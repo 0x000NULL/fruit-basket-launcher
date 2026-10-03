@@ -14,14 +14,43 @@ feed.json + feed.json.minisig ──minisign, key in src/key.rs──▶ Feed
    │  refused if older than the last accepted feed (replay)
    ├─ assets[platform].sha256 ──▶ jobs.rs: download hashed as it streams;
    │                               mismatch = file deleted, nothing on disk changed
-   └─ compat / dumps {url, sha256} ──▶ lists.rs: cached list used only if it matches
+   ├─ compat / dumps {url, sha256} ──▶ lists.rs: cached list used only if it matches
+   └─ launcher.assets[platform] ──▶ update.rs: hashed download, then `--version`
+                                    must name the build before it is staged
 ```
 
 Everything the launcher downloads is pinned by the signed feed. The signing
 key lives offline on Ethan's machine (`~/.minisign/fruitbasket.key`). The
 site signs with `make sign`, and `make deploy` refuses an unsigned or
 stale feed. The public key and its ID `9A7C56F99E6460E9` are compiled in.
-Debug builds also accept `FRUITBASKET_KEY` so tests can use a throwaway key.
+Debug builds also accept `FRUITBASKET_KEY` so tests can use a throwaway key,
+and `FRUITBASKET_CONFIG` for a settings file other than the real one.
+
+### Self-update
+
+`App::check_launcher_update` runs once the feed is in (never under
+`cfg(test)`). If `feed.launcher` is newer than `VERSION` and has a build
+for this PC, `update::start` stages it on a thread:
+1. Download it into `launcher/update/` and hash it against the feed.
+2. Unpack it to `<build>.tmp`.
+3. Run it with `--version`; it must print the build.
+4. Rename it to `<build>/`, then write `update/staged` atomically.
+
+The banner then offers Restart now, which saves settings, starts the
+launcher again and quits.
+
+At start, `main::swap_in_update` runs before the window opens. When
+`staged` names a newer build:
+1. Rename the running exe to `fruitbasket.old(.exe)`. A running exe can be
+   renamed on every OS, but on Windows it can't be deleted.
+2. Copy the staged exe to the old exe's path.
+3. Start the new exe with `--updated <old version>`, and exit.
+
+If any step fails, the old exe is put back. The next normal start deletes
+the `.old` file and the update folder.
+
+If the exe's folder can't be written (`update::can_replace`), nothing is
+downloaded. The banner offers the asset's URL instead.
 
 ## Disk layout
 
@@ -37,6 +66,7 @@ Debug builds also accept `FRUITBASKET_KEY` so tests can use a throwaway key.
   launcher/played.tsv             last played + play time per game (library.rs)
   launcher/hashes.tsv             SHA-1 per game, keyed by size + mtime (dumps.rs)
   launcher/lists/<fruit>.{compat,dumps}.txt
+  launcher/update/                a launcher update: <build>/, and `staged` naming it (update.rs)
 <config dir>/fruitbasket/settings.toml   (settings.rs, via basket_app::prefs)
 ```
 
@@ -80,7 +110,7 @@ leaves them out of the feed (`oldest` in its LAUNCHER file).
 
 | File | What it does |
 |---|---|
-| `main.rs` | module list; `app::run()` |
+| `main.rs` | `--version`; swap in a staged update; `app::run()` |
 | `focus.rs` | the controller's focus: `Spot`s the frame drew, `next` (nearest in a direction, level ones first), `cycle` (Tab) |
 | `app.rs` | `App`: state, the frame loop (poll → draw → apply `Cmd`s), `Ctx` (read-only view of the state shared by views and commands), the render and e2e tests |
 | `key.rs` | embedded public key, key ID, feed URL (`FRUITBASKET_FEED` overrides) |
@@ -95,6 +125,7 @@ leaves them out of the feed (`oldest` in its LAUNCHER file).
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
 | `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), start, a thread that times the session |
 | `mover.rs` | Move basket: where it goes, then rename or a checked copy on a thread |
+| `update.rs` | the launcher's own update: `newer`, stage (download, hash, unpack, `--version`), `apply_staged` / `undo` / `clean` at start |
 | `shelf.rs` | the Library's state: games, lists, hashing, the running game (from a slot, with couch arguments), `view()`, `couch_rows()` |
 | `settings.rs` | `Settings` (with `[gamepad]`, the launcher's controller map), unknown keys kept |
 | `platform.rs` | OS dark mode, free space, screen size, open / reveal, `~` paths |
@@ -157,11 +188,22 @@ renders at 1280×720 and 1920×1080.
 | `hashing` | `Shelf::start_hashing` | `((path, size, mtime), sha1)` |
 | game session | `launch::start` | `Session` when the emulator exits |
 | basket move | `mover::start` | `Progress` (percent, then done or the error) |
+| launcher update | `update::start` | `Upd` (staged, or why not) |
 
 ## Releases
 
 A pushed `v*` tag runs `.github/workflows/release.yml` on GitHub-hosted
-runners: test, `cargo build --profile dist` for windows-x64 (zip),
-linux-x64 and macos-arm64 (tar.gz), a `.sha256` per archive, and a GitHub
-release whose notes are the tag's `## vX.Y.Z` section of CHANGELOG.md. The
-repo is public, so it must never use self-hosted runners.
+runners. It runs the tests, then `cargo build --profile dist` for:
+- windows-x64 (zip)
+- linux-x64 and macos-arm64 (tar.gz)
+- macos-x64 (tar.gz), cross-built on the Apple Silicon runner, with its
+  tests left to macos-arm64
+
+Each archive gets a `.sha256`. The GitHub release's notes are the tag's
+`## vX.Y.Z` section of CHANGELOG.md. Run by hand (`gh workflow run
+release.yml`), the workflow builds and packages every target without
+releasing. The repo is public, so it must never use self-hosted runners.
+
+The site mirrors each release with `./fetch-release.sh fruit-basket/launcher
+0x000NULL/fruit-basket-launcher vX`, which checks the `.sha256` files. The
+feed's `launcher` entry is then the newest mirrored release.

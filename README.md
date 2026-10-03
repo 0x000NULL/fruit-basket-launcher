@@ -10,14 +10,14 @@ It is built on the same crates as the emulators
 `basket-app`, `basket-build`), so it looks and handles input exactly like them.
 No async runtime, no web view: a `minifb` window drawn with tiny-skia.
 
-Status: early. These work:
+What it does:
 - the Library: scan, play, play time, compat, dump check, saves
 - the Basket and Downloads: install, update, roll back, uninstall
 - Settings, including moving the basket and mapping the controller
 - a controller everywhere, and couch mode
+- updating itself from the site
 
-Self-update comes next; see
-[PROGRESS.md](PROGRESS.md) and [CHANGELOG.md](CHANGELOG.md).
+See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) for each release.
 
 ## Using it
 
@@ -59,8 +59,17 @@ Self-update comes next; see
     cargo test                     # also renders every screen to target/shots/
 
 Linux needs `libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev`.
-Releases for Windows x64, Linux x64 and macOS arm64 are built from tags by
-GitHub Actions.
+Releases for Windows x64, Linux x64, macOS arm64 and macOS x64 are built
+from tags by GitHub Actions, and mirrored to the site.
+
+## Updates
+
+The launcher checks the site's feed when it opens. If there is a newer
+launcher, it downloads it in the background and checks it against the
+signed feed. A banner then says it's ready: **Restart now**, or it goes in
+the next time the launcher opens. If the launcher sits in a folder it
+can't write to, the banner offers **Download** instead. Launchers before
+v1.0.0 can't update themselves; get v1.0.0 by hand once.
 
 ## Where builds come from
 
@@ -72,12 +81,14 @@ The launcher reads one feed,
 2. **No replays.** A feed older than the one already accepted is refused, so an old signed feed cannot be replayed.
 3. **Checked downloads.** The feed carries the SHA-256 and size of every build, and of each fruit's compatibility and dump lists. A download that does not match is deleted before anything on disk changes.
 4. **Atomic installs.** Each build is extracted beside the old one and renamed into place, then the fruit's `current` file is rewritten. A failure at any step leaves the running build alone.
+5. **The launcher too.** Its own updates come from the same signed feed and are checked the same way. A new launcher must also report the right `--version` before it is staged.
 
 Everything lives under `~/FruitBasket/` (movable in Settings):
 
     <fruit>/builds/<build>/   <fruit>/current   <fruit>/games/   <fruit>/data/
     launcher/feed.json  launcher/feed.json.minisig  launcher/downloads/
     launcher/history.log  launcher/played.tsv  launcher/hashes.tsv  launcher/lists/
+    launcher/update/      a launcher update waiting for the next start
 
 `<fruit>/data/` holds saves and settings for a fruit that takes a data
 folder (Pomegranate). Its memory cards and states move there from the
@@ -91,7 +102,9 @@ Settings are in `<config dir>/fruitbasket/settings.toml`.
     FRUITBASKET_FEED=http://localhost:8765/fruit-basket/feed.json cargo run
 
 Debug builds also accept `FRUITBASKET_KEY` (a minisign public key) so a test
-feed can be signed with a throwaway key. Release builds ignore it.
+feed can be signed with a throwaway key, and `FRUITBASKET_CONFIG` (a
+settings file) so a test never touches the real one. Release builds ignore
+both.
 
 ## Design and code
 

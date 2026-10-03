@@ -14,7 +14,7 @@ map: `docs/ARCHITECTURE.md`.
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | next | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; the site mirrors each release (below) | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -22,7 +22,7 @@ bumped in the same commit, and the release notes come from a
 
 ## Verified
 
-- `cargo test`: 57 pass. Covers:
+- `cargo test`: 61 pass. Covers:
   - feed signature: a real signed feed passes; a tampered feed, the wrong key or an older feed is refused
   - install, switch, prune, uninstall; a bad archive leaves the current build running
   - a wrong hash deletes the download; a network failure changes nothing
@@ -35,6 +35,8 @@ bumped in the same commit, and the release notes come from a
   - save slots in both numberings with their pictures and notes; deleting one (and a pre-slots state with slot 0)
   - couch mode end to end: Start, LB/RB, the saves list, delete through the dialog, Load (the stand-in emulator gets `--slot`), no input while the game runs, B out
   - Map buttons: listen, bind with a swap, Done saves `[gamepad]`, Reset; the settings round trip keeps unknown keys
+  - self-update: version order; staging refuses a wrong hash or a build that doesn't name itself, leaving nothing behind; the swap, the undo and the clean-up; an unwritable folder
+  - `couch` arguments only for builds the feed lists
   - renders of every tab state, the dialogs, the ripe banner, the space failure, couch mode at 1280×720 and 1920×1080, the focus ring and the Map dialog
 - `e2e_install_switch_and_refuse` (opt-in: `FRUITBASKET_E2E=1`; `FRUITBASKET_FEED` can point it at a local copy of the site instead) does all of this over HTTP. On 2026-10-03 it passed against the live feed:
   - installs Strawberry v1.4.0
@@ -43,6 +45,13 @@ bumped in the same commit, and the release notes come from a
   - refuses a job with a wrong hash, leaving nothing on disk
   - (v0.4.0, same day) rolls back to the kept stable build through the dialog and forward again, moves the basket, and uninstalls with the games kept
 - A real window ran against the local site and wrote `settings.toml` on close.
+- **Self-update, end to end on Windows (2026-10-03).** A debug v0.9.8 launcher used a local feed signed with a throwaway key, plus its own settings file and basket (`FRUITBASKET_CONFIG`). The feed offered v0.9.9.
+  - It staged v0.9.9 in 2 s.
+  - The next start swapped it in, exited 0, and started v0.9.9 with `--updated v0.9.8`.
+  - The exe on disk then said v0.9.9, and the start after that removed `fruitbasket.old.exe` and the update folder.
+  - A release build's `--version` reads through a pipe (`Command::output`), as the smoke test uses it.
+  - Not done: clicking Restart now (the same spawn-and-quit path, untested by hand), macOS, Linux, and an unwritable folder by hand.
+- The release workflow, run by hand on 2026-10-03, built and packaged all four targets, macos-x64 included.
 - Not yet done by hand for M5: anything with a real controller. Untested by hand: the pad walking each tab, hot-plugging with "open in couch mode" on, couch mode's borderless window entering and leaving on each OS, and Map buttons with a real pad. CI builds the macOS (CoreGraphics) and Linux (xrandr) screen-size code but nothing runs it.
 - Not yet done by hand: starting a real game from the Library (no ROM was available; `launch.rs` is tested with a stand-in program), clicking through the dialogs in a real window, and Move basket across two drives. The copy path is unit-tested, but every test move so far stayed on one volume and was a rename.
 
@@ -78,17 +87,16 @@ bumped in the same commit, and the release notes come from a
   - The feed's LAUNCHER keys: `launch`, `load_slot`, `open` (all may use `{rom}`, `{slot}`, `{data}`), `carry`, and `oldest` (feedgen only; not in the feed).
   - The feed's top-level `launcher` entry is null: the site doesn't host launcher builds yet (M6).
 
-## For M6
+## After v1.0.0
 
-- **Hosting:** the site is ready (`5af8902`). Mirror each launcher release with `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`, then deploy. The feed's `launcher` entry is then the newest release.
-- **Notes:** feedgen's `launcher.notes` come from a CHANGELOG line in the site repo that is edited by hand. The site session takes them from this repo's `## vX.Y.Z` sections.
-- **Wired already, waiting for M6:**
-  - `App::launcher_update` and the banner's "Restart now" (`Cmd::RestartForUpdate`, a no-op today)
-  - `jobs::download`, the hash check, and `basket::extract` (all reusable)
+- **Mirror each release to the site** (the site session, with Ethan's OK): `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`, a notes line from this CHANGELOG, then deploy. v0.5.1 was asked for first; from v1.0.0 on, mirroring a release is what updates everyone.
+- **The first real self-update** happens when v1.0.1 is mirrored and a v1.0.0 picks it up. The live path (site URL, 1-year nginx cache on release files, macOS and Linux) is only proven then.
+- **Strawberry and Crabapple couch flags:** once a release has them, the site sets their `couch` key and raises `oldest` with it. No launcher change is needed.
 
 ## Known gaps
 
-- The launcher-update banner's Restart now does nothing yet (M6).
+- A launcher update is checked only when the launcher opens (and with Settings → Check now). A launcher left open for days won't notice a new release.
+- The macOS launcher is a bare binary in a tar.gz, not a signed `.app`. Gatekeeper may stop the first run of a download from the browser. Updates the launcher stages itself aren't affected.
 - Couch mode's covers are placeholders, like the Library's. The saves list has no pictures, though Pomegranate writes a `.png` for each slot.
 - The Map buttons dialog is taller than a 680-high window, and its bottom gets cut off there.
 - Saves on a fruit without `load_slot` can be shown and deleted but not loaded. The dialog's button becomes Show file.

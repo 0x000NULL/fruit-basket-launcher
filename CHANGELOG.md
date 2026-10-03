@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.0.0
+
+The launcher updates itself.
+
+- **Self-update.** When the site has a newer launcher, it is downloaded in the background.
+  - It is checked against the SHA-256 in the signed feed, unpacked, and asked for its version.
+  - Only then does the banner say it is ready. **Restart now**, or the next start, swaps it in.
+  - If anything fails, the launcher you have keeps running.
+  - In a folder the launcher can't write to (such as Program Files), the banner offers **Download** instead.
+- **macOS on Intel**: releases now include `macos-x64`.
+- `fruitbasket --version` prints the version.
+- **Updating from v0.5.1 or earlier:** download v1.0.0 by hand once, from the site or GitHub. Earlier launchers can't update themselves.
+
 ## v0.5.1
 
 - The feed's `couch` arguments go only to a build the feed still lists. A Pomegranate v0.3.0 that is installed or kept for rolling back runs from couch mode in a window, because it doesn't know `--fullscreen` or `--exit-on-quit`.

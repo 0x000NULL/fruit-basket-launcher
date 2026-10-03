@@ -37,6 +37,7 @@ The e2e test downloads real builds from the live site.
 - **Tests never touch real files.**
   - Each test uses its own temp basket.
   - `Settings::path()` is `None` under `cfg(test)`, so `save()` is a no-op. Keep it that way: a test once overwrote the real settings.toml.
+- **The launcher replaces its own exe only through `update.rs`**: hashed against the signed feed, `--version` checked, the old exe kept until the new one has started. Never in tests (`cfg(test)`); the exe there is the test binary.
 - **The private signing key never leaves `~/.minisign/`.** Only the public key is in `src/key.rs`.
 
 ## Git and releases
