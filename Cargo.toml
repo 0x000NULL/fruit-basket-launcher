@@ -1,0 +1,44 @@
+[package]
+name = "fruitbasket"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Fruit Basket launcher: the game library and the emulators, from one window"
+license = "MIT"
+publish = false
+
+[dependencies]
+basket-ui = { git = "https://github.com/0x000NULL/fruit-basket", tag = "v0.1.0" }
+basket-app = { git = "https://github.com/0x000NULL/fruit-basket", tag = "v0.1.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ureq = { version = "2", default-features = false, features = ["tls"] }
+minisign-verify = "0.2"
+sha2 = "0.10"
+sha1 = "0.10"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
+dirs = "6"
+minifb = "0.28"
+gilrs = "0.11"
+tiny-skia = "0.11"
+png = "0.17"
+toml = "0.8"
+
+[build-dependencies]
+basket-build = { git = "https://github.com/0x000NULL/fruit-basket", tag = "v0.1.0" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = "s"
+
+# Shipped binaries (the release workflow builds with `--profile dist`).
+[profile.dist]
+inherits = "release"
+lto = "fat"
+codegen-units = 1
+strip = true
+debug = false

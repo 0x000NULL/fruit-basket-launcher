@@ -1,0 +1,623 @@
+{
+ "schema": 1,
+ "generated": "2026-10-03T02:54:28Z",
+ "base": "https://projects.ethanaldrich.net/fruit-basket/",
+ "launcher": null,
+ "fruits": [
+  {
+   "id": "pomegranate",
+   "no": 1,
+   "name": "Pomegranate",
+   "system": "PS2",
+   "pixel": false,
+   "ext": [
+    ".chd",
+    ".iso"
+   ],
+   "status": "released",
+   "summary": "PS2 emulator; v0.1.0 for Windows, Linux; 15 of 30 games give control",
+   "blurb": "Seeds on the inside, hundreds of them in chambers, under one smooth skin.",
+   "bin": "ps2emu",
+   "bios": "not needed",
+   "dump_db": "Redump",
+   "launch": [
+    "play",
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [
+    "ps2emu.toml",
+    "cards",
+    "states"
+   ],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/README",
+   "compat": {
+    "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/compat.txt",
+    "sha256": "c74dfbb1e69c73a05ca0cbd9e28de340d860b7be237c22612a4b50457beaa3fd"
+   },
+   "dumps": null,
+   "changelog": [
+    {
+     "date": "2026-10-03",
+     "text": "Release v0.1.0, the first release: Windows and Linux builds, the Library window, JIT for EE and VU1; 15 of 30 games give the player control; builds in releases/v0.1.0/"
+    },
+    {
+     "date": "2026-10-02",
+     "text": "Nightly build at 7c1239a; M9 closed: Disgaea 114.4 fps, Kingdom Hearts II 40.7, God of War II 16.2; new window with library, save states, settings and memory cards (in testing); ISO and BIN images over 2 GB read on Windows"
+    },
+    {
+     "date": "2026-10-01",
+     "text": "Nightly build at 9487cfd; M9 wave 3: God of War II 12.7 fps, Kingdom Hearts II 25.1, Disgaea 113.7"
+    },
+    {
+     "date": "2026-09-30",
+     "text": "M9 speed work: VU1 decode cache and four-lane FMAC; God of War II 7.9 to 8.9 fps, Kingdom Hearts II 20.6 to 22.4 fps"
+    },
+    {
+     "date": "2026-09-29",
+     "text": "M8 done: 22 of 30 games reach a title or menu, 9 give player control, Disgaea plays 36,000 scripted frames"
+    },
+    {
+     "date": "2026-09-25",
+     "text": "M7 done: Disgaea 3D scene at 67 fps on the Windows build"
+    }
+   ],
+   "stable": {
+    "build": "v0.1.0",
+    "date": "2026-10-03",
+    "notes": [
+     "The first release: Windows and Linux builds, the Library window, JIT for EE and VU1",
+     "15 of 30 games give the player control"
+    ],
+    "notes_url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/releases/v0.1.0/README",
+    "assets": {
+     "linux-x64": {
+      "name": "ps2emu-0.1.0-linux-x64.tar.gz",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/releases/v0.1.0/ps2emu-0.1.0-linux-x64.tar.gz",
+      "size": 2134377,
+      "sha256": "ed54635f6ac9d576d7b97cba89e5c7066af38ff4da2d190bb9c8abd70369e922"
+     },
+     "windows-x64": {
+      "name": "ps2emu-0.1.0-windows-x64.zip",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/releases/v0.1.0/ps2emu-0.1.0-windows-x64.zip",
+      "size": 3329360,
+      "sha256": "dcd89fb6b09743809fb0ced4b8aaf9804b6cdad2f0c7763124fcff6be0741c02"
+     }
+    }
+   },
+   "nightly": {
+    "build": "247b3f6",
+    "date": "2026-10-02",
+    "notes": [],
+    "notes_url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/CHANGELOG.txt",
+    "assets": {
+     "windows-x64": {
+      "name": "pomegranate-win-x64-nightly.zip",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/pomegranate-win-x64-nightly.zip",
+      "size": 3329360,
+      "sha256": "dcd89fb6b09743809fb0ced4b8aaf9804b6cdad2f0c7763124fcff6be0741c02"
+     }
+    }
+   },
+   "releases": [
+    {
+     "build": "v0.1.0",
+     "date": "2026-10-03",
+     "notes": [
+      "The first release: Windows and Linux builds, the Library window, JIT for EE and VU1",
+      "15 of 30 games give the player control"
+     ],
+     "notes_url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/releases/v0.1.0/README",
+     "assets": {
+      "linux-x64": {
+       "name": "ps2emu-0.1.0-linux-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/releases/v0.1.0/ps2emu-0.1.0-linux-x64.tar.gz",
+       "size": 2134377,
+       "sha256": "ed54635f6ac9d576d7b97cba89e5c7066af38ff4da2d190bb9c8abd70369e922"
+      },
+      "windows-x64": {
+       "name": "ps2emu-0.1.0-windows-x64.zip",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/pomegranate/releases/v0.1.0/ps2emu-0.1.0-windows-x64.zip",
+       "size": 3329360,
+       "sha256": "dcd89fb6b09743809fb0ced4b8aaf9804b6cdad2f0c7763124fcff6be0741c02"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "strawberry",
+   "no": 2,
+   "name": "Strawberry",
+   "system": "GBA",
+   "pixel": true,
+   "ext": [
+    ".gba"
+   ],
+   "status": "released",
+   "summary": "GBA emulator; v1.3.1 for Windows, macOS, Linux",
+   "blurb": "Seeds on the outside, every one in plain sight, like dots you can count.",
+   "bin": "strawberry",
+   "bios": "built in",
+   "dump_db": "No-Intro",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/README",
+   "compat": {
+    "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/compat.txt",
+    "sha256": "78ea84884d70ec184c8abecf786c5dc1f63593907950e640bfe774f336d1e109"
+   },
+   "dumps": null,
+   "changelog": [
+    {
+     "date": "2026-10-02",
+     "text": "Release v1.3.1: frontend moved to the shared fruit-basket crates, nothing a player sees changes; builds in releases/v1.3.1/"
+    },
+    {
+     "date": "2026-10-02",
+     "text": "Release v1.3.0: the player is Strawberry (name, window and exe icon, strawberry/ config folders, brand empty library); builds in releases/v1.3.0/"
+    },
+    {
+     "date": "2026-10-02",
+     "text": "Release v1.2.0: gamepad buttons can be rebound; builds in releases/v1.2.0/"
+    },
+    {
+     "date": "2026-10-02",
+     "text": "Release v1.1.0: BIOS sound driver emulated, 1,528 of 1,543 library titles boot with sound; 1.0.0 save states do not load; builds in releases/v1.1.0/"
+    },
+    {
+     "date": "2026-10-01",
+     "text": "Release v1.0.0: first release, Windows, macOS and Linux; builds in releases/v1.0.0/"
+    },
+    {
+     "date": "2026-10-01",
+     "text": "Nightly build at 037f8ff; GUI (M9) done; 28 of 29 games reach gameplay; mGBA Timing and SIO suites pass"
+    },
+    {
+     "date": "2026-09-30",
+     "text": "M8 partly done: savestates, fast-forward, game pak prefetch; mGBA Timing 1956/2020; Final Fantasy IV Advance, Initial D and the Zelda ports reach gameplay"
+    },
+    {
+     "date": "2026-09-29",
+     "text": "M0 to M7: ARM7TDMI, PPU, APU, DMA; all jsmolka test ROMs pass; Kingdom Hearts: Chain of Memories reaches gameplay"
+    }
+   ],
+   "stable": {
+    "build": "v1.3.1",
+    "date": "2026-10-02",
+    "notes": [
+     "Frontend moved to the shared fruit-basket crates, nothing a player sees changes"
+    ],
+    "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/README",
+    "assets": {
+     "linux-x64": {
+      "name": "strawberry-v1.3.1-linux-x64.tar.gz",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-linux-x64.tar.gz",
+      "size": 2645801,
+      "sha256": "c9a34e63fd7fa28a67ba730d84f9bfcd1bff93eb109a372c9d439c39298cd385"
+     },
+     "macos-arm64": {
+      "name": "strawberry-v1.3.1-macos-arm64.tar.gz",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-macos-arm64.tar.gz",
+      "size": 2295365,
+      "sha256": "f8a4feacc48fad95df0df898d2d7fb1168edc9e438d9df71f95928ceeb036501"
+     },
+     "macos-x64": {
+      "name": "strawberry-v1.3.1-macos-x64.tar.gz",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-macos-x64.tar.gz",
+      "size": 2388043,
+      "sha256": "c81514885164d68af99389ddd106be072e7ed2b2a14f8de4204b31adef33d282"
+     },
+     "windows-x64": {
+      "name": "strawberry-v1.3.1-windows-x64.zip",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-windows-x64.zip",
+      "size": 2549550,
+      "sha256": "873329b6edfd453c0e65f3aeda4a7aec917a492daf5a8e19b70bd4892eaee75b"
+     }
+    }
+   },
+   "nightly": {
+    "build": "e8bc5e3",
+    "date": "2026-10-02",
+    "notes": [],
+    "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/CHANGELOG.txt",
+    "assets": {
+     "windows-x64": {
+      "name": "strawberry-win-x64-nightly.zip",
+      "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/strawberry-win-x64-nightly.zip",
+      "size": 2549550,
+      "sha256": "873329b6edfd453c0e65f3aeda4a7aec917a492daf5a8e19b70bd4892eaee75b"
+     }
+    }
+   },
+   "releases": [
+    {
+     "build": "v1.3.1",
+     "date": "2026-10-02",
+     "notes": [
+      "Frontend moved to the shared fruit-basket crates, nothing a player sees changes"
+     ],
+     "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/README",
+     "assets": {
+      "linux-x64": {
+       "name": "strawberry-v1.3.1-linux-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-linux-x64.tar.gz",
+       "size": 2645801,
+       "sha256": "c9a34e63fd7fa28a67ba730d84f9bfcd1bff93eb109a372c9d439c39298cd385"
+      },
+      "macos-arm64": {
+       "name": "strawberry-v1.3.1-macos-arm64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-macos-arm64.tar.gz",
+       "size": 2295365,
+       "sha256": "f8a4feacc48fad95df0df898d2d7fb1168edc9e438d9df71f95928ceeb036501"
+      },
+      "macos-x64": {
+       "name": "strawberry-v1.3.1-macos-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-macos-x64.tar.gz",
+       "size": 2388043,
+       "sha256": "c81514885164d68af99389ddd106be072e7ed2b2a14f8de4204b31adef33d282"
+      },
+      "windows-x64": {
+       "name": "strawberry-v1.3.1-windows-x64.zip",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.1/strawberry-v1.3.1-windows-x64.zip",
+       "size": 2549550,
+       "sha256": "873329b6edfd453c0e65f3aeda4a7aec917a492daf5a8e19b70bd4892eaee75b"
+      }
+     }
+    },
+    {
+     "build": "v1.3.0",
+     "date": "2026-10-02",
+     "notes": [
+      "The player is Strawberry (name, window and exe icon, strawberry/ config folders, brand empty library)"
+     ],
+     "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.0/README",
+     "assets": {
+      "linux-x64": {
+       "name": "strawberry-v1.3.0-linux-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.0/strawberry-v1.3.0-linux-x64.tar.gz",
+       "size": 2614085,
+       "sha256": "515495bd0989c7e3e0e7e4d22940be3073630e4d6c8baa4b389074bc6a984c73"
+      },
+      "macos-arm64": {
+       "name": "strawberry-v1.3.0-macos-arm64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.0/strawberry-v1.3.0-macos-arm64.tar.gz",
+       "size": 2264645,
+       "sha256": "46b64a5526b80e4a33e104c4bf8aee78da9c96438a84bb9fc371dbcf8e6f49a3"
+      },
+      "macos-x64": {
+       "name": "strawberry-v1.3.0-macos-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.0/strawberry-v1.3.0-macos-x64.tar.gz",
+       "size": 2359059,
+       "sha256": "87dcbe4cd4028238b3f8b081700ff66431bc22bcb75424f30ee4328f4eb4ca8c"
+      },
+      "windows-x64": {
+       "name": "strawberry-v1.3.0-windows-x64.zip",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.3.0/strawberry-v1.3.0-windows-x64.zip",
+       "size": 2505079,
+       "sha256": "a3214267151d4a498ed3611b3bb8245374a5b07c59d67448a9d81c6343b57904"
+      }
+     }
+    },
+    {
+     "build": "v1.2.0",
+     "date": "2026-10-02",
+     "notes": [
+      "Gamepad buttons can be rebound"
+     ],
+     "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.2.0/README",
+     "assets": {
+      "linux-x64": {
+       "name": "gba-v1.2.0-linux-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.2.0/gba-v1.2.0-linux-x64.tar.gz",
+       "size": 2573082,
+       "sha256": "6c3e5782e742afc4bb1aa7761094a99d99f8267264002186ed8a0e36a9e750cd"
+      },
+      "macos-arm64": {
+       "name": "gba-v1.2.0-macos-arm64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.2.0/gba-v1.2.0-macos-arm64.tar.gz",
+       "size": 2244000,
+       "sha256": "808b5903d7f0dbe279bb03cbfa12685ebb11bc58899df7bb19570a2850f7dcbb"
+      },
+      "macos-x64": {
+       "name": "gba-v1.2.0-macos-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.2.0/gba-v1.2.0-macos-x64.tar.gz",
+       "size": 2333838,
+       "sha256": "ea8d238f015451d929b9a08f2f2055e035a8325d6f7042e866403610e0db48ae"
+      },
+      "windows-x64": {
+       "name": "gba-v1.2.0-windows-x64.zip",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.2.0/gba-v1.2.0-windows-x64.zip",
+       "size": 2469260,
+       "sha256": "bb4b2d38566e08bbf2965f4e900358bf02a282e5a845b93103da7ad4bacbeb4b"
+      }
+     }
+    },
+    {
+     "build": "v1.1.0",
+     "date": "2026-10-02",
+     "notes": [
+      "BIOS sound driver emulated, 1,528 of 1,543 library titles boot with sound",
+      "1.0.0 save states do not load"
+     ],
+     "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.1.0/README",
+     "assets": {
+      "linux-x64": {
+       "name": "gba-v1.1.0-linux-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.1.0/gba-v1.1.0-linux-x64.tar.gz",
+       "size": 2567562,
+       "sha256": "85a0832f9f48d783dcd3a87c681f97fd886b04bfeb46ea5ae8c22d4103ea35a7"
+      },
+      "macos-arm64": {
+       "name": "gba-v1.1.0-macos-arm64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.1.0/gba-v1.1.0-macos-arm64.tar.gz",
+       "size": 2239142,
+       "sha256": "989f2d97d047b62b163b611955c851a31290858612a05fe2f45cda1a6dc71086"
+      },
+      "macos-x64": {
+       "name": "gba-v1.1.0-macos-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.1.0/gba-v1.1.0-macos-x64.tar.gz",
+       "size": 2328182,
+       "sha256": "00e8fa20f7a9c8c9484de6d85b3dd42efb4751fcd4688277790e210f0c6179fe"
+      },
+      "windows-x64": {
+       "name": "gba-v1.1.0-windows-x64.zip",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.1.0/gba-v1.1.0-windows-x64.zip",
+       "size": 2463064,
+       "sha256": "26a59f144639fea29d93921fe99949f7d09369f19327088c512a069063348713"
+      }
+     }
+    },
+    {
+     "build": "v1.0.0",
+     "date": "2026-10-01",
+     "notes": [
+      "First release, Windows, macOS and Linux"
+     ],
+     "notes_url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.0.0/README",
+     "assets": {
+      "linux-x64": {
+       "name": "gba-v1.0.0-linux-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.0.0/gba-v1.0.0-linux-x64.tar.gz",
+       "size": 2554149,
+       "sha256": "51c78b3ef9b8a97f5d8b499504b60842dc3e0e38b9471597f19749a7ff6b5000"
+      },
+      "macos-arm64": {
+       "name": "gba-v1.0.0-macos-arm64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.0.0/gba-v1.0.0-macos-arm64.tar.gz",
+       "size": 2228255,
+       "sha256": "211d4d8052839d6bde26296d396a4d300b8e601b1d049b82f97f9ca5c0ac749b"
+      },
+      "macos-x64": {
+       "name": "gba-v1.0.0-macos-x64.tar.gz",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.0.0/gba-v1.0.0-macos-x64.tar.gz",
+       "size": 2315977,
+       "sha256": "db4f8ae2103dc19f300d2bcd9db457f1ff6e3f4478b225ea8b6045e4a16d95c4"
+      },
+      "windows-x64": {
+       "name": "gba-v1.0.0-windows-x64.zip",
+       "url": "https://projects.ethanaldrich.net/fruit-basket/strawberry/releases/v1.0.0/gba-v1.0.0-windows-x64.zip",
+       "size": 2451153,
+       "sha256": "eb00cfa81ec76fa2b9be7ee1419228da1f5db2493874995ec466584abe393a8a"
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "fig",
+   "no": 4,
+   "name": "Fig",
+   "system": "PS1",
+   "pixel": false,
+   "ext": [
+    ".cue",
+    ".bin",
+    ".chd"
+   ],
+   "status": "growing",
+   "summary": "PS1 emulator; planned",
+   "blurb": "One of the first fruits ever grown, for the first PlayStation. Cut across, a disc.",
+   "bin": null,
+   "bios": null,
+   "dump_db": "Redump",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/fig/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/fig/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  },
+  {
+   "id": "starfruit",
+   "no": 5,
+   "name": "Starfruit",
+   "system": "N64",
+   "pixel": false,
+   "ext": [
+    ".z64",
+    ".n64",
+    ".v64"
+   ],
+   "status": "growing",
+   "summary": "N64 emulator; planned",
+   "blurb": "A star, pushed into 3D, for the console that pushed everything there.",
+   "bin": null,
+   "bios": null,
+   "dump_db": "No-Intro",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/starfruit/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/starfruit/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  },
+  {
+   "id": "mangosteen",
+   "no": 6,
+   "name": "Mangosteen",
+   "system": "GameCube",
+   "pixel": false,
+   "ext": [
+    ".iso",
+    ".rvz"
+   ],
+   "status": "growing",
+   "summary": "GameCube emulator; planned",
+   "blurb": "Deep purple, with a cap that lifts off the top like the lid over the disc.",
+   "bin": null,
+   "bios": null,
+   "dump_db": "Redump",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/mangosteen/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/mangosteen/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  },
+  {
+   "id": "crabapple",
+   "no": 7,
+   "name": "Crabapple",
+   "system": "NES",
+   "pixel": true,
+   "ext": [
+    ".nes"
+   ],
+   "status": "growing",
+   "summary": "NES emulator; in development",
+   "blurb": "Small, hard and wild: the apple from before the orchard. Five seeds in a star.",
+   "bin": "crabapple",
+   "bios": null,
+   "dump_db": "No-Intro",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/crabapple/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/crabapple/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  },
+  {
+   "id": "mulberry",
+   "no": 8,
+   "name": "Mulberry",
+   "system": "SNES",
+   "pixel": true,
+   "ext": [
+    ".sfc",
+    ".smc"
+   ],
+   "status": "growing",
+   "summary": "SNES emulator; planned",
+   "blurb": "One berry made of dozens of small ones, the way a screen is made of tiles.",
+   "bin": null,
+   "bios": null,
+   "dump_db": "No-Intro",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/mulberry/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/mulberry/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  },
+  {
+   "id": "olive",
+   "no": 9,
+   "name": "Olive",
+   "system": "GB · GBC",
+   "pixel": true,
+   "ext": [
+    ".gb",
+    ".gbc"
+   ],
+   "status": "growing",
+   "summary": "Game Boy and Game Boy Color emulator; planned",
+   "blurb": "The green of the first screen, stuffed, so the red sits where the stone was.",
+   "bin": null,
+   "bios": null,
+   "dump_db": "No-Intro",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/olive/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/olive/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  },
+  {
+   "id": "pear",
+   "no": 10,
+   "name": "Pear",
+   "system": "DS · DSi",
+   "pixel": true,
+   "ext": [
+    ".nds"
+   ],
+   "status": "growing",
+   "summary": "DS and DSi emulator; planned",
+   "blurb": "Say it out loud: a pair of screens. Narrow over wide, hinged at the waist.",
+   "bin": null,
+   "bios": null,
+   "dump_db": "No-Intro",
+   "launch": [
+    "{rom}"
+   ],
+   "load_slot": null,
+   "carry": [],
+   "url": "https://projects.ethanaldrich.net/fruit-basket/pear/",
+   "readme_url": "https://projects.ethanaldrich.net/fruit-basket/pear/README",
+   "compat": null,
+   "dumps": null,
+   "changelog": [],
+   "stable": null,
+   "nightly": null,
+   "releases": []
+  }
+ ]
+}

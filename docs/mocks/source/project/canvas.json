@@ -1,0 +1,430 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Launcher.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 900,
+      "title": "Library",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Library-List.dc.html": {
+      "x": 1360,
+      "y": 0,
+      "w": 1280,
+      "h": 900,
+      "title": "Library · list view",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Library-Strawberry.dc.html": {
+      "x": 2720,
+      "y": 0,
+      "w": 1280,
+      "h": 900,
+      "title": "Library · one system",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Library-Unverified.dc.html": {
+      "x": 4080,
+      "y": 0,
+      "w": 1280,
+      "h": 900,
+      "title": "Library · unverified dump",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Basket.dc.html": {
+      "x": 0,
+      "y": 1280,
+      "w": 1280,
+      "h": 900,
+      "title": "Basket · update ready",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Basket-Strawberry.dc.html": {
+      "x": 1360,
+      "y": 1280,
+      "w": 1280,
+      "h": 900,
+      "title": "Basket · all set up",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Basket-Growing.dc.html": {
+      "x": 2720,
+      "y": 1280,
+      "w": 1280,
+      "h": 900,
+      "title": "Basket · still growing",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Basket-Search.dc.html": {
+      "x": 4080,
+      "y": 1280,
+      "w": 1280,
+      "h": 900,
+      "title": "Basket · search",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Installing.dc.html": {
+      "x": 0,
+      "y": 2560,
+      "w": 1280,
+      "h": 900,
+      "title": "Updating · verifying",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Rollback.dc.html": {
+      "x": 1360,
+      "y": 2560,
+      "w": 1280,
+      "h": 900,
+      "title": "Roll back",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Uninstall.dc.html": {
+      "x": 2720,
+      "y": 2560,
+      "w": 1280,
+      "h": 900,
+      "title": "Uninstall",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Download-Failed.dc.html": {
+      "x": 4080,
+      "y": 2560,
+      "w": 1280,
+      "h": 900,
+      "title": "Download stopped",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Launcher-Update.dc.html": {
+      "x": 5440,
+      "y": 2560,
+      "w": 1280,
+      "h": 900,
+      "title": "Launcher update ready",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "First-Run.dc.html": {
+      "x": 0,
+      "y": 3840,
+      "w": 1280,
+      "h": 900,
+      "title": "First run · library",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "First-Run-Basket.dc.html": {
+      "x": 1360,
+      "y": 3840,
+      "w": 1280,
+      "h": 900,
+      "title": "First run · basket",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Downloads.dc.html": {
+      "x": 2720,
+      "y": 3840,
+      "w": 1280,
+      "h": 900,
+      "title": "Downloads · in progress",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Downloads-Signature.dc.html": {
+      "x": 4080,
+      "y": 3840,
+      "w": 1280,
+      "h": 900,
+      "title": "Downloads · bad signature",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Settings.dc.html": {
+      "x": 5440,
+      "y": 3840,
+      "w": 1280,
+      "h": 1120,
+      "title": "Settings",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Pad-Library.dc.html": {
+      "x": 0,
+      "y": 5340,
+      "w": 1280,
+      "h": 900,
+      "title": "Controller · library",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Pad-Basket.dc.html": {
+      "x": 1360,
+      "y": 5340,
+      "w": 1280,
+      "h": 900,
+      "title": "Controller · basket",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Couch.dc.html": {
+      "x": 2720,
+      "y": 5340,
+      "w": 1280,
+      "h": 720,
+      "title": "Couch mode",
+      "page": "page-bwwaxu",
+      "is_interactive": true
+    },
+    "Couch-Strawberry.dc.html": {
+      "x": 4080,
+      "y": 5340,
+      "w": 1280,
+      "h": 720,
+      "title": "Couch · one system",
+      "page": "page-bwwaxu",
+      "is_interactive": true
+    },
+    "Couch-Saves.dc.html": {
+      "x": 5440,
+      "y": 5340,
+      "w": 1280,
+      "h": 720,
+      "title": "Couch · saves",
+      "page": "page-bwwaxu",
+      "is_interactive": true
+    },
+    "Compact-Library.dc.html": {
+      "x": 0,
+      "y": 6620,
+      "w": 1024,
+      "h": 680,
+      "title": "Compact · 1024 × 680",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Compact-Basket.dc.html": {
+      "x": 1104,
+      "y": 6620,
+      "w": 1024,
+      "h": 680,
+      "title": "Compact basket · 1024 × 680",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Narrow-Library.dc.html": {
+      "x": 2208,
+      "y": 6620,
+      "w": 640,
+      "h": 880,
+      "title": "Narrow · 640",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Narrow-Sheet.dc.html": {
+      "x": 2928,
+      "y": 6620,
+      "w": 640,
+      "h": 880,
+      "title": "Narrow · game sheet",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Narrow-Basket-Sheet.dc.html": {
+      "x": 3648,
+      "y": 6620,
+      "w": 640,
+      "h": 880,
+      "title": "Narrow · fruit sheet",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Night-Library.dc.html": {
+      "x": 0,
+      "y": 7880,
+      "w": 1280,
+      "h": 900,
+      "title": "Night · library",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Night-Basket.dc.html": {
+      "x": 1360,
+      "y": 7880,
+      "w": 1280,
+      "h": 900,
+      "title": "Night · basket",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Night-Downloads.dc.html": {
+      "x": 2720,
+      "y": 7880,
+      "w": 1280,
+      "h": 900,
+      "title": "Night · downloads",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    },
+    "Night-Settings.dc.html": {
+      "x": 4080,
+      "y": 7880,
+      "w": 1280,
+      "h": 1120,
+      "title": "Night · settings",
+      "page": "page-bwwaxu",
+      "is_interactive": true,
+      "expand": "fill"
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-10-02T21:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "row1": {
+      "x": 0,
+      "y": -260,
+      "text": "Library",
+      "kind": "title1",
+      "maxW": 5360,
+      "page": "page-bwwaxu"
+    },
+    "row2": {
+      "x": 0,
+      "y": 1020,
+      "text": "Basket",
+      "kind": "title1",
+      "maxW": 5360,
+      "page": "page-bwwaxu"
+    },
+    "row3": {
+      "x": 0,
+      "y": 2300,
+      "text": "Updating safely",
+      "kind": "title1",
+      "maxW": 6720,
+      "page": "page-bwwaxu"
+    },
+    "row4": {
+      "x": 0,
+      "y": 3580,
+      "text": "First run, downloads, settings",
+      "kind": "title1",
+      "maxW": 6720,
+      "page": "page-bwwaxu"
+    },
+    "row5": {
+      "x": 0,
+      "y": 5080,
+      "text": "Controller and couch mode",
+      "kind": "title1",
+      "maxW": 6720,
+      "page": "page-bwwaxu"
+    },
+    "row6": {
+      "x": 0,
+      "y": 6360,
+      "text": "Smaller windows",
+      "kind": "title1",
+      "maxW": 4288,
+      "page": "page-bwwaxu"
+    },
+    "row7": {
+      "x": 0,
+      "y": 7620,
+      "text": "Night",
+      "kind": "title1",
+      "maxW": 5360,
+      "page": "page-bwwaxu"
+    }
+  },
+  "order": [
+    "Launcher.dc.html",
+    "Library-List.dc.html",
+    "Library-Strawberry.dc.html",
+    "Library-Unverified.dc.html",
+    "Basket.dc.html",
+    "Basket-Strawberry.dc.html",
+    "Basket-Growing.dc.html",
+    "Basket-Search.dc.html",
+    "Installing.dc.html",
+    "Rollback.dc.html",
+    "Uninstall.dc.html",
+    "Download-Failed.dc.html",
+    "Launcher-Update.dc.html",
+    "First-Run.dc.html",
+    "First-Run-Basket.dc.html",
+    "Downloads.dc.html",
+    "Downloads-Signature.dc.html",
+    "Settings.dc.html",
+    "Pad-Library.dc.html",
+    "Pad-Basket.dc.html",
+    "Couch.dc.html",
+    "Couch-Strawberry.dc.html",
+    "Couch-Saves.dc.html",
+    "Compact-Library.dc.html",
+    "Compact-Basket.dc.html",
+    "Narrow-Library.dc.html",
+    "Narrow-Sheet.dc.html",
+    "Narrow-Basket-Sheet.dc.html",
+    "Night-Library.dc.html",
+    "Night-Basket.dc.html",
+    "Night-Downloads.dc.html",
+    "Night-Settings.dc.html"
+  ],
+  "pages": [
+    {
+      "id": "page-bwwaxu",
+      "name": "Launcher"
+    }
+  ],
+  "title": "Fruit Basket Launcher"
+}

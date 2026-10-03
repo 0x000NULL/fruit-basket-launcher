@@ -1,0 +1,2 @@
+# Signed test data must stay byte-for-byte what minisign signed.
+tests/data/** -text

@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fruit Basket Launcher</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; height: 100vh; min-height: 520px; overflow: hidden; background: {{c.bg}}; color: {{c.ink}}; font-family: 'Archivo', system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px {{headerGap}}; padding: {{headerPad}}; flex: none">
+    <img src="{{lockup}}" alt="Fruit Basket" style="height: 28px; width: auto; display: block; flex: none">
+    <nav aria-label="Main" style="display: flex; gap: 2px; flex: none">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="4">
+        <button onClick="{{t.pick}}" aria-current="{{t.current}}" style="height: 44px; padding: {{navPad}}; border: 0; border-bottom: {{t.underline}}; background: transparent; color: {{t.color}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: {{navLs}}; text-transform: uppercase; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 8px">{{t.label}}<sc-if value="{{t.hasBadge}}" hint-placeholder-val="{{ false }}"><span style="min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: {{c.seed}}; color: #F4EFE3; font: 500 11px/18px 'IBM Plex Mono', monospace; letter-spacing: 0; text-align: center">{{t.badge}}</span></sc-if></button>
+      </sc-for>
+    </nav>
+    <div style="flex: 1 1 0px"></div>
+    <label style="display: flex; align-items: center; gap: 12px; height: 40px; border-bottom: 2px solid {{c.ink}}; flex: {{findFlex}}; min-width: 130px">
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.18em; white-space: nowrap; display: {{findLabelDisplay}}">FIND</span>
+      <input value="{{q}}" onChange="{{onQ}}" placeholder="{{findPlaceholder}}" style="flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: {{c.ink}}; font-size: 15px; font-family: 'Archivo', sans-serif">
+    </label>
+    <sc-if value="{{hasUpdates}}" hint-placeholder-val="{{ true }}">
+      <button onClick="{{updateAll}}" style="flex: none; height: 44px; padding: 0 14px; border: 2px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap; cursor: pointer; display: flex; align-items: center; gap: 10px">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: {{c.seed}}"></span>{{updateLabel}}
+      </button>
+    </sc-if>
+    <button aria-label="Couch mode" title="Couch mode" style="flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid {{c.ink}}; background: {{padBg}}; color: {{padFg}}; cursor: pointer; display: flex; align-items: center; justify-content: center">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10a5 5 0 0 1 4.9 6l-.8 3.6a2.6 2.6 0 0 1-4.5 1.2L14.5 15h-5l-2.1 2.8a2.6 2.6 0 0 1-4.5-1.2L2.1 13A5 5 0 0 1 7 7z"></path><path d="M7.5 10v4M5.5 12h4"></path><circle cx="16" cy="11" r="0.6" fill="currentColor"></circle><circle cx="18" cy="13" r="0.6" fill="currentColor"></circle></svg>
+    </button>
+  </header>
+  <div style="height: 3px; background: {{c.ink}}; margin: {{ruleMargin}}; flex: none"></div>
+
+  <sc-if value="{{showLauncherUpdate}}" hint-placeholder-val="{{ false }}">
+    <div style="flex: none; margin: 14px {{sidePad}} 0; padding: 10px 14px 10px 18px; background: {{c.panel}}; border: 1px solid {{c.rule}}; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: {{c.seed}}; flex: none"></span>
+      <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap">Launcher [NEW VERSION]</span>
+      <span style="flex: 1 1 240px; font: 400 15px/1.4 'Source Serif 4', serif">is downloaded and verified. It installs the next time the launcher opens.</span>
+      <button style="height: 36px; padding: 0 14px; border: 1.5px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; font-family: 'Archivo', sans-serif; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer">Restart now</button>
+      <button onClick="{{dismissLauncherUpdate}}" style="height: 36px; padding: 0 8px; border: 0; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 14px; text-decoration: underline; white-space: nowrap; cursor: pointer">Later</button>
+    </div>
+  </sc-if>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+
+    <sc-if value="{{isLibrary}}" hint-placeholder-val="{{ true }}">
+      <main style="flex: 1; min-width: 0; overflow-y: auto; padding: 20px {{sidePad}} 32px; display: flex; flex-direction: column; gap: 26px; box-sizing: border-box">
+        <sc-if value="{{hasLib}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px">
+          <div role="group" aria-label="Show games for" style="display: flex; flex-wrap: wrap; gap: 6px">
+            <sc-for list="{{chips}}" as="ch" hint-placeholder-count="3">
+              <button onClick="{{ch.pick}}" aria-pressed="{{ch.on}}" style="height: 34px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: {{ch.bg}}; color: {{ch.fg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer">{{ch.label}} <span style="font: 400 12px 'IBM Plex Mono', monospace; opacity: 0.75">{{ch.count}}</span></button>
+            </sc-for>
+          </div>
+          <div style="flex: 1 1 0px"></div>
+          <div role="group" aria-label="Sort" style="display: inline-flex; border: 1.5px solid {{c.ink}}; flex: none">
+            <button onClick="{{sortRecent}}" aria-pressed="{{isRecent}}" style="height: 31px; padding: 0 11px; border: 0; background: {{recentBg}}; color: {{recentFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Recent</button>
+            <button onClick="{{sortAZ}}" aria-pressed="{{isAZ}}" style="height: 31px; padding: 0 11px; border: 0; background: {{azBg}}; color: {{azFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">A–Z</button>
+          </div>
+          <div role="group" aria-label="View" style="display: inline-flex; border: 1.5px solid {{c.ink}}; flex: none">
+            <button onClick="{{viewCovers}}" aria-pressed="{{isCovers}}" style="height: 31px; padding: 0 11px; border: 0; background: {{coversBg}}; color: {{coversFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Covers</button>
+            <button onClick="{{viewList}}" aria-pressed="{{isList}}" style="height: 31px; padding: 0 11px; border: 0; background: {{listBg}}; color: {{listFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">List</button>
+          </div>
+          <button style="flex: none; height: 34px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer">Add folder…</button>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{libEmpty}}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 28px; border: 1px dashed {{c.rule}}; display: flex; flex-wrap: wrap; align-items: center; gap: 24px">
+            <img src="{{mark}}" alt="" style="width: 96px; height: auto; flex: none; display: block">
+            <div style="flex: 1 1 280px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start">
+              <h2 style="margin: 0; font-size: 30px; font-weight: 800; font-stretch: 72%; line-height: 1; text-transform: uppercase">No games yet</h2>
+              <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif; color: {{c.muted}}; max-width: 46ch">Install a fruit from the basket, then put your games in its games/ folder. They show up here on their own.</p>
+              <button onClick="{{goBasket}}" style="height: 42px; padding: 0 16px; border: 2px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 700; white-space: nowrap; cursor: pointer">Open the basket</button>
+            </div>
+          </div>
+        </sc-if>
+        <sc-if value="{{noGameMatch}}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 20px; border: 1px dashed {{c.rule}}; font: 400 16px/1.5 'Source Serif 4', serif; color: {{c.muted}}">No game matches “{{q}}”.</div>
+        </sc-if>
+
+        <sc-if value="{{showContinue}}" hint-placeholder-val="{{ true }}">
+          <section style="display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 9px; border-bottom: 1px solid {{c.rule}}">
+              <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap">Continue</h2>
+              <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; color: {{c.muted}}">last played</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px">
+              <sc-for list="{{continueList}}" as="g" hint-placeholder-count="3">
+                <div style="display: flex; align-items: center; gap: 14px; padding: 10px; border: {{g.border}}; background: {{g.cardBg}}; min-width: 0">
+                  <button onClick="{{g.pick}}" aria-label="{{g.title}}" style="flex: none; width: 54px; height: 72px; padding: 0; border: 0; background: {{g.coverBg}}; cursor: pointer"></button>
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                    <span style="font-size: 18px; font-weight: 800; font-stretch: 72%; line-height: 1.05; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{g.title}}</span>
+                    <span style="font: 400 12px 'IBM Plex Mono', monospace; color: {{c.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{g.fruitName}} · {{g.last}}</span>
+                  </div>
+                  <button onClick="{{g.play}}" aria-label="Continue {{g.title}}" title="Continue" style="flex: none; width: 44px; height: 44px; padding: 0; border: 2px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; cursor: pointer; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"></path></svg></button>
+                </div>
+              </sc-for>
+            </div>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{hasGames}}" hint-placeholder-val="{{ true }}">
+          <section style="display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 9px; border-bottom: 1px solid {{c.rule}}">
+              <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap">{{gamesTitle}} <span style="color: {{c.muted}}">· {{gamesCount}}</span></h2>
+              <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; color: {{c.muted}}">{{sortNote}}</span>
+            </div>
+            <sc-if value="{{isCovers}}" hint-placeholder-val="{{ true }}">
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax({{coverMin}}, 1fr)); gap: 20px 16px">
+                <sc-for list="{{games}}" as="g" hint-placeholder-count="8">
+                  <button onClick="{{g.pick}}" aria-pressed="{{g.selected}}" style="display: flex; flex-direction: column; gap: 7px; padding: 0; border: 0; background: transparent; color: {{c.ink}}; text-align: left; cursor: pointer; min-width: 0; font-family: 'Archivo', sans-serif">
+                    <span style="position: relative; display: block; width: 100%; aspect-ratio: 3 / 4; background: {{g.coverBg}}; outline: {{g.outline}}; outline-offset: 3px">
+                      <span style="position: absolute; top: 9px; left: 10px; font: 500 10px 'IBM Plex Mono', monospace; color: #F4EFE3; opacity: 0.85">{{g.sys}}</span>
+                      <span style="position: absolute; left: 10px; right: 10px; bottom: 10px; font-size: 16px; font-weight: 800; font-stretch: 72%; line-height: 1.05; text-transform: uppercase; color: #F4EFE3">{{g.title}}</span>
+                    </span>
+                    <span style="display: flex; align-items: center; gap: 8px; min-width: 0">
+                      <span style="display: inline-flex; gap: 2px; flex: none" aria-label="{{g.compat}}"><sc-for list="{{g.bars}}" as="b" hint-placeholder-count="4"><span style="width: 7px; height: 7px; background: {{b.fill}}; border: 1px solid {{c.ink}}; box-sizing: border-box"></span></sc-for></span>
+                      <span style="font: 400 12px 'IBM Plex Mono', monospace; color: {{c.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{g.metaShort}}</span>
+                    </span>
+                  </button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{isList}}" hint-placeholder-val="{{ false }}">
+              <div style="overflow-x: auto">
+                <div style="min-width: 640px; display: flex; flex-direction: column">
+                  <div style="display: grid; grid-template-columns: 32px minmax(160px, 1fr) 110px 120px 110px 80px; gap: 14px; padding: 0 8px 8px; border-bottom: 1px solid {{c.rule}}; font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}"><span></span><span>Title</span><span>System</span><span>Runs</span><span>Last played</span><span style="text-align: right">Size</span></div>
+                  <sc-for list="{{games}}" as="g" hint-placeholder-count="8">
+                    <button onClick="{{g.pick}}" aria-pressed="{{g.selected}}" style="display: grid; grid-template-columns: 32px minmax(160px, 1fr) 110px 120px 110px 80px; gap: 14px; align-items: center; padding: 8px; border: 0; border-bottom: 1px solid {{c.rule}}; background: {{g.rowBg}}; color: {{c.ink}}; text-align: left; cursor: pointer; font-family: 'Archivo', sans-serif">
+                      <span style="width: 24px; height: 32px; background: {{g.coverBg}}"></span>
+                      <span style="font-size: 17px; font-weight: 800; font-stretch: 72%; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{g.title}}</span>
+                      <span style="font: 400 13px 'IBM Plex Mono', monospace; white-space: nowrap">{{g.sys}}</span>
+                      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap"><span style="display: inline-flex; gap: 2px"><sc-for list="{{g.bars}}" as="b" hint-placeholder-count="4"><span style="width: 7px; height: 7px; background: {{b.fill}}; border: 1px solid {{c.ink}}; box-sizing: border-box"></span></sc-for></span>{{g.compat}}</span>
+                      <span style="font: 400 13px 'IBM Plex Mono', monospace; color: {{c.muted}}; white-space: nowrap">{{g.last}}</span>
+                      <span style="font: 400 13px 'IBM Plex Mono', monospace; color: {{c.muted}}; text-align: right">[SIZE]</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </section>
+        </sc-if>
+      </main>
+
+      <sc-if value="{{showGameAside}}" hint-placeholder-val="{{ true }}">
+        <aside aria-label="Selected game" style="{{asideStyle}}">
+          <sc-if value="{{narrow}}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; justify-content: space-between; align-items: center"><span style="width: 44px; height: 4px; background: {{c.rule}}"></span><button onClick="{{closeSheet}}" style="height: 36px; padding: 0 4px; border: 0; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 14px; text-decoration: underline; cursor: pointer">Close</button></div>
+          </sc-if>
+          <div style="display: flex; gap: 18px; align-items: flex-end">
+            <span style="flex: none; width: {{gcoverW}}; aspect-ratio: 3 / 4; background: {{g.coverBg}}; position: relative; display: block">
+              <span style="position: absolute; top: 9px; left: 10px; font: 500 10px 'IBM Plex Mono', monospace; color: #F4EFE3; opacity: 0.85">{{g.sys}}</span>
+            </span>
+            <div style="display: flex; flex-direction: column; gap: 8px; min-width: 0">
+              <span style="display: flex; align-items: center; gap: 8px"><span style="display: inline-flex; gap: 2px"><sc-for list="{{g.bars}}" as="b" hint-placeholder-count="4"><span style="width: 9px; height: 9px; background: {{b.fill}}; border: 1px solid {{c.ink}}; box-sizing: border-box"></span></sc-for></span><span style="font-size: 14px; font-weight: 600">{{g.compat}}</span></span>
+              <span style="font: 400 12px/1.4 'IBM Plex Mono', monospace; color: {{c.muted}}">from {{g.fruitName}}’s compatibility list</span>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+            <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; white-space: nowrap">{{g.sys}} · {{g.fruitName}}</div>
+            <h1 style="margin: 0; font-size: 40px; font-weight: 800; font-stretch: 72%; line-height: 0.98; text-transform: uppercase; overflow-wrap: anywhere">{{g.title}}</h1>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <button onClick="{{g.play}}" style="height: 54px; padding: 0 20px; border: 2px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; font-family: 'Archivo', sans-serif; font-size: 18px; font-weight: 700; white-space: nowrap; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px">{{g.playLabel}}<span style="font: 400 13px 'IBM Plex Mono', monospace; opacity: 0.6">{{playKey}}</span></button>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px">
+              <button style="height: 40px; padding: 0 14px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer">Saves · {{g.saves}}</button>
+              <button style="height: 40px; padding: 0 14px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer">Show file</button>
+              <span style="flex: 1"></span>
+              <button style="height: 40px; padding: 0 2px; border: 0; background: transparent; color: {{c.muted}}; font-family: 'Archivo', sans-serif; font-size: 14px; text-decoration: underline; white-space: nowrap; cursor: pointer">Remove</button>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; border-top: 1px solid {{c.rule}}">
+            <div style="padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 6px; min-width: 0"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Last played</span><span style="font: 400 14px 'IBM Plex Mono', monospace">{{g.last}}</span></div>
+            <div style="padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 6px; min-width: 0"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Play time</span><span style="font: 400 14px 'IBM Plex Mono', monospace">{{g.time}}</span></div>
+            <div style="grid-column: span 2; padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 6px; min-width: 0"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Dump</span><span style="display: flex; align-items: center; gap: 8px; font: 400 15px/1.4 'Source Serif 4', serif"><sc-if value="{{g.dumpOk}}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if><sc-if value="{{g.dumpBad}}" hint-placeholder-val="{{ false }}"><span style="width: 9px; height: 9px; border-radius: 50%; background: {{c.seed}}; flex: none; margin: 0 3px"></span></sc-if>{{g.dump}}</span></div>
+            <div style="grid-column: span 2; padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 6px; min-width: 0"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">File</span><span style="font: 400 13px/1.45 'IBM Plex Mono', monospace; overflow-wrap: anywhere">{{g.path}}</span></div>
+          </div>
+        </aside>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{isBasket}}" hint-placeholder-val="{{ false }}">
+      <main style="flex: 1; min-width: 0; overflow-y: auto; padding: 22px {{sidePad}} 32px; display: flex; flex-direction: column; gap: 28px; box-sizing: border-box">
+        <sc-if value="{{noFruitMatch}}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 20px; border: 1px dashed {{c.rule}}; font: 400 16px/1.5 'Source Serif 4', serif; color: {{c.muted}}">No fruit matches “{{q}}”.</div>
+        </sc-if>
+        <sc-for list="{{sections}}" as="s" hint-placeholder-count="2">
+          <section style="display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 9px; border-bottom: 1px solid {{c.rule}}">
+              <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap">{{s.title}} <span style="color: {{c.muted}}">· {{s.count}}</span></h2>
+              <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; color: {{c.muted}}">{{s.note}}</span>
+            </div>
+            <sc-if value="{{s.empty}}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 18px 20px; border: 1px dashed {{c.rule}}; display: flex; align-items: center; gap: 20px">
+                <sc-if value="{{s.showMark}}" hint-placeholder-val="{{ false }}"><img src="{{mark}}" alt="" style="width: 64px; height: auto; flex: none; display: block"></sc-if>
+                <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif; color: {{c.muted}}; max-width: 46ch">{{s.emptyText}}</p>
+              </div>
+            </sc-if>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px">
+              <sc-for list="{{s.items}}" as="f" hint-placeholder-count="2">
+                <button onClick="{{f.pick}}" aria-pressed="{{f.selected}}" style="position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: {{f.border}}; outline: {{f.outline}}; outline-offset: 3px; background: {{f.cardBg}}; color: {{c.ink}}; text-align: left; cursor: pointer; box-sizing: border-box; min-width: 0; font-family: 'Archivo', sans-serif">
+                  <img src="{{f.icon}}" alt="" style="width: 76.8px; height: 76.8px; flex: none; display: block; image-rendering: {{f.render}}">
+                  <span style="display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1">
+                    <span style="display: flex; gap: 8px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; overflow: hidden"><span style="color: {{c.seed}}">No. {{f.no}}</span><span style="color: {{c.muted}}">{{f.sys}}</span></span>
+                    <span style="font-size: 22px; font-weight: 800; font-stretch: 72%; line-height: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.name}}</span>
+                    <span style="font: 400 12px/1.3 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{f.statusColor}}">{{f.status}}</span>
+                    <sc-if value="{{f.busy}}" hint-placeholder-val="{{ false }}">
+                      <span style="display: block; width: 100%; height: 4px; background: {{c.rule}}"><span style="display: block; height: 4px; width: {{pctW}}; background: {{c.ink}}"></span></span>
+                    </sc-if>
+                  </span>
+                  <sc-if value="{{f.hasDot}}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; top: 12px; right: 12px; width: 9px; height: 9px; border-radius: 50%; background: {{c.seed}}"></span>
+                  </sc-if>
+                </button>
+              </sc-for>
+            </div>
+          </section>
+        </sc-for>
+        <sc-if value="{{hasGrowing}}" hint-placeholder-val="{{ true }}">
+          <section style="display: flex; flex-direction: column; gap: 12px">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 9px; border-bottom: 1px solid {{c.rule}}">
+              <h2 style="margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; white-space: nowrap">Still growing <span style="color: {{c.muted}}">· {{growingCount}}</span></h2>
+              <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; color: {{c.muted}}">no build yet</span>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px">
+              <sc-for list="{{growing}}" as="f" hint-placeholder-count="7">
+                <button onClick="{{f.pick}}" aria-pressed="{{f.selected}}" style="width: 96px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; border: {{f.stripBorder}}; outline: {{f.outline}}; outline-offset: 3px; background: {{f.cardBg}}; color: {{c.muted}}; cursor: pointer; font-family: 'Archivo', sans-serif">
+                  <img src="{{f.icon}}" alt="" style="width: 51.2px; height: 51.2px; display: block; image-rendering: {{f.render}}; opacity: 0.45">
+                  <span style="font-size: 13px; font-weight: 800; font-stretch: 72%; text-transform: uppercase; white-space: nowrap">{{f.name}}</span>
+                  <span style="font: 400 10.5px 'IBM Plex Mono', monospace; white-space: nowrap; color: {{f.watchColor}}">{{f.stripNote}}</span>
+                </button>
+              </sc-for>
+            </div>
+          </section>
+        </sc-if>
+      </main>
+
+      <sc-if value="{{showFruitAside}}" hint-placeholder-val="{{ true }}">
+        <aside aria-label="Selected fruit" style="{{asideStyle}}">
+          <sc-if value="{{narrow}}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; justify-content: space-between; align-items: center"><span style="width: 44px; height: 4px; background: {{c.rule}}"></span><button onClick="{{closeSheet}}" style="height: 36px; padding: 0 4px; border: 0; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 14px; text-decoration: underline; cursor: pointer">Close</button></div>
+          </sc-if>
+          <div style="display: flex; align-items: center; gap: 18px; min-width: 0">
+            <img src="{{sel.bigIcon}}" alt="" style="width: 76.8px; height: 76.8px; flex: none; display: block; image-rendering: {{sel.render}}; opacity: {{sel.opacity}}">
+            <div style="display: flex; flex-direction: column; gap: 6px; min-width: 0">
+              <div style="display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase"><span style="color: {{c.seed}}; white-space: nowrap">No. {{sel.no}}</span><span style="color: {{c.muted}}; white-space: nowrap">{{sel.sys}} · Emulator</span></div>
+              <h1 style="margin: 0; font-size: {{h1Size}}; font-weight: 800; font-stretch: 72%; line-height: 0.95; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{sel.name}}</h1>
+            </div>
+          </div>
+          <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif">{{sel.blurb}}</p>
+
+          <sc-if value="{{sel.notPlanned}}" hint-placeholder-val="{{ true }}">
+            <div style="display: flex; flex-direction: column; gap: 10px">
+              <button onClick="{{sel.primary}}" disabled="{{sel.primaryDisabled}}" style="height: 52px; padding: 0 20px; border: 2px solid {{sel.primaryBorder}}; background: {{sel.primaryBg}}; color: {{sel.primaryFg}}; font-family: 'Archivo', sans-serif; font-size: 18px; font-weight: 700; white-space: nowrap; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px">{{sel.primaryLabel}}<sc-if value="{{sel.showKey}}" hint-placeholder-val="{{ true }}"><span style="font: 400 13px 'IBM Plex Mono', monospace; opacity: 0.6">{{playKey}}</span></sc-if></button>
+              <sc-if value="{{sel.isBusy}}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; gap: 6px">
+                  <sc-for list="{{steps}}" as="st" hint-placeholder-count="3">
+                    <span style="flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0"><span style="height: 4px; background: {{st.bar}}"></span><span style="font: 400 11px 'IBM Plex Mono', monospace; color: {{st.color}}; white-space: nowrap">{{st.label}}</span></span>
+                  </sc-for>
+                </div>
+              </sc-if>
+              <sc-if value="{{sel.hasNews}}" hint-placeholder-val="{{ false }}">
+                <div style="padding: 14px 16px; border: 1px solid {{c.rule}}; background: {{c.bg}}; display: flex; flex-direction: column; gap: 8px">
+                  <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px"><span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap">What’s new · [NEW BUILD]</span><a href="#" style="color: {{c.ink}}; font-size: 13px; white-space: nowrap">Full notes</a></div>
+                  <ul style="margin: 0; padding-left: 18px; font: 400 15px/1.5 'Source Serif 4', serif">
+                    <li>[Change from the release notes]</li>
+                    <li>[Change from the release notes]</li>
+                    <li>[Fix from the release notes]</li>
+                  </ul>
+                </div>
+              </sc-if>
+              <sc-if value="{{sel.isInstalled}}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px">
+                  <button style="height: 40px; padding: 0 14px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer">Open games/</button>
+                  <button onClick="{{sel.askRollback}}" style="height: 40px; padding: 0 14px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer">Roll back…</button>
+                  <span style="flex: 1"></span>
+                  <button onClick="{{sel.askUninstall}}" style="height: 40px; padding: 0 2px; border: 0; background: transparent; color: {{c.muted}}; font-family: 'Archivo', sans-serif; font-size: 14px; text-decoration: underline; white-space: nowrap; cursor: pointer">Uninstall</button>
+                </div>
+              </sc-if>
+            </div>
+
+            <section style="display: flex; flex-direction: column">
+              <h2 style="margin: 0 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">{{sel.checkTitle}}</h2>
+              <sc-for list="{{sel.checks}}" as="k" hint-placeholder-count="5">
+                <div style="display: flex; align-items: center; gap: 12px; min-height: 44px; border-bottom: 1px solid {{c.rule}}">
+                  <span style="width: 18px; flex: none; display: flex; justify-content: center">
+                    <sc-if value="{{k.ok}}" hint-placeholder-val="{{ true }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-label="Done"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if>
+                    <sc-if value="{{k.warn}}" hint-placeholder-val="{{ false }}"><span aria-label="Needs attention" style="width: 9px; height: 9px; border-radius: 50%; background: {{c.seed}}"></span></sc-if>
+                    <sc-if value="{{k.todo}}" hint-placeholder-val="{{ false }}"><span style="width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid {{c.muted}}; box-sizing: border-box"></span></sc-if>
+                  </span>
+                  <span style="width: 88px; flex: none; font-size: 14px; font-weight: 600; white-space: nowrap">{{k.label}}</span>
+                  <span style="flex: 1; min-width: 0; font: 400 13px 'IBM Plex Mono', monospace; color: {{k.color}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{k.value}}</span>
+                  <sc-if value="{{k.hasAction}}" hint-placeholder-val="{{ false }}"><button style="flex: none; height: 32px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer">{{k.action}}</button></sc-if>
+                </div>
+              </sc-for>
+            </section>
+
+            <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px">
+              <div style="padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 7px; min-width: 0">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Channel</span>
+                <div role="group" aria-label="Release channel" style="display: inline-flex; align-self: flex-start; border: 1.5px solid {{c.ink}}">
+                  <button onClick="{{sel.setStable}}" aria-pressed="{{sel.isStable}}" style="height: 30px; padding: 0 11px; border: 0; background: {{sel.stableBg}}; color: {{sel.stableFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Stable</button>
+                  <button onClick="{{sel.setNightly}}" aria-pressed="{{sel.isNightly}}" style="height: 30px; padding: 0 11px; border: 0; background: {{sel.nightlyBg}}; color: {{sel.nightlyFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Nightly</button>
+                </div>
+              </div>
+              <div style="padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 7px; min-width: 0">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">On disk</span>
+                <span style="font: 400 13px/1.45 'IBM Plex Mono', monospace; white-space: pre-line">{{sel.disk}}</span>
+              </div>
+              <div style="grid-column: span 2; padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 7px; min-width: 0">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Builds for</span>
+                <span style="display: flex; flex-wrap: wrap; gap: 6px">
+                  <sc-for list="{{platforms}}" as="pl" hint-placeholder-count="3">
+                    <span style="height: 26px; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid {{pl.border}}; color: {{pl.fg}}; font: 400 12px 'IBM Plex Mono', monospace; white-space: nowrap">{{pl.label}}</span>
+                  </sc-for>
+                </span>
+              </div>
+              <div style="grid-column: span 2; padding: 11px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; min-width: 0">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Docs</span>
+                <a href="#" style="color: {{c.ink}}; font-size: 14px">README</a><a href="#" style="color: {{c.ink}}; font-size: 14px">Compatibility list</a><a href="#" style="color: {{c.ink}}; font-size: 14px">All releases</a>
+              </div>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{sel.isPlanned}}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 20px; border: 1.5px dashed {{c.ink}}; display: flex; flex-direction: column; gap: 14px">
+              <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase">Still growing</div>
+              <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif">No build yet. {{sel.name}} moves up to Ready to install the night its first build lands.</p>
+              <div style="display: flex; flex-direction: column; gap: 5px">
+                <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}">Will read</span>
+                <span style="font: 400 13px 'IBM Plex Mono', monospace">{{sel.ext}}</span>
+              </div>
+              <button onClick="{{sel.toggleWatch}}" aria-pressed="{{sel.watching}}" style="align-self: flex-start; height: 44px; padding: 0 18px; border: 2px solid {{c.ink}}; background: {{sel.watchBg}}; color: {{sel.watchFg}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer">{{sel.watchLabel}}</button>
+            </div>
+          </sc-if>
+        </aside>
+      </sc-if>
+    </sc-if>
+
+    <sc-if value="{{isDownloads}}" hint-placeholder-val="{{ false }}">
+      <main style="flex: 1; min-width: 0; overflow-y: auto; padding: 22px {{sidePad}} 32px; box-sizing: border-box">
+        <div style="max-width: 960px; display: flex; flex-direction: column; gap: 30px">
+          <section style="display: flex; flex-direction: column; gap: 14px">
+            <h2 style="margin: 0; padding-bottom: 9px; border-bottom: 1px solid {{c.rule}}; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase">Now</h2>
+            <sc-if value="{{busyAny}}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; align-items: center; gap: 18px">
+                <img src="{{busyIcon}}" alt="" style="width: 76.8px; height: 76.8px; flex: none; image-rendering: {{busyRender}}">
+                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+                  <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 16px"><span style="font-size: 26px; font-weight: 800; font-stretch: 72%; text-transform: uppercase; white-space: nowrap">{{busyName}}</span><span style="font: 400 13px 'IBM Plex Mono', monospace; white-space: nowrap">{{busyLine}}</span></div>
+                  <div style="display: flex; gap: 6px">
+                    <sc-for list="{{steps}}" as="st" hint-placeholder-count="3">
+                      <span style="flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0"><span style="height: 6px; background: {{st.bar}}"></span><span style="font: 400 12px 'IBM Plex Mono', monospace; color: {{st.color}}; white-space: nowrap">{{st.label}}</span></span>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{hasFailed}}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; padding: 14px 16px; border: 1.5px solid {{c.seed}}">
+                <img src="{{failedIcon}}" alt="" style="width: 51.2px; height: 51.2px; flex: none; image-rendering: {{failedRender}}">
+                <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                  <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.seed}}">{{failedName}} · {{failHead}}</span>
+                  <span style="font: 400 15px/1.45 'Source Serif 4', serif">{{failText}}</span>
+                </div>
+                <button onClick="{{retryFailed}}" style="height: 40px; padding: 0 16px; border: 2px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 600; white-space: nowrap; cursor: pointer">Try again</button>
+              </div>
+            </sc-if>
+            <sc-for list="{{queueRows}}" as="r" hint-placeholder-count="0">
+              <div style="display: flex; align-items: center; gap: 16px; padding: 4px 0">
+                <img src="{{r.icon}}" alt="" style="width: 38.4px; height: 38.4px; flex: none; image-rendering: {{r.render}}; opacity: 0.6">
+                <span style="flex: 1; min-width: 0; font-size: 18px; font-weight: 800; font-stretch: 72%; text-transform: uppercase; white-space: nowrap; color: {{c.muted}}">{{r.name}}</span>
+                <span style="font: 400 13px 'IBM Plex Mono', monospace; color: {{c.muted}}; white-space: nowrap">queued · {{r.what}}</span>
+              </div>
+            </sc-for>
+            <sc-if value="{{idle}}" hint-placeholder-val="{{ true }}">
+              <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif; color: {{c.muted}}">Nothing downloading. Every build is checked against the signing key before it is installed.</p>
+            </sc-if>
+          </section>
+          <section style="display: flex; flex-direction: column">
+            <h2 style="margin: 0; padding-bottom: 9px; border-bottom: 1px solid {{c.rule}}; font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase">Earlier</h2>
+            <sc-if value="{{noLog}}" hint-placeholder-val="{{ false }}">
+              <p style="margin: 14px 0 0; font: 400 16px/1.5 'Source Serif 4', serif; color: {{c.muted}}">Nothing yet.</p>
+            </sc-if>
+            <sc-for list="{{log}}" as="l" hint-placeholder-count="3">
+              <div style="display: grid; grid-template-columns: 38.4px minmax(0, 1fr) minmax(0, 1.4fr) 92px; gap: 16px; align-items: center; padding: 10px 0; border-bottom: 1px solid {{c.rule}}">
+                <img src="{{l.icon}}" alt="" style="width: 38.4px; height: 38.4px; image-rendering: {{l.render}}">
+                <span style="font-size: 18px; font-weight: 800; font-stretch: 72%; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{l.name}}</span>
+                <span style="display: flex; align-items: center; gap: 8px; min-width: 0; font: 400 13px 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden"><sc-if value="{{l.verified}}" hint-placeholder-val="{{ true }}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-label="Verified" style="flex: none"><path d="M4 12.5l5 5L20 6.5"></path></svg></sc-if><span style="overflow: hidden; text-overflow: ellipsis">{{l.what}}</span></span>
+                <span style="font: 400 13px 'IBM Plex Mono', monospace; color: {{c.muted}}; text-align: right; white-space: nowrap">{{l.when}}</span>
+              </div>
+            </sc-for>
+          </section>
+        </div>
+      </main>
+    </sc-if>
+
+    <sc-if value="{{isSettings}}" hint-placeholder-val="{{ false }}">
+      <main style="flex: 1; min-width: 0; overflow-y: auto; padding: 22px {{sidePad}} 32px; box-sizing: border-box">
+        <div style="max-width: 960px; display: grid; grid-template-columns: {{setCols}}; column-gap: 28px; border-top: 1px solid {{c.rule}}">
+          <div style="padding: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; border-bottom: {{setLabelRule}}">Game folders</div>
+          <div style="padding: 10px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; align-items: center; gap: 12px; min-height: 36px"><span style="flex: 1; min-width: 0; font: 400 13px 'IBM Plex Mono', monospace; overflow-wrap: anywhere">~/FruitBasket/&lt;fruit&gt;/games/</span><span style="font-size: 13px; color: {{c.muted}}; white-space: nowrap">always scanned</span></div>
+            <div style="display: flex; align-items: center; gap: 12px; min-height: 36px"><span style="flex: 1; min-width: 0; font: 400 13px 'IBM Plex Mono', monospace; overflow-wrap: anywhere">[EXTRA FOLDER]</span><button style="height: 30px; padding: 0 4px; border: 0; background: transparent; color: {{c.muted}}; font-family: 'Archivo', sans-serif; font-size: 13px; text-decoration: underline; cursor: pointer">Remove</button></div>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding-top: 6px"><button style="height: 34px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer">Add folder…</button><label style="display: flex; align-items: center; gap: 10px; min-height: 34px; font-size: 14px; cursor: pointer"><input type="checkbox" checked="{{rescan}}" onChange="{{toggleRescan}}" style="width: 17px; height: 17px; margin: 0; accent-color: {{c.ink}}">Rescan when the launcher opens</label></div>
+          </div>
+
+          <div style="padding: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; border-bottom: {{setLabelRule}}">Storage</div>
+          <div style="padding: 10px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 36px; padding-bottom: 8px"><span style="font: 400 13px 'IBM Plex Mono', monospace">~/FruitBasket/</span><span style="font-size: 14px; color: {{c.muted}}">[SIZE] used · [SIZE] free</span><span style="flex: 1"></span><button style="height: 32px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer">Move basket…</button></div>
+            <sc-for list="{{storageRows}}" as="d" hint-placeholder-count="2">
+              <div style="display: grid; grid-template-columns: 38.4px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 8px 0; border-top: 1px solid {{c.rule}}">
+                <img src="{{d.icon}}" alt="" style="width: 38.4px; height: 38.4px; image-rendering: {{d.render}}">
+                <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0"><span style="font-size: 16px; font-weight: 800; font-stretch: 72%; text-transform: uppercase">{{d.name}}</span><span style="font: 400 12px 'IBM Plex Mono', monospace; color: {{c.muted}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">program [SIZE] · games [SIZE] · {{d.kept}}</span></span>
+                <button style="height: 30px; padding: 0 4px; border: 0; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; text-decoration: underline; white-space: nowrap; cursor: pointer">Clear old builds</button>
+              </div>
+            </sc-for>
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding-top: 10px; border-top: 1px solid {{c.rule}}">
+              <span style="font-size: 14px">Old builds to keep for rolling back</span>
+              <div role="group" aria-label="Builds to keep" style="display: inline-flex; border: 1.5px solid {{c.ink}}">
+                <sc-for list="{{keepOpts}}" as="o" hint-placeholder-count="3"><button onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="height: 30px; min-width: 36px; padding: 0 10px; border: 0; background: {{o.bg}}; color: {{o.fg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">{{o.label}}</button></sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; border-bottom: {{setLabelRule}}">Updates</div>
+          <div style="padding: 10px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 40px">
+              <span style="font-size: 14px">New installs use</span>
+              <div role="group" aria-label="Default channel" style="display: inline-flex; border: 1.5px solid {{c.ink}}">
+                <button onClick="{{defStable}}" aria-pressed="{{defIsStable}}" style="height: 30px; padding: 0 12px; border: 0; background: {{defStableBg}}; color: {{defStableFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Stable</button>
+                <button onClick="{{defNightly}}" aria-pressed="{{defIsNightly}}" style="height: 30px; padding: 0 12px; border: 0; background: {{defNightlyBg}}; color: {{defNightlyFg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">Nightly</button>
+              </div>
+            </div>
+            <label style="display: flex; align-items: center; gap: 12px; min-height: 38px; font-size: 14px; cursor: pointer"><input type="checkbox" checked="{{autoCheck}}" onChange="{{toggleAutoCheck}}" style="width: 17px; height: 17px; margin: 0; flex: none; accent-color: {{c.ink}}">Check every fruit when the launcher opens</label>
+            <label style="display: flex; align-items: center; gap: 12px; min-height: 38px; font-size: 14px; cursor: pointer"><input type="checkbox" checked="{{autoApply}}" onChange="{{toggleAutoApply}}" style="width: 17px; height: 17px; margin: 0; flex: none; accent-color: {{c.ink}}">Install updates without asking</label>
+            <label style="display: flex; align-items: center; gap: 12px; min-height: 38px; font-size: 14px; color: {{c.muted}}"><input type="checkbox" checked="{{ true }}" disabled="{{ true }}" style="width: 17px; height: 17px; margin: 0; flex: none; accent-color: {{c.ink}}">Only install builds signed with [KEY ID] · always on</label>
+          </div>
+
+          <div style="padding: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; border-bottom: {{setLabelRule}}">Controller</div>
+          <div style="padding: 10px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 2px">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 40px"><span style="display: flex; align-items: center; gap: 8px; font-size: 14px"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{padDot}}; border: 1.5px solid {{c.ink}}"></span>{{padText}}</span><span style="flex: 1"></span><button style="height: 32px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer">Map buttons…</button></div>
+            <label style="display: flex; align-items: center; gap: 12px; min-height: 38px; font-size: 14px; cursor: pointer"><input type="checkbox" checked="{{autoCouch}}" onChange="{{toggleAutoCouch}}" style="width: 17px; height: 17px; margin: 0; flex: none; accent-color: {{c.ink}}">Open in couch mode when a controller connects</label>
+          </div>
+
+          <div style="padding: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; border-bottom: {{setLabelRule}}">Look</div>
+          <div style="padding: 10px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 40px">
+            <span style="font-size: 14px">Theme</span>
+            <div role="group" aria-label="Theme" style="display: inline-flex; border: 1.5px solid {{c.ink}}">
+              <sc-for list="{{themeOpts}}" as="o" hint-placeholder-count="3"><button onClick="{{o.pick}}" aria-pressed="{{o.on}}" style="height: 30px; padding: 0 12px; border: 0; background: {{o.bg}}; color: {{o.fg}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer">{{o.label}}</button></sc-for>
+            </div>
+            <span style="font: 400 14px 'Source Serif 4', serif; color: {{c.muted}}">{{themeNote}}</span>
+          </div>
+
+          <div style="padding: 18px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: {{c.muted}}; border-bottom: {{setLabelRule}}">Launcher</div>
+          <div style="padding: 10px 0; border-bottom: 1px solid {{c.rule}}; display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; min-height: 36px"><span style="font: 400 13px 'IBM Plex Mono', monospace">[VERSION]</span><button style="height: 32px; padding: 0 12px; border: 1.5px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer">Check now</button></div>
+            <span style="font: 400 13px/1.5 'IBM Plex Mono', monospace; color: {{c.muted}}; overflow-wrap: anywhere">builds from https://[SITE HOST]/&lt;fruit&gt;/ · key [KEY ID]</span>
+          </div>
+        </div>
+      </main>
+    </sc-if>
+  </div>
+
+  <footer style="flex: none; margin: 0 {{sidePad}}; border-top: 1px solid {{c.rule}}; padding: 12px 0 14px; display: flex; align-items: center; gap: 20px; font-size: 14px; white-space: nowrap">
+    <sc-for list="{{hintsL}}" as="h" hint-placeholder-count="2">
+      <span style="display: flex; align-items: center; gap: 9px; flex: none"><kbd style="min-width: 26px; height: 26px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; border: 1.5px solid {{c.ink}}; border-bottom-width: {{h.bottom}}; border-radius: {{h.radius}}; font: {{h.font}}">{{h.key}}</kbd><sc-if value="{{h.hasKey2}}" hint-placeholder-val="{{ false }}"><kbd style="min-width: 26px; height: 26px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; margin-left: -4px; border: 1.5px solid {{c.ink}}; border-bottom-width: {{h.bottom}}; border-radius: {{h.radius}}; font: {{h.font}}">{{h.key2}}</kbd></sc-if><span>{{h.label}}</span></span>
+    </sc-for>
+    <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; font: 400 12px 'IBM Plex Mono', monospace; color: {{c.muted}}">{{footerStatus}}</span>
+    <sc-for list="{{hintsR}}" as="h" hint-placeholder-count="1">
+      <span style="display: flex; align-items: center; gap: 9px; flex: none"><kbd style="min-width: 26px; height: 26px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; border: 1.5px solid {{c.ink}}; border-bottom-width: {{h.bottom}}; border-radius: {{h.radius}}; font: {{h.font}}">{{h.key}}</kbd><sc-if value="{{h.hasKey2}}" hint-placeholder-val="{{ false }}"><kbd style="min-width: 26px; height: 26px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; margin-left: -4px; border: 1.5px solid {{c.ink}}; border-bottom-width: {{h.bottom}}; border-radius: {{h.radius}}; font: {{h.font}}">{{h.key2}}</kbd></sc-if><span>{{h.label}}</span></span>
+    </sc-for>
+  </footer>
+
+  <sc-if value="{{hasModal}}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; background: {{c.scrim}}; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; z-index: 5">
+      <div role="dialog" aria-modal="true" aria-label="{{modalTitle}}" style="width: 540px; max-width: 100%; max-height: 100%; overflow-y: auto; background: {{c.bg}}; border: 2px solid {{c.ink}}; padding: 26px 28px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="display: flex; gap: 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase"><span style="color: {{c.seed}}">No. {{sel.no}}</span><span style="color: {{c.muted}}">{{sel.sys}}</span></div>
+          <h2 style="margin: 0; font-size: 38px; font-weight: 800; font-stretch: 72%; line-height: 1; text-transform: uppercase">{{modalTitle}}?</h2>
+        </div>
+
+        <sc-if value="{{mUninstall}}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif">The program is removed. Your games and saves stay in <span style="font: 400 14px 'IBM Plex Mono', monospace">~/FruitBasket/{{sel.id}}/games/</span> unless you tick the box.</p>
+          <label style="display: flex; align-items: center; gap: 12px; min-height: 40px; font-size: 15px; cursor: pointer"><input type="checkbox" checked="{{deleteGames}}" onChange="{{toggleDeleteGames}}" style="width: 18px; height: 18px; margin: 0; flex: none; accent-color: {{c.ink}}">Also delete games and saves</label>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap">
+            <button onClick="{{closeModal}}" style="height: 46px; padding: 0 20px; border: 2px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 16px; font-weight: 600; white-space: nowrap; cursor: pointer">Keep it</button>
+            <button onClick="{{confirmUninstall}}" style="height: 46px; padding: 0 20px; border: 2px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; font-family: 'Archivo', sans-serif; font-size: 16px; font-weight: 700; white-space: nowrap; cursor: pointer">Uninstall</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{mRollback}}" hint-placeholder-val="{{ false }}">
+          <p style="margin: 0; font: 400 16px/1.5 'Source Serif 4', serif">Saves, settings and controller maps stay as they are. You can update again any time.</p>
+          <div role="radiogroup" aria-label="Build to roll back to" style="display: flex; flex-direction: column; border-top: 1px solid {{c.rule}}">
+            <div style="display: flex; align-items: center; gap: 12px; min-height: 46px; border-bottom: 1px solid {{c.rule}}; color: {{c.muted}}">
+              <span style="width: 18px; height: 18px; flex: none"></span>
+              <span style="flex: 1; min-width: 0; font: 400 14px 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{sel.channelName}} [BUILD]</span>
+              <span style="font-size: 13px; white-space: nowrap">installed now</span>
+            </div>
+            <sc-for list="{{rollOpts}}" as="o" hint-placeholder-count="2">
+              <button role="radio" aria-checked="{{o.on}}" onClick="{{o.pick}}" style="display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0; border: 0; border-bottom: 1px solid {{c.rule}}; background: transparent; color: {{c.ink}}; text-align: left; cursor: pointer; font-family: 'Archivo', sans-serif">
+                <span style="width: 18px; height: 18px; flex: none; border-radius: 50%; border: 2px solid {{c.ink}}; box-sizing: border-box; display: flex; align-items: center; justify-content: center"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{o.dot}}"></span></span>
+                <span style="flex: 1; min-width: 0; font: 400 14px 'IBM Plex Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{o.label}}</span>
+                <span style="font-size: 13px; color: {{c.muted}}; white-space: nowrap">{{o.note}}</span>
+              </button>
+            </sc-for>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap">
+            <button onClick="{{closeModal}}" style="height: 46px; padding: 0 20px; border: 2px solid {{c.ink}}; background: transparent; color: {{c.ink}}; font-family: 'Archivo', sans-serif; font-size: 16px; font-weight: 600; white-space: nowrap; cursor: pointer">Cancel</button>
+            <button onClick="{{confirmRollback}}" style="height: 46px; padding: 0 20px; border: 2px solid {{c.ink}}; background: {{c.ink}}; color: {{c.bg}}; font-family: 'Archivo', sans-serif; font-size: 16px; font-weight: 700; white-space: nowrap; cursor: pointer">Roll back</button>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["paper","night"],"default":"paper","section":"Screen"},"scenario":{"editor":"enum","options":["typical","first run"],"default":"typical","section":"Screen"},"tab":{"editor":"enum","options":["library","basket","downloads","settings"],"default":"library","section":"Screen"},"size":{"editor":"enum","options":["regular","compact","narrow"],"default":"regular","section":"Screen"},"pad":{"editor":"boolean","default":false,"section":"Screen"},"pick":{"editor":"enum","options":["pomegranate","strawberry","fig","starfruit","mangosteen","crabapple","mulberry","olive","pear"],"default":"pomegranate","section":"Screen"},"game":{"editor":"enum","options":["p1","p2","p3","p4","p5","p6","s1","s2","s3","s4","s5","s6"],"default":"p1","section":"Screen"},"modal":{"editor":"enum","options":["none","uninstall","rollback"],"default":"none","section":"Screen"},"view":{"editor":"enum","options":["covers","list"],"default":"covers","section":"Library"},"filter":{"editor":"enum","options":["all","pomegranate","strawberry"],"default":"all","section":"Library"},"q":{"editor":"text","default":"","section":"Library"},"busy":{"editor":"enum","options":["none","pomegranate","strawberry"],"default":"none","section":"Frozen state"},"pct":{"editor":"range","min":0,"max":100,"step":1,"default":46,"section":"Frozen state"},"failed":{"editor":"enum","options":["none","pomegranate","strawberry"],"default":"none","section":"Frozen state"},"failKind":{"editor":"enum","options":["network","signature"],"default":"network","section":"Frozen state"},"launcherUpdate":{"editor":"boolean","default":false,"section":"Frozen state"},"sheet":{"editor":"boolean","default":false,"section":"Frozen state"},"queue":{"editor":null,"default":""},"installs":{"editor":null,"default":""},"$preview":{"width":1280,"height":900}}'>
+const ICONS = {
+  pomegranate: ['assets/pomegranate-icon-256.png', 'assets/pomegranate-icon-night-256.png'],
+  strawberry: ['assets/strawberry-icon-256.png', 'assets/strawberry-icon-night-256.png'],
+  fig: ['assets/fig-icon-256.png', 'assets/fig-icon-night-256.png'],
+  starfruit: ['assets/starfruit-icon-256.png', 'assets/starfruit-icon-night-256.png'],
+  mangosteen: ['assets/mangosteen-icon-256.png', 'assets/mangosteen-icon-night-256.png'],
+  crabapple: ['assets/crabapple-icon-256.png', 'assets/crabapple-icon-night-256.png'],
+  mulberry: ['assets/mulberry-icon-256.png', 'assets/mulberry-icon-night-256.png'],
+  olive: ['assets/olive-icon-256.png', 'assets/olive-icon-night-256.png'],
+  pear: ['assets/pear-icon-256.png', 'assets/pear-icon-night-256.png']
+};
+const LOCKUP = ['assets/fruit-basket-lockup.svg', 'assets/fruit-basket-lockup-night.svg'];
+const MARK = ['assets/fruit-basket-mark.svg', 'assets/fruit-basket-mark-night.svg'];
+
+const FRUITS = [
+  { id: 'pomegranate', no: 1, name: 'Pomegranate', sys: 'PS2', pixel: false, ext: '.chd .iso', dumpDb: 'Redump', blurb: 'Seeds on the inside, hundreds of them in chambers, under one smooth skin.', bios: 'not needed' },
+  { id: 'strawberry', no: 2, name: 'Strawberry', sys: 'GBA', pixel: true, ext: '.gba', dumpDb: 'No-Intro', blurb: 'Seeds on the outside, every one in plain sight, like dots you can count.', bios: 'built in' },
+  { id: 'fig', no: 4, name: 'Fig', sys: 'PS1', pixel: false, ext: '.cue .bin .chd', blurb: 'One of the first fruits ever grown, for the first PlayStation. Cut across, a disc.' },
+  { id: 'starfruit', no: 5, name: 'Starfruit', sys: 'N64', pixel: false, ext: '.z64 .n64 .v64', blurb: 'A star, pushed into 3D, for the console that pushed everything there.' },
+  { id: 'mangosteen', no: 6, name: 'Mangosteen', sys: 'GameCube', pixel: false, ext: '.iso .rvz', blurb: 'Deep purple, with a cap that lifts off the top like the lid over the disc.' },
+  { id: 'crabapple', no: 7, name: 'Crabapple', sys: 'NES', pixel: true, ext: '.nes', blurb: 'Small, hard and wild: the apple from before the orchard. Five seeds in a star.' },
+  { id: 'mulberry', no: 8, name: 'Mulberry', sys: 'SNES', pixel: true, ext: '.sfc .smc', blurb: 'One berry made of dozens of small ones, the way a screen is made of tiles.' },
+  { id: 'olive', no: 9, name: 'Olive', sys: 'GB · GBC', pixel: true, ext: '.gb .gbc', blurb: 'The green of the first screen, stuffed, so the red sits where the stone was.' },
+  { id: 'pear', no: 10, name: 'Pear', sys: 'DS · DSi', pixel: true, ext: '.nds', blurb: 'Say it out loud: a pair of screens. Narrow over wide, hinged at the waist.' }
+];
+
+const COMPAT = { Playable: 4, 'In-game': 3, Menus: 2, Boots: 1 };
+const GAMES = [
+  { id: 'p1', fruit: 'pomegranate', n: 1, color: '#46604F', compat: 'Playable', last: 'today', rank: 1, time: '[HH:MM]', saves: 2, dump: true },
+  { id: 's1', fruit: 'strawberry', n: 1, color: '#3E5A7A', compat: 'Playable', last: 'today', rank: 2, time: '[HH:MM]', saves: 1, dump: true },
+  { id: 's2', fruit: 'strawberry', n: 2, color: '#7A4A3A', compat: 'Playable', last: 'yesterday', rank: 3, time: '[HH:MM]', saves: 1, dump: true },
+  { id: 'p2', fruit: 'pomegranate', n: 2, color: '#5B4E70', compat: 'In-game', last: 'yesterday', rank: 4, time: '[HH:MM]', saves: 1, dump: true },
+  { id: 's3', fruit: 'strawberry', n: 3, color: '#6E6A35', compat: 'Playable', last: '[DATE]', rank: 5, time: '[HH:MM]', saves: 1, dump: true },
+  { id: 'p3', fruit: 'pomegranate', n: 3, color: '#2F4B57', compat: 'Playable', last: '[DATE]', rank: 6, time: '[HH:MM]', saves: 1, dump: true },
+  { id: 's4', fruit: 'strawberry', n: 4, color: '#8A5A2E', compat: 'In-game', last: '[DATE]', rank: 7, time: '[HH:MM]', saves: 0, dump: true },
+  { id: 'p4', fruit: 'pomegranate', n: 4, color: '#6B3B47', compat: 'Menus', last: 'never', rank: 8, time: '—', saves: 0, dump: true },
+  { id: 's5', fruit: 'strawberry', n: 5, color: '#3F5E4A', compat: 'Playable', last: 'never', rank: 9, time: '—', saves: 0, dump: true },
+  { id: 'p5', fruit: 'pomegranate', n: 5, color: '#4A5568', compat: 'Playable', last: 'never', rank: 10, time: '—', saves: 0, dump: true },
+  { id: 's6', fruit: 'strawberry', n: 6, color: '#5E4636', compat: 'Playable', last: 'never', rank: 11, time: '—', saves: 0, dump: true },
+  { id: 'p6', fruit: 'pomegranate', n: 6, color: '#55555A', compat: 'Boots', last: 'never', rank: 12, time: '—', saves: 0, dump: false }
+];
+
+const THEMES = {
+  paper: { bg: '#F4EFE3', panel: '#ECE5D6', card: '#F4EFE3', ink: '#1A1A1A', muted: '#5A5448', rule: '#D5CCB9', seed: '#C8322A', faded: '#6E685C', scrim: 'rgba(26, 26, 26, 0.42)' },
+  night: { bg: '#141414', panel: '#1C1B19', card: '#141414', ink: '#EDE6D6', muted: '#A39D90', rule: '#3A3733', seed: '#E5483C', faded: '#8C8679', scrim: 'rgba(0, 0, 0, 0.62)' }
+};
+
+const TYPICAL = { st: { strawberry: 'installed', pomegranate: 'update' }, channel: { strawberry: 'stable', pomegranate: 'nightly' } };
+const FIRST_RUN = { st: { strawberry: 'available', pomegranate: 'available' }, channel: {} };
+const KEYS = ['theme', 'scenario', 'tab', 'size', 'pad', 'pick', 'game', 'modal', 'view', 'filter', 'q', 'busy', 'pct', 'failed', 'failKind', 'launcherUpdate', 'sheet', 'queue', 'installs'];
+const truthy = (v) => v === true || v === 'true';
+const stepName = (p) => (p < 70 ? 'downloading' : p < 85 ? 'verifying' : 'installing');
+
+function initState(p) {
+  const first = p.scenario === 'first run';
+  const base = first ? FIRST_RUN : TYPICAL;
+  const st = { ...base.st };
+  if (p.installs) String(p.installs).split(',').forEach((pair) => { const [k, v] = pair.split(':').map((x) => x.trim()); if (k && v) st[k] = v; });
+  const busy = p.busy && p.busy !== 'none' ? p.busy : null;
+  return {
+    tab: p.tab || 'library', sel: p.pick || (first ? 'strawberry' : 'pomegranate'), game: p.game || 'p1',
+    view: p.view || 'covers', filter: p.filter || 'all', sort: 'recent',
+    st, channel: { ...base.channel },
+    busy, busyVerb: busy ? (st[busy] === 'update' ? 'Updating' : 'Installing') : '', pct: busy ? (Number(p.pct ?? 46) || 0) : 0,
+    queue: p.queue ? String(p.queue).split(',').map((x) => x.trim()).filter(Boolean) : [],
+    failed: p.failed && p.failed !== 'none' ? p.failed : null, failKind: p.failKind || 'network',
+    modal: p.modal && p.modal !== 'none' ? p.modal : null, deleteGames: false, rollTo: 0,
+    launcherUpdate: truthy(p.launcherUpdate), sheet: truthy(p.sheet),
+    defChannel: 'stable', q: p.q || '', watch: { pear: true }, themePref: 'system', keep: 2,
+    autoCheck: true, autoApply: false, rescan: true, autoCouch: true, playing: null,
+    mapped: { strawberry: true },
+    log: first ? [] : [
+      { id: 'pomegranate', what: 'nightly [BUILD] · verified', when: '[DATE]', verified: true },
+      { id: 'strawberry', what: 'stable [BUILD] · verified', when: '[DATE]', verified: true },
+      { id: 'pomegranate', what: 'installed · nightly [BUILD]', when: '[DATE]', verified: true },
+      { id: 'strawberry', what: 'installed · stable [BUILD]', when: '[DATE]', verified: true }
+    ]
+  };
+}
+
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = initState(props); }
+  componentDidUpdate(prev) { if (KEYS.some((k) => prev[k] !== this.props[k])) { clearInterval(this.t); this.setState(initState(this.props)); } }
+  componentWillUnmount() { clearInterval(this.t); }
+  run(id, verb) {
+    const s = this.state;
+    if (s.busy) { if (s.busy !== id && !s.queue.includes(id)) this.setState({ queue: [...s.queue, id] }); return; }
+    this.setState({ busy: id, busyVerb: verb, pct: 0, failed: s.failed === id ? null : s.failed });
+    clearInterval(this.t);
+    this.t = setInterval(() => {
+      const p = this.state.pct + 3;
+      if (p < 100) { this.setState({ pct: p }); return; }
+      clearInterval(this.t);
+      const ch = this.state.channel[id] || this.state.defChannel;
+      const what = (verb === 'Installing' ? 'installed · ' : '') + ch + ' [BUILD] · verified';
+      const [next, ...rest] = this.state.queue;
+      this.setState({ busy: null, pct: 0, st: { ...this.state.st, [id]: 'installed' }, channel: { ...this.state.channel, [id]: ch }, log: [{ id, what, when: 'just now', verified: true }, ...this.state.log], queue: rest });
+      if (next) setTimeout(() => this.run(next, this.state.st[next] === 'update' ? 'Updating' : 'Installing'), 200);
+    }, 70);
+  }
+  renderVals() {
+    const s = this.state;
+    const P = this.props;
+    const night = s.themePref === 'system' ? (P.theme || 'paper') === 'night' : s.themePref === 'night';
+    const c = THEMES[night ? 'night' : 'paper'];
+    const ti = night ? 1 : 0;
+    const size = P.size || 'regular';
+    const narrow = size === 'narrow', compact = size === 'compact';
+    const pad = truthy(P.pad);
+    const sidePad = narrow ? '16px' : (compact ? '24px' : '32px');
+    const status = (f) => s.st[f.id] || 'planned';
+    const installedIds = FRUITS.filter((f) => ['installed', 'update'].includes(status(f))).map((f) => f.id);
+    const q = s.q.trim().toLowerCase();
+    const chOf = (f) => s.channel[f.id] || s.defChannel;
+    const px = (f) => (f.pixel ? 'pixelated' : 'auto');
+    const seg = (on) => ({ bg: on ? c.ink : 'transparent', fg: on ? c.bg : c.ink });
+    const fruitOf = (id) => FRUITS.find((x) => x.id === id);
+    const focusRing = '3px solid ' + c.ink;
+
+    const asideStyle = narrow
+      ? 'position: absolute; left: 0; right: 0; bottom: 0; max-height: 80%; overflow-y: auto; z-index: 4; background: ' + c.panel + '; border-top: 3px solid ' + c.ink + '; padding: 12px 16px 24px; display: flex; flex-direction: column; gap: 16px; box-sizing: border-box'
+      : 'flex: none; width: ' + (compact ? '340px' : '400px') + '; overflow-y: auto; border-left: 1px solid ' + c.rule + '; background: ' + c.panel + '; padding: ' + (compact ? '22px 24px 28px' : '26px 32px 32px') + '; display: flex; flex-direction: column; gap: 18px; box-sizing: border-box';
+    const openSheet = narrow ? { sheet: true } : {};
+
+    const gameVals = (g) => {
+      const f = fruitOf(g.fruit);
+      const bars = [1, 2, 3, 4].map((i) => ({ fill: i <= COMPAT[g.compat] ? c.ink : 'transparent' }));
+      const selected = s.game === g.id;
+      return {
+        ...g, title: '[' + f.sys + ' game ' + g.n + ']', sys: f.sys, fruitName: f.name, bars, selected,
+        coverBg: 'repeating-linear-gradient(135deg, transparent 0 14px, rgba(0,0,0,0.12) 14px 15px), ' + g.color,
+        outline: selected ? focusRing : '0',
+        border: selected ? '2px solid ' + c.ink : '1px solid ' + c.rule,
+        cardBg: selected ? c.panel : c.card,
+        rowBg: selected ? c.panel : 'transparent',
+        metaShort: g.compat + ' · ' + g.last,
+        dumpOk: g.dump, dumpBad: !g.dump,
+        dump: g.dump ? 'Verified · matches ' + f.dumpDb : 'No match in ' + f.dumpDb + ' · may not run right',
+        path: '~/FruitBasket/' + f.id + '/games/' + f.sys.toLowerCase() + '-game-' + g.n + f.ext.split(' ')[0],
+        playLabel: s.playing === g.id ? 'Running in ' + f.name : (g.last === 'never' ? 'Play' : 'Continue'),
+        pick: () => this.setState({ game: g.id, ...openSheet }),
+        play: () => this.setState({ playing: g.id })
+      };
+    };
+    const libGames = GAMES.filter((g) => installedIds.includes(g.fruit));
+    const filtered = libGames.filter((g) => (s.filter === 'all' || g.fruit === s.filter))
+      .filter((g) => { if (!q) return true; const f = fruitOf(g.fruit); return ('[' + f.sys + ' game ' + g.n + '] ' + f.name + ' ' + f.sys + ' ' + g.compat).toLowerCase().includes(q); });
+    const sorted = [...filtered].sort((a, b) => s.sort === 'az' ? (a.fruit + a.n).localeCompare(b.fruit + b.n) : a.rank - b.rank);
+    const games = sorted.map(gameVals);
+    const chip = (id, label, count) => { const on = s.filter === id; const sg = seg(on); return { label, count, on, bg: sg.bg, fg: sg.fg, pick: () => this.setState({ filter: id }) }; };
+    const chips = libGames.length ? [chip('all', 'All', libGames.length), ...FRUITS.filter((f) => installedIds.includes(f.id)).map((f) => chip(f.id, f.name, libGames.filter((g) => g.fruit === f.id).length))] : [];
+    const continueList = s.sort === 'recent' && !q ? libGames.filter((g) => (s.filter === 'all' || g.fruit === s.filter) && g.last !== 'never').sort((a, b) => a.rank - b.rank).slice(0, compact || narrow ? 2 : 3).map(gameVals) : [];
+    const gsel = GAMES.find((g) => g.id === s.game && installedIds.includes(g.fruit)) || libGames[0];
+    const g = gsel ? gameVals(gsel) : null;
+    const sR = seg(s.sort === 'recent'), sA = seg(s.sort === 'az'), vC = seg(s.view === 'covers'), vL = seg(s.view === 'list');
+
+    const card = (f) => {
+      const st = status(f);
+      const busy = s.busy === f.id, queued = s.queue.includes(f.id), failed = s.failed === f.id, selected = s.sel === f.id;
+      let text;
+      if (busy) text = stepName(s.pct) + ' · ' + s.pct + '%';
+      else if (failed) text = s.failKind === 'signature' ? 'signature mismatch' : 'download stopped';
+      else if (queued) text = 'queued';
+      else if (st === 'installed') text = chOf(f) + ' · up to date';
+      else if (st === 'update') text = 'update ready';
+      else if (st === 'available') text = 'not installed';
+      else text = 'no build yet';
+      return {
+        ...f, icon: ICONS[f.id][ti], render: px(f), selected,
+        border: selected ? '2px solid ' + c.ink : '1px solid ' + c.rule,
+        stripBorder: selected ? '2px solid ' + c.ink : '1px solid transparent',
+        outline: selected && pad ? focusRing : '0',
+        cardBg: selected ? c.panel : c.card,
+        status: text, statusColor: failed ? c.seed : c.muted,
+        stripNote: s.watch[f.id] ? 'watching' : f.sys, watchColor: c.faded,
+        busy, hasDot: st === 'update' && !busy,
+        pick: () => this.setState({ sel: f.id, ...openSheet })
+      };
+    };
+    const fmatch = (f) => !q || (f.name + ' ' + f.sys + ' ' + f.ext).toLowerCase().includes(q);
+    const flist = FRUITS.filter(fmatch);
+    const inBasket = flist.filter((f) => ['installed', 'update'].includes(status(f))).map(card);
+    const ready = flist.filter((f) => status(f) === 'available').map(card);
+    const growing = flist.filter((f) => status(f) === 'planned').map(card);
+    const sections = [
+      { title: 'In the basket', note: 'installed', items: inBasket, empty: inBasket.length === 0 && !q, showMark: true, emptyText: 'The basket is empty. Install a fruit below and it downloads into ~/FruitBasket/.' },
+      { title: 'Ready to install', note: 'built and published', items: ready, empty: false, showMark: false, emptyText: '' }
+    ].filter((x) => x.items.length > 0 || x.empty).map((x) => ({ ...x, count: x.items.length }));
+
+    const f = fruitOf(s.sel) || FRUITS[0];
+    const st = status(f);
+    const isBusy = s.busy === f.id, queued = s.queue.includes(f.id), failed = s.failed === f.id;
+    const planned = st === 'planned', installed = st === 'installed' || st === 'update';
+    const ch = chOf(f);
+    let primaryLabel = 'Open ' + f.name, primary = () => {}, primaryDisabled = false, showKey = true;
+    if (isBusy) { const n = stepName(s.pct); primaryLabel = n.charAt(0).toUpperCase() + n.slice(1) + '…'; primaryDisabled = true; showKey = false; }
+    else if (queued) { primaryLabel = 'Queued'; primaryDisabled = true; showKey = false; }
+    else if (failed) { primaryLabel = 'Try again'; primary = () => this.run(f.id, st === 'update' ? 'Updating' : 'Installing'); showKey = false; }
+    else if (st === 'update') { primaryLabel = 'Update ' + f.name; primary = () => this.run(f.id, 'Updating'); }
+    else if (st === 'available') { primaryLabel = 'Install ' + f.name; primary = () => this.run(f.id, 'Installing'); showKey = false; }
+    const stS = seg(ch === 'stable'), niS = seg(ch === 'nightly');
+    const nGames = GAMES.filter((x) => x.fruit === f.id).length;
+    const mappedPad = !!s.mapped[f.id];
+    const checks = installed ? [
+      { label: 'Program', value: ch + ' [BUILD]', ok: true },
+      { label: 'Signature', value: 'verified · [KEY ID]', ok: true },
+      { label: 'Games', value: 'games/ · ' + nGames + ' found', ok: true },
+      { label: 'BIOS', value: f.bios, ok: true },
+      { label: 'Controller', value: mappedPad ? '[CONTROLLER]' : 'not mapped yet', ok: mappedPad, warn: !mappedPad, action: 'Map…', hasAction: !mappedPad }
+    ] : [
+      { label: 'Program', value: ch + ' [BUILD] · [SIZE]', todo: true },
+      { label: 'Signature', value: 'checked on download', todo: true },
+      { label: 'Games', value: 'reads ' + f.ext, todo: true },
+      { label: 'BIOS', value: f.bios || '—', ok: true },
+      { label: 'Controller', value: 'map after install', todo: true }
+    ];
+    const checksV = checks.map((k) => ({ ...k, ok: !!k.ok, warn: !!k.warn, todo: !!k.todo, hasAction: !!k.hasAction, color: k.warn ? c.ink : c.muted }));
+    const platforms = ['Windows x64', 'macOS arm64', 'Linux x64'].map((label, i) => ({ label: i === 0 ? label + ' · this PC' : label, border: i === 0 ? c.ink : c.rule, fg: i === 0 ? c.ink : c.muted }));
+
+    const pct = s.pct;
+    const steps = [['Download', 0, 70], ['Verify', 70, 85], ['Install', 85, 100]].map(([label, a, b]) => {
+      const done = pct >= b, cur = pct >= a && pct < b;
+      return { label: label + (cur ? ' · ' + Math.round(((pct - a) / (b - a)) * 100) + '%' : done ? ' ✓' : ''), bar: done ? c.ink : (cur ? c.muted : c.rule), color: done || cur ? c.ink : c.faded };
+    });
+    const updates = FRUITS.filter((x) => status(x) === 'update' && s.busy !== x.id && !s.queue.includes(x.id));
+    const busyF = s.busy ? fruitOf(s.busy) : null;
+    const failedF = s.failed ? fruitOf(s.failed) : null;
+    const dlCount = (s.busy ? 1 : 0) + s.queue.length + (s.failed ? 1 : 0);
+    const tab = (id, label, badge) => ({
+      label, badge: badge ? String(badge) : '', hasBadge: !!badge, current: s.tab === id ? 'page' : 'false',
+      underline: s.tab === id ? '3px solid ' + c.ink : '3px solid transparent', color: s.tab === id ? c.ink : c.muted,
+      pick: () => this.setState({ tab: id, sheet: false })
+    });
+    const K = (key, label) => ({ key, key2: '', hasKey2: false, label, bottom: '3px', radius: '0', font: "500 12px 'IBM Plex Mono', monospace" });
+    const B = (key, label, key2) => ({ key, key2: key2 || '', hasKey2: !!key2, label, bottom: '1.5px', radius: key.length > 1 ? '7px' : '50%', font: "700 11px 'Archivo', sans-serif" });
+    const isLib = s.tab === 'library', isBas = s.tab === 'basket';
+    let hintsL, hintsR;
+    if (pad) { hintsL = [B('A', isLib ? 'Play' : 'Select'), B('B', 'Back'), B('Y', 'Details'), B('LB', 'Tabs', 'RB')]; hintsR = [B('☰', 'Couch mode')]; }
+    else { hintsL = [K('Z', isLib ? 'Play' : (installed ? 'Open' : 'Install')), K('/', 'Find')]; hintsR = [K('Esc', 'Quit')]; }
+    if (narrow) hintsL = hintsL.slice(0, 2);
+
+    const rollOpts = [['[PREV BUILD]', 'kept on disk'], ['[OLDER BUILD]', 'download · [SIZE]']].map(([label, note], i) => ({ label: ch + ' ' + label, note, on: s.rollTo === i, dot: s.rollTo === i ? c.ink : 'transparent', pick: () => this.setState({ rollTo: i }) }));
+    const themeOpts = [['system', 'System'], ['paper', 'Paper'], ['night', 'Night']].map(([id, label]) => { const sg = seg(s.themePref === id); return { label, on: s.themePref === id, bg: sg.bg, fg: sg.fg, pick: () => this.setState({ themePref: id }) }; });
+    const keepOpts = [1, 2, 3].map((n) => { const sg = seg(s.keep === n); return { label: String(n), on: s.keep === n, bg: sg.bg, fg: sg.fg, pick: () => this.setState({ keep: n }) }; });
+    const dS = seg(s.defChannel === 'stable'), dN = seg(s.defChannel === 'nightly');
+    const mt = { uninstall: 'Uninstall ' + f.name, rollback: 'Roll back ' + f.name };
+    const playingG = s.playing ? gameVals(GAMES.find((x) => x.id === s.playing)) : null;
+
+    return {
+      c, lockup: LOCKUP[ti], mark: MARK[ti], narrow, sidePad,
+      headerGap: compact ? '14px' : (narrow ? '12px' : '28px'), navPad: compact || narrow ? '0 8px' : '0 11px', navLs: compact || narrow ? '0.12em' : '0.16em',
+      findFlex: narrow ? '1 1 200px' : (compact ? '0 1 170px' : '0 1 240px'), findLabelDisplay: compact ? 'none' : 'inline',
+      updateLabel: compact ? 'Update · ' + updates.length : 'Update all · ' + updates.length,
+      h1Size: compact ? '31px' : '38px',
+      headerPad: narrow ? '14px 16px 10px' : (compact ? '16px 24px 12px' : '20px 32px 14px'),
+      ruleMargin: '0 ' + sidePad, asideStyle,
+      padBg: pad ? c.ink : 'transparent', padFg: pad ? c.bg : c.ink,
+      tabs: [tab('library', 'Library'), tab('basket', 'Basket'), tab('downloads', 'Downloads', dlCount), tab('settings', 'Settings')],
+      isLibrary: isLib, isBasket: isBas, isDownloads: s.tab === 'downloads', isSettings: s.tab === 'settings',
+      q: s.q, onQ: (e) => this.setState({ q: e.target.value }), findPlaceholder: isBas ? 'Fruit, console or .ext' : 'Game or console',
+      chips, sortRecent: () => this.setState({ sort: 'recent' }), sortAZ: () => this.setState({ sort: 'az' }),
+      isRecent: s.sort === 'recent', isAZ: s.sort === 'az', recentBg: sR.bg, recentFg: sR.fg, azBg: sA.bg, azFg: sA.fg,
+      viewCovers: () => this.setState({ view: 'covers' }), viewList: () => this.setState({ view: 'list' }),
+      isCovers: s.view === 'covers', isList: s.view === 'list', coversBg: vC.bg, coversFg: vC.fg, listBg: vL.bg, listFg: vL.fg,
+      libEmpty: libGames.length === 0, hasLib: libGames.length > 0, noGameMatch: libGames.length > 0 && games.length === 0,
+      showContinue: continueList.length > 0, continueList,
+      hasGames: games.length > 0, games, gamesCount: games.length,
+      gamesTitle: s.filter === 'all' ? 'All games' : fruitOf(s.filter).name + ' games', sortNote: s.sort === 'az' ? 'a–z' : 'most recent first',
+      coverMin: narrow ? '120px' : (compact ? '104px' : '128px'),
+      showGameAside: !!g && (!narrow || s.sheet), g: g || {}, gcoverW: narrow ? '84px' : '120px',
+      goBasket: () => this.setState({ tab: 'basket' }),
+      closeSheet: () => this.setState({ sheet: false }),
+      playKey: pad ? 'Ⓐ' : 'Z',
+      sections, noFruitMatch: !!q && flist.length === 0,
+      hasGrowing: growing.length > 0, growing, growingCount: growing.length,
+      showFruitAside: !narrow || s.sheet,
+      steps, platforms,
+      hasUpdates: updates.length > 0 && !narrow, updateCount: updates.length,
+      updateAll: () => updates.forEach((u, i) => setTimeout(() => this.run(u.id, 'Updating'), i * 20)),
+      showLauncherUpdate: s.launcherUpdate, dismissLauncherUpdate: () => this.setState({ launcherUpdate: false }),
+      pctW: s.pct + '%', busyAny: !!s.busy, idle: !s.busy && !s.failed && s.queue.length === 0,
+      busyName: busyF ? busyF.name : '', busyIcon: busyF ? ICONS[busyF.id][ti] : '', busyRender: busyF ? px(busyF) : 'auto',
+      busyLine: busyF ? chOf(busyF) + ' [BUILD] · [SIZE]' : '',
+      hasFailed: !!failedF, failedName: failedF ? failedF.name : '', failedIcon: failedF ? ICONS[failedF.id][ti] : '', failedRender: failedF ? px(failedF) : 'auto',
+      failHead: s.failKind === 'signature' ? 'signature didn’t match' : 'download stopped',
+      failText: s.failKind === 'signature' ? 'The download wasn’t signed with [KEY ID], so it was deleted. Nothing was installed and your current build still works.' : 'Couldn’t reach [SITE HOST]. Nothing on disk was changed.',
+      retryFailed: () => failedF && this.run(failedF.id, status(failedF) === 'update' ? 'Updating' : 'Installing'),
+      queueRows: s.queue.map((id) => { const qf = fruitOf(id); return { name: qf.name, icon: ICONS[id][ti], render: px(qf), what: status(qf) === 'update' ? 'update' : 'install' }; }),
+      log: s.log.map((l) => { const lf = fruitOf(l.id); return { ...l, verified: !!l.verified, name: lf.name, icon: ICONS[lf.id][ti], render: px(lf) }; }),
+      noLog: s.log.length === 0,
+      hintsL, hintsR,
+      footerStatus: s.busy ? stepName(s.pct) + ' ' + busyF.name + ' · ' + s.pct + '%' : (playingG ? 'running ' + playingG.title + ' in ' + playingG.fruitName : '~/FruitBasket/ · launcher [VERSION]'),
+      setCols: narrow ? 'minmax(0, 1fr)' : 'minmax(140px, 200px) minmax(0, 1fr)', setLabelRule: narrow ? '0' : '1px solid ' + c.rule,
+      rescan: s.rescan, toggleRescan: () => this.setState({ rescan: !s.rescan }),
+      storageRows: FRUITS.filter((x) => installedIds.includes(x.id)).map((x) => ({ name: x.name, icon: ICONS[x.id][ti], render: px(x), kept: s.keep + ' old build' + (s.keep > 1 ? 's' : '') + ' kept' })),
+      keepOpts,
+      defStable: () => this.setState({ defChannel: 'stable' }), defNightly: () => this.setState({ defChannel: 'nightly' }),
+      defIsStable: s.defChannel === 'stable', defIsNightly: s.defChannel === 'nightly',
+      defStableBg: dS.bg, defStableFg: dS.fg, defNightlyBg: dN.bg, defNightlyFg: dN.fg,
+      autoCheck: s.autoCheck, autoApply: s.autoApply, autoCouch: s.autoCouch,
+      toggleAutoCheck: () => this.setState({ autoCheck: !s.autoCheck }), toggleAutoApply: () => this.setState({ autoApply: !s.autoApply }), toggleAutoCouch: () => this.setState({ autoCouch: !s.autoCouch }),
+      padDot: pad ? c.ink : 'transparent', padText: pad ? '[CONTROLLER] connected' : 'No controller connected',
+      themeOpts, themeNote: s.themePref === 'system' ? 'Follows your computer: ' + (night ? 'night' : 'paper') + ' right now.' : '',
+      hasModal: !!s.modal, modalTitle: mt[s.modal] || '',
+      mUninstall: s.modal === 'uninstall', mRollback: s.modal === 'rollback', rollOpts,
+      closeModal: () => this.setState({ modal: null, deleteGames: false }),
+      confirmUninstall: () => this.setState({ modal: null, deleteGames: false, st: { ...s.st, [f.id]: 'available' }, log: [{ id: f.id, what: 'uninstalled' + (s.deleteGames ? ' · games deleted' : ' · games kept'), when: 'just now' }, ...s.log] }),
+      confirmRollback: () => this.setState({ modal: null, st: { ...s.st, [f.id]: 'update' }, log: [{ id: f.id, what: 'rolled back · ' + ch + ' [PREV BUILD]', when: 'just now', verified: true }, ...s.log] }),
+      deleteGames: s.deleteGames, toggleDeleteGames: () => this.setState({ deleteGames: !s.deleteGames }),
+      sel: {
+        ...f, bigIcon: ICONS[f.id][ti], render: px(f), opacity: planned ? 0.45 : 1,
+        isPlanned: planned, notPlanned: !planned, isInstalled: installed && !isBusy, isBusy,
+        hasNews: st === 'update' && !isBusy,
+        primaryLabel, primary, primaryDisabled, showKey,
+        primaryBorder: primaryDisabled ? c.rule : c.ink, primaryBg: primaryDisabled ? 'transparent' : c.ink, primaryFg: primaryDisabled ? c.muted : c.bg,
+        channelName: ch, isStable: ch === 'stable', isNightly: ch === 'nightly',
+        stableBg: stS.bg, stableFg: stS.fg, nightlyBg: niS.bg, nightlyFg: niS.fg,
+        setStable: () => this.setState({ channel: { ...s.channel, [f.id]: 'stable' } }),
+        setNightly: () => this.setState({ channel: { ...s.channel, [f.id]: 'nightly' } }),
+        checkTitle: installed ? 'Setup' : 'What install does', checks: checksV,
+        disk: installed ? 'program [SIZE]\ngames [SIZE]' : 'needs [SIZE]',
+        askUninstall: () => this.setState({ modal: 'uninstall' }), askRollback: () => this.setState({ modal: 'rollback', rollTo: 0 }),
+        watching: !!s.watch[f.id], watchLabel: s.watch[f.id] ? 'Watching ✓' : 'Tell me when it’s ripe',
+        watchBg: s.watch[f.id] ? c.ink : 'transparent', watchFg: s.watch[f.id] ? c.bg : c.ink,
+        toggleWatch: () => this.setState({ watch: { ...s.watch, [f.id]: !s.watch[f.id] } })
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fruit Basket · Couch mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="position: relative; width: 1280px; height: 720px; overflow: hidden; background: #141414; color: #EDE6D6; font-family: 'Archivo', system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <header style="display: flex; align-items: center; gap: 36px; padding: 30px 56px 0">
+    <img src="assets/fruit-basket-lockup-night.svg" alt="Fruit Basket" style="height: 26px; width: auto; display: block">
+    <nav aria-label="Systems" style="display: flex; align-items: center; gap: 6px">
+      <span style="height: 24px; padding: 0 7px; display: inline-flex; align-items: center; border: 1.5px solid #EDE6D6; border-radius: 7px; font-size: 11px; font-weight: 700">LB</span>
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+        <button onClick="{{t.pick}}" aria-current="{{t.current}}" style="height: 44px; padding: 0 14px; border: 0; border-bottom: {{t.underline}}; background: transparent; color: {{t.color}}; font-family: 'Archivo', sans-serif; font-size: 15px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; white-space: nowrap; cursor: pointer">{{t.label}}</button>
+      </sc-for>
+      <span style="height: 24px; padding: 0 7px; display: inline-flex; align-items: center; border: 1.5px solid #EDE6D6; border-radius: 7px; font-size: 11px; font-weight: 700">RB</span>
+    </nav>
+    <div style="flex: 1"></div>
+    <span style="display: flex; align-items: center; gap: 10px; font: 400 14px 'IBM Plex Mono', monospace; color: #A39D90"><span style="width: 8px; height: 8px; border-radius: 50%; background: #EDE6D6"></span>[CONTROLLER]</span>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex; gap: 48px; padding: 34px 56px 0">
+    <span style="flex: none; width: 228px; height: 304px; background: {{f.coverBg}}; position: relative; display: block">
+      <span style="position: absolute; top: 12px; left: 14px; font: 500 12px 'IBM Plex Mono', monospace; color: #F4EFE3; opacity: 0.85">{{f.sys}}</span>
+    </span>
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding-top: 8px">
+      <div style="font-size: 14px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #A39D90">{{f.sys}} · {{f.fruitName}}</div>
+      <h1 style="margin: 0; font-size: 76px; font-weight: 800; font-stretch: 72%; line-height: 0.92; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.title}}</h1>
+      <div style="display: flex; align-items: center; gap: 22px; font-size: 17px">
+        <span style="display: flex; align-items: center; gap: 10px"><span style="display: inline-flex; gap: 3px"><sc-for list="{{f.bars}}" as="b" hint-placeholder-count="4"><span style="width: 11px; height: 11px; background: {{b.fill}}; border: 1.5px solid #EDE6D6; box-sizing: border-box"></span></sc-for></span>{{f.compat}}</span>
+        <span style="font: 400 15px 'IBM Plex Mono', monospace; color: #A39D90">{{f.lastLine}}</span>
+      </div>
+      <sc-if value="{{isRow}}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; gap: 14px; margin-top: 14px">
+          <button onClick="{{play}}" style="height: 60px; padding: 0 26px; border: 3px solid #EDE6D6; background: #EDE6D6; color: #141414; font-family: 'Archivo', sans-serif; font-size: 21px; font-weight: 800; display: flex; align-items: center; gap: 12px; cursor: pointer; outline: 3px solid #EDE6D6; outline-offset: 4px"><span style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #141414; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 13px">A</span><span>{{f.playLabel}}</span></button>
+          <button onClick="{{openSaves}}" style="height: 60px; padding: 0 22px; border: 2px solid #EDE6D6; background: transparent; color: #EDE6D6; font-family: 'Archivo', sans-serif; font-size: 19px; font-weight: 700; display: flex; align-items: center; gap: 12px; cursor: pointer"><span style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #EDE6D6; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 13px">X</span><span>Saves · {{f.saves}}</span></button>
+          <button style="height: 60px; padding: 0 22px; border: 2px solid #EDE6D6; background: transparent; color: #EDE6D6; font-family: 'Archivo', sans-serif; font-size: 19px; font-weight: 700; display: flex; align-items: center; gap: 12px; cursor: pointer"><span style="width: 28px; height: 28px; border-radius: 50%; border: 2px solid #EDE6D6; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; font-size: 13px">Y</span>Details</button>
+        </div>
+      </sc-if>
+      <sc-if value="{{isSaves}}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; margin-top: 8px; border-top: 1px solid #3A3733; max-width: 640px">
+          <sc-for list="{{slots}}" as="sl" hint-placeholder-count="3">
+            <button onClick="{{sl.pick}}" style="display: flex; align-items: center; gap: 18px; height: 58px; padding: 0 16px; border: 0; border-bottom: 1px solid #3A3733; background: {{sl.bg}}; color: {{sl.fg}}; font-family: 'Archivo', sans-serif; text-align: left; cursor: pointer">
+              <span style="font-size: 20px; font-weight: 800; font-stretch: 72%; text-transform: uppercase; flex: 1">{{sl.label}}</span>
+              <span style="font: 400 15px 'IBM Plex Mono', monospace; opacity: 0.8">{{sl.when}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+
+  <section aria-label="{{rowTitle}}" style="padding: 0 56px; display: flex; flex-direction: column; gap: 14px">
+    <div style="font-size: 13px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: #A39D90">{{rowTitle}} · {{count}}</div>
+    <div style="display: flex; gap: 20px; height: 150px; align-items: flex-end">
+      <sc-for list="{{games}}" as="g" hint-placeholder-count="8">
+        <button onClick="{{g.pick}}" aria-label="{{g.title}}" aria-pressed="{{g.focused}}" style="flex: none; width: {{g.w}}; height: {{g.h}}; padding: 0; border: 0; background: {{g.coverBg}}; outline: {{g.outline}}; outline-offset: 5px; cursor: pointer; position: relative; opacity: {{g.opacity}}">
+          <span style="position: absolute; left: 8px; right: 8px; bottom: 8px; font-size: 12px; font-weight: 800; font-stretch: 72%; line-height: 1.05; text-transform: uppercase; color: #F4EFE3; text-align: left">{{g.title}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </section>
+
+  <footer style="margin: 26px 56px 0; border-top: 1px solid #3A3733; padding: 16px 0 22px; display: flex; align-items: center; gap: 28px; font-size: 16px; white-space: nowrap">
+    <sc-for list="{{hints}}" as="h" hint-placeholder-count="4">
+      <span style="display: flex; align-items: center; gap: 10px"><span style="min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid #EDE6D6; border-radius: {{h.radius}}; font-size: 12px; font-weight: 700">{{h.key}}</span><sc-if value="{{h.hasKey2}}" hint-placeholder-val="{{ false }}"><span style="min-width: 28px; height: 28px; padding: 0 6px; margin-left: -4px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid #EDE6D6; border-radius: {{h.radius}}; font-size: 12px; font-weight: 700">{{h.key2}}</span></sc-if><span>{{h.label}}</span></span>
+    </sc-for>
+    <span style="flex: 1"></span>
+    <span style="display: flex; align-items: center; gap: 10px"><span style="min-width: 28px; height: 28px; padding: 0 6px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid #EDE6D6; border-radius: 7px; font-size: 12px; font-weight: 700">☰</span>Desktop mode</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"tab":{"editor":"enum","options":["all","pomegranate","strawberry"],"default":"all"},"focus":{"editor":"int","min":0,"max":11,"default":0},"view":{"editor":"enum","options":["row","saves"],"default":"row"},"$preview":{"width":1280,"height":720}}'>
+const COMPAT = { Playable: 4, 'In-game': 3, Menus: 2, Boots: 1 };
+const FR = { pomegranate: { name: 'Pomegranate', sys: 'PS2' }, strawberry: { name: 'Strawberry', sys: 'GBA' } };
+const GAMES = [
+  { id: 'p1', fruit: 'pomegranate', n: 1, color: '#46604F', compat: 'Playable', last: 'today', saves: 2 },
+  { id: 's1', fruit: 'strawberry', n: 1, color: '#3E5A7A', compat: 'Playable', last: 'today', saves: 1 },
+  { id: 's2', fruit: 'strawberry', n: 2, color: '#7A4A3A', compat: 'Playable', last: 'yesterday', saves: 1 },
+  { id: 'p2', fruit: 'pomegranate', n: 2, color: '#5B4E70', compat: 'In-game', last: 'yesterday', saves: 1 },
+  { id: 's3', fruit: 'strawberry', n: 3, color: '#6E6A35', compat: 'Playable', last: '[DATE]', saves: 1 },
+  { id: 'p3', fruit: 'pomegranate', n: 3, color: '#2F4B57', compat: 'Playable', last: '[DATE]', saves: 1 },
+  { id: 's4', fruit: 'strawberry', n: 4, color: '#8A5A2E', compat: 'In-game', last: '[DATE]', saves: 0 },
+  { id: 'p4', fruit: 'pomegranate', n: 4, color: '#6B3B47', compat: 'Menus', last: 'never', saves: 0 },
+  { id: 's5', fruit: 'strawberry', n: 5, color: '#3F5E4A', compat: 'Playable', last: 'never', saves: 0 },
+  { id: 'p5', fruit: 'pomegranate', n: 5, color: '#4A5568', compat: 'Playable', last: 'never', saves: 0 },
+  { id: 's6', fruit: 'strawberry', n: 6, color: '#5E4636', compat: 'Playable', last: 'never', saves: 0 },
+  { id: 'p6', fruit: 'pomegranate', n: 6, color: '#55555A', compat: 'Boots', last: 'never', saves: 0 }
+];
+const cover = (color) => 'repeating-linear-gradient(135deg, transparent 0 14px, rgba(0,0,0,0.14) 14px 15px), ' + color;
+
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { tab: props.tab || 'all', focus: Number(props.focus) || 0, view: props.view || 'row', slot: 0 }; }
+  componentDidUpdate(prev) {
+    if (prev.tab !== this.props.tab || prev.focus !== this.props.focus || prev.view !== this.props.view)
+      this.setState({ tab: this.props.tab || 'all', focus: Number(this.props.focus) || 0, view: this.props.view || 'row', slot: 0 });
+  }
+  renderVals() {
+    const s = this.state;
+    const list = GAMES.filter((g) => s.tab === 'all' || g.fruit === s.tab);
+    const fi = Math.min(s.focus, list.length - 1);
+    const val = (g, i) => {
+      const fr = FR[g.fruit];
+      const focused = i === fi;
+      return {
+        ...g, title: '[' + fr.sys + ' game ' + g.n + ']', sys: fr.sys, fruitName: fr.name, focused,
+        coverBg: cover(g.color), w: focused ? '112px' : '96px', h: focused ? '150px' : '128px',
+        outline: focused ? '4px solid #EDE6D6' : '0', opacity: focused ? 1 : 0.8,
+        bars: [1, 2, 3, 4].map((k) => ({ fill: k <= COMPAT[g.compat] ? '#EDE6D6' : 'transparent' })),
+        lastLine: g.last === 'never' ? 'not played yet' : 'last played ' + g.last + ' · [HH:MM] played',
+        playLabel: g.last === 'never' ? 'Play' : 'Continue',
+        pick: () => this.setState({ focus: i, view: 'row' })
+      };
+    };
+    const games = list.map(val);
+    const f = games[fi];
+    const tab = (id, label) => ({ label, current: s.tab === id ? 'page' : 'false', underline: s.tab === id ? '3px solid #EDE6D6' : '3px solid transparent', color: s.tab === id ? '#EDE6D6' : '#A39D90', pick: () => this.setState({ tab: id, focus: 0, view: 'row' }) });
+    const slotN = Math.max(f.saves, 1);
+    const slots = [...Array(slotN).keys()].map((i) => ({
+      label: f.fruit === 'pomegranate' ? 'Memory card ' + (i + 1) : 'Save ' + (i + 1), when: f.saves ? '[DATE] · [TIME]' : 'empty',
+      bg: s.slot === i ? '#EDE6D6' : 'transparent', fg: s.slot === i ? '#141414' : '#EDE6D6', pick: () => this.setState({ slot: i })
+    })).concat([{ label: 'Start fresh', when: '', bg: s.slot === slotN ? '#EDE6D6' : 'transparent', fg: s.slot === slotN ? '#141414' : '#EDE6D6', pick: () => this.setState({ slot: slotN }) }]);
+    const isSaves = s.view === 'saves';
+    return {
+      tabs: [tab('all', 'All'), tab('pomegranate', 'Pomegranate'), tab('strawberry', 'Strawberry')],
+      f, games, count: games.length, rowTitle: s.tab === 'all' ? 'All games' : FR[s.tab].name,
+      isRow: !isSaves, isSaves, slots,
+      play: () => {}, openSaves: () => this.setState({ view: 'saves', slot: 0 }),
+      hints: isSaves
+        ? [{ key: 'A', label: 'Load', radius: '50%' }, { key: 'B', label: 'Back', radius: '50%' }, { key: 'X', label: 'Delete save', radius: '50%' }]
+        : [{ key: 'A', label: f.playLabel, radius: '50%' }, { key: 'B', label: 'Back', radius: '50%' }, { key: 'X', label: 'Saves', radius: '50%' }, { key: 'LB', key2: 'RB', hasKey2: true, label: 'Switch system', radius: '7px' }]
+    };
+  }
+}
+</script>
+</body>
+</html>
