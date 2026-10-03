@@ -70,9 +70,13 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
     }
 
     // Tabs, after the lockup.
-    let gap = if ui.size == Size::Narrow { 14.0 } else { 26.0 };
+    let gap = match ui.size {
+        Size::Regular => 26.0,
+        Size::Compact => 20.0,
+        Size::Narrow => 14.0,
+    };
     let tab_st = |on: bool, ui: &Ui| Style::interface_bold(13.0).upper().tracking(2.0).color(if on { ui.pal.fg } else { ui.muted() });
-    let mut tx = x0 + lockup_w + if ui.size == Size::Narrow { 20.0 } else { 38.0 };
+    let mut tx = x0 + lockup_w + if ui.size == Size::Regular { 38.0 } else { 22.0 };
     for tab in Tab::ALL {
         let on = tab == v.tab;
         let st = tab_st(on, ui);
@@ -98,7 +102,8 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
     let (fx, fy, fw) = if narrow {
         (x0, NARROW_ROW2, cx - 12.0 - x0)
     } else {
-        let fw = if ui.size == Size::Compact { 200.0 } else { 240.0 };
+        // Its width, but never over the tabs.
+        let fw = (if ui.size == Size::Compact { 200.0f32 } else { 240.0 }).min(right - tx - 14.0).max(80.0);
         (right - fw, top, fw)
     };
     let placeholder = if v.tab == Tab::Basket { "Fruit, console or .ext" } else { "Game or console" };

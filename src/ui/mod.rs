@@ -5,6 +5,7 @@
 pub mod basket;
 pub mod downloads;
 pub mod frame;
+pub mod library;
 pub mod settings;
 
 use basket_ui::canvas::Clip;
@@ -112,6 +113,15 @@ pub enum Cmd {
     /// Scrolling the aside (or the narrow sheet), apart from the list.
     AsideScroll(f32),
     AsideScrollMax(f32),
+    // Library; games are named by path.
+    LibFilter(Option<String>),
+    LibSort(bool),
+    LibView(bool),
+    SelectGame(std::path::PathBuf),
+    Play(std::path::PathBuf),
+    ShowFile(std::path::PathBuf),
+    ShowSaves(std::path::PathBuf),
+    RemoveGame(std::path::PathBuf),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

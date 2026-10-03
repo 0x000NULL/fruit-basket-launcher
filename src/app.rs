@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 
 use basket_app::pads::{Gamepads, PadPoll, Ports};
 use basket_ui::input::{Action, ButtonSet, KeyMap, MenuRoles, PadMap, UiInput};
-use basket_ui::text::Style;
 use basket_ui::{Canvas, Fonts};
 use gilrs::Button;
 use minifb::Key;
@@ -23,8 +22,10 @@ use crate::key;
 use crate::platform;
 use crate::queue::{self, Finished, Queue};
 use crate::settings::{Settings, ThemePref};
+use crate::shelf::Shelf;
 use crate::ui::basket::{BasketView, Card, CardState, Detail, Primary};
 use crate::ui::downloads::DownloadsView;
+use crate::ui::library::Row;
 use crate::ui::frame::{self, FrameView};
 use crate::ui::settings::{FruitStorage, SettingsView};
 use crate::ui::{self, capitalise, Cmd, Flag, Size, Tab, Ui};
@@ -113,6 +114,10 @@ pub struct App {
     aside_scroll_max: f32,
     /// Channel picked in the aside for a fruit not installed yet.
     chosen: HashMap<String, Channel>,
+    /// The Library tab's games and everything known about them.
+    pub shelf: Shelf,
+    /// Why the last Play didn't start, shown in the footer.
+    play_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -137,6 +142,7 @@ impl App {
     /// An app with no window and no network: `new` without the side effects.
     pub fn with(settings: Settings, basket: Basket, cached: Option<Feed>) -> App {
         let history = history::read(&basket.launcher_dir());
+        let shelf = Shelf::load(&basket.launcher_dir());
         let mut app = App {
             worker: Worker::start(basket.clone()),
             feed: cached,
@@ -166,10 +172,15 @@ impl App {
             aside_scroll: 0.0,
             aside_scroll_max: 0.0,
             chosen: HashMap::new(),
+            shelf,
+            play_error: None,
             settings,
             basket,
         };
         app.refresh_installed();
+        if let Some(feed) = &app.feed {
+            app.shelf.lists(&app.basket.launcher_dir(), feed);
+        }
         app
     }
 
@@ -183,6 +194,11 @@ impl App {
         }
         self.disk = None;
         self.storage = None;
+        self.rescan();
+    }
+
+    fn rescan(&mut self) {
+        self.shelf.rescan(&self.basket, self.feed.as_ref(), &self.installed, &self.settings);
     }
 
     fn ctx(&self) -> Ctx<'_> {
@@ -236,6 +252,9 @@ impl App {
                         self.feed = Some(fetched.feed);
                         self.feed_error = None;
                         self.refresh_installed();
+                        if let Some(feed) = &self.feed {
+                            self.shelf.lists(&self.basket.launcher_dir(), feed);
+                        }
                         if self.settings.install_without_asking {
                             self.apply(Cmd::UpdateAll);
                         }
@@ -261,6 +280,9 @@ impl App {
             self.history.insert(0, entry);
             self.history.truncate(history::SHOWN);
             self.refresh_installed();
+        }
+        if self.shelf.poll(&self.basket.launcher_dir(), self.feed.as_ref()) && self.shelf.running().is_none() {
+            self.play_error = None;
         }
         if self.settings.theme == ThemePref::System && self.os_dark_at.elapsed() > Duration::from_secs(5) {
             self.os_dark = platform::os_dark();
@@ -339,6 +361,7 @@ impl App {
             key_id: key::KEY_ID,
             scroll: self.scroll,
         });
+        let lv = (self.tab == Tab::Library).then(|| self.shelf.view(&self.basket, self.feed.as_ref(), &self.find, self.sheet, self.scroll, self.aside_scroll));
         let mut cmds = {
             let mut ui = Ui::new(&mut self.canvas, input, &self.art, night, self.pad_used);
             let fv = FrameView {
@@ -360,13 +383,13 @@ impl App {
                 ui::basket::draw(&mut ui, bv, top, bottom);
             } else if let Some(dv) = &dv {
                 ui::downloads::draw(&mut ui, dv, top, bottom);
-            } else {
-                placeholder(&mut ui, self.tab, self.feed.as_ref(), self.feed_error.as_deref(), top);
+            } else if let Some(lv) = &lv {
+                ui::library::draw(&mut ui, lv, top, bottom);
             }
             frame::footer(&mut ui, &fv);
             ui.cmds
         };
-        drop((sv, bv, dv));
+        drop((sv, bv, dv, lv));
         cmds.extend(self.keys(input));
         for cmd in cmds {
             self.apply(cmd);
@@ -378,6 +401,31 @@ impl App {
         let mut out = Vec::new();
         if self.find_focused {
             return out;
+        }
+        if self.tab == Tab::Library {
+            let rows = self.shelf.rows(self.feed.as_ref(), &self.find);
+            let at = self.shelf.selected_in(&rows).and_then(|p| rows.iter().position(|r| r.game.path == p));
+            let cols = if self.shelf.list { 1 } else if Size::of(self.canvas.width()) == Size::Narrow { 4 } else { 5 };
+            let step = if input.action(Action::Left) {
+                -1
+            } else if input.action(Action::Right) {
+                1
+            } else if input.action(Action::Up) {
+                -cols
+            } else if input.action(Action::Down) {
+                cols
+            } else {
+                0
+            };
+            if step != 0 && !rows.is_empty() {
+                let i = at.map_or(0, |i| (i as i32 + step).clamp(0, rows.len() as i32 - 1) as usize);
+                out.push(Cmd::SelectGame(rows[i].game.path.clone()));
+            }
+            if input.action(Action::Confirm) {
+                if let Some(p) = self.shelf.selected_in(&rows) {
+                    out.push(Cmd::Play(p.to_path_buf()));
+                }
+            }
         }
         if self.tab == Tab::Basket {
             let ctx = self.ctx();
@@ -404,7 +452,7 @@ impl App {
             out.push(Cmd::FocusFind(true));
         }
         // Esc closes the narrow sheet first (the sheet emits that itself).
-        let sheet_open = self.sheet && self.tab == Tab::Basket && Size::of(self.canvas.width()) == Size::Narrow;
+        let sheet_open = self.sheet && matches!(self.tab, Tab::Basket | Tab::Library) && Size::of(self.canvas.width()) == Size::Narrow;
         if input.pressed(Key::Escape) && !sheet_open {
             out.push(Cmd::Quit);
         }
@@ -431,6 +479,9 @@ impl App {
                     }
                     if tab == Tab::Basket {
                         self.disk = None;
+                    }
+                    if tab == Tab::Library && self.settings.rescan_on_open {
+                        self.rescan();
                     }
                 }
             }
@@ -474,7 +525,48 @@ impl App {
                 if i < s.folders.len() {
                     s.folders.remove(i);
                     s.save();
+                    self.rescan();
                 }
+            }
+            Cmd::AddFolder => {
+                if let Some(dir) = rfd::FileDialog::new().set_title("Add a game folder").pick_folder() {
+                    if !s.folders.contains(&dir) {
+                        s.folders.push(dir);
+                        s.save();
+                    }
+                    self.rescan();
+                }
+            }
+            Cmd::LibFilter(f) => {
+                self.shelf.filter = f;
+                self.scroll = 0.0;
+            }
+            Cmd::LibSort(az) => self.shelf.az = az,
+            Cmd::LibView(list) => self.shelf.list = list,
+            Cmd::SelectGame(p) => {
+                if self.shelf.selected.as_ref() != Some(&p) {
+                    self.aside_scroll = 0.0;
+                }
+                self.shelf.selected = Some(p);
+                self.sheet = true;
+            }
+            Cmd::Play(p) => {
+                self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref()).err();
+            }
+            Cmd::ShowFile(p) => platform::reveal(&p),
+            Cmd::ShowSaves(p) => {
+                let fruit = self.shelf.games.iter().find(|g| g.path == p).map(|g| g.fruit.clone());
+                let build = fruit.and_then(|f| self.basket.current(&f).map(|c| self.basket.build_dir(&f, &c.build)));
+                if let Some(save) = crate::library::saves(&p, build.as_deref()).first() {
+                    platform::reveal(save);
+                }
+            }
+            Cmd::RemoveGame(p) => {
+                if !s.hidden.contains(&p) {
+                    s.hidden.push(p.clone());
+                    s.save();
+                }
+                self.shelf.remove(&p);
             }
             Cmd::ClearOldBuilds(id) => {
                 if let Err(e) = self.basket.prune(&id, 0) {
@@ -541,7 +633,7 @@ impl App {
             }
             Cmd::Open(id) => self.open(&id),
             // Wired up in later milestones.
-            Cmd::Couch | Cmd::AddFolder | Cmd::MoveBasket | Cmd::MapButtons | Cmd::RestartForUpdate => {}
+            Cmd::Couch | Cmd::MoveBasket | Cmd::MapButtons | Cmd::RestartForUpdate => {}
         }
     }
 
@@ -589,6 +681,12 @@ impl App {
         if let Some(a) = self.queue.active() {
             return format!("{} {} · {}%", a.step.name(), self.ctx().name(&a.job.fruit), a.pct);
         }
+        if let Some(e) = &self.play_error {
+            return format!("couldn't start: {e}");
+        }
+        if let Some(name) = self.shelf.running() {
+            return format!("running in {name}");
+        }
         let sep = std::path::MAIN_SEPARATOR;
         format!("{}{sep} · launcher {VERSION}", platform::tilde(&self.basket.root))
     }
@@ -599,7 +697,12 @@ impl App {
             return vec![first, ("B", "Back"), ("Y", "Details"), ("LB RB", "Tabs")];
         }
         match self.tab {
-            Tab::Library => vec![("Z", "Play"), ("/", "Find")],
+            Tab::Library => {
+                let rows: Vec<Row> = self.shelf.rows(self.feed.as_ref(), &self.find);
+                let sel = self.shelf.selected_in(&rows).and_then(|p| rows.iter().find(|r| r.game.path == p));
+                let verb = if sel.is_some_and(|r| r.last.is_some()) { "Continue" } else { "Play" };
+                vec![("Z", verb), ("/", "Find")]
+            }
             Tab::Basket => {
                 let ctx = self.ctx();
                 let verb = match ctx.selected_fruit().map(|f| ctx.primary(f)) {
@@ -900,42 +1003,6 @@ fn dir_size(path: &Path) -> u64 {
         .sum()
 }
 
-/// Until each tab lands: what the feed says, so a run shows it loaded.
-fn placeholder(ui: &mut Ui, tab: Tab, feed: Option<&Feed>, error: Option<&str>, top: f32) {
-    let x0 = ui.pad_x();
-    let w = ui.w() - 2.0 * x0;
-    let y = ui.section(x0, top + 24.0, w, tab.label(), Some("in progress"));
-    let body = ui.body();
-    let mono = ui.mono();
-    match feed {
-        Some(f) => {
-            ui.cv.text(x0, y + 16.0, &format!("Feed from {} · {} fruits · signature verified", f.generated, f.fruits.len()), &body);
-            let mut fy = y + 52.0;
-            for fruit in &f.fruits {
-                let alpha = if fruit.status == feed::Status::Growing { 0.45 } else { 1.0 };
-                ui.art.icon(ui.cv, &fruit.id, ui.night, crate::art::ICON_S, x0, fy, alpha);
-                let name = Style::interface_bold(13.0).upper().tracking(1.6).color(ui.pal.fg);
-                ui.cv.text(x0 + 44.0, fy, &format!("No. {}  {}", fruit.no, fruit.name), &name);
-                let what = match (&fruit.stable, &fruit.nightly) {
-                    (Some(s), Some(n)) => format!("{} · stable {} · nightly {}", fruit.system, s.build, n.build),
-                    (Some(s), None) => format!("{} · stable {}", fruit.system, s.build),
-                    (None, Some(n)) => format!("{} · nightly {}", fruit.system, n.build),
-                    (None, None) => format!("{} · no build yet", fruit.system),
-                };
-                ui.cv.text(x0 + 44.0, fy + 17.0, &what, &mono);
-                fy += 44.0;
-            }
-        }
-        None => {
-            ui.cv.text(x0, y + 16.0, "No feed yet.", &body);
-        }
-    }
-    if let Some(e) = error {
-        let st = Style::data(12.0).color(ui.pal.spot);
-        ui.cv.text(x0, ui.h() - 80.0, e, &st);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -995,6 +1062,22 @@ mod tests {
         println!("installed {} at {}", cur.build, exe.display());
         assert_eq!(app.history[0].failed, None);
 
+        // The compat list comes over HTTP, checked against the feed, and
+        // the library matches a game in games/ against it.
+        std::fs::write(app.basket.games_dir("strawberry").join("Final Fantasy IV Advance (USA).gba"), "x").unwrap();
+        app.rescan();
+        let start = Instant::now();
+        loop {
+            app.poll();
+            let rows = app.shelf.rows(app.feed.as_ref(), "");
+            if let Some(level) = rows.first().and_then(|r| r.level) {
+                println!("compat: {}", level.label());
+                break;
+            }
+            assert!(start.elapsed() < Duration::from_secs(30), "compat list never arrived");
+            thread::sleep(Duration::from_millis(50));
+        }
+
         app.apply(Cmd::SetChannel("strawberry".into(), Channel::Nightly));
         wait(&mut app);
         assert_eq!(app.installed["strawberry"].channel, Channel::Nightly);
@@ -1024,6 +1107,66 @@ mod tests {
     fn job(app: &App, id: &str) -> Job {
         let f = app.feed.as_ref().unwrap().fruit(id).unwrap();
         queue::job_for(f, app.ctx().new_channel(f), 2).expect("a build for this PC")
+    }
+
+    /// The Library states from the mocks, every size and theme: empty,
+    /// covers, list, one fruit's chip, a dump that didn't match.
+    #[test]
+    fn library_shots() {
+        use crate::compat::Compat;
+        use crate::dumps::DumpDb;
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let titles = [
+            "Final Fantasy IV Advance (USA)",
+            "Mario Kart - Super Circuit (USA)",
+            "Legend of Zelda, The (USA)",
+            "Max Payne (USA)",
+            "Cars (USA)",
+            "Golden Sun (USA)",
+            "Metroid Fusion (USA)",
+        ];
+        let compat = "title\tserial\tstatus\tnotes\nFinal Fantasy IV Advance\tBZ4E\tplayable\t\nMario Kart: Super Circuit\tAMKE\tin-game\t\nClassic NES Series: Legend of Zelda\tFZLE\tin-game\t\nMax Payne\tBMEE\tmenus\t\nCars\tBCAE\tboots\t\n";
+        type Setup = fn(&mut App);
+        let states: [(&str, bool, Setup); 5] = [
+            ("library-first-run", false, |_| {}),
+            ("library-covers", true, |_| {}),
+            ("library-list", true, |app| app.shelf.list = true),
+            ("library-strawberry", true, |app| app.shelf.filter = Some("strawberry".into())),
+            ("library-unverified", true, |app| {
+                app.shelf.list = true;
+                let g = app.shelf.games.iter().find(|g| g.title == "Golden Sun").unwrap().clone();
+                app.shelf.set_hash(&g, &"ab".repeat(20));
+                app.shelf.selected = Some(g.path);
+            }),
+        ];
+        for (theme, tname) in [(ThemePref::Paper, "paper"), (ThemePref::Night, "night")] {
+            for (w, h, size) in [(1280, 900, "regular"), (1024, 680, "compact"), (640, 880, "narrow")] {
+                for (name, stock, setup) in states {
+                    let tmp = tempfile::tempdir().unwrap();
+                    let basket = if stock { stocked(tmp.path()) } else { Basket::new(tmp.path()) };
+                    if stock {
+                        for t in titles {
+                            std::fs::write(basket.games_dir("strawberry").join(format!("{t}.gba")), "x").unwrap();
+                        }
+                    }
+                    let settings = Settings { theme, ..Settings::default() };
+                    let mut app = App::with(settings, basket, Some(feed.clone()));
+                    app.shelf.set_lists("strawberry", Compat::parse(compat), Some(DumpDb::parse("")));
+                    let now = std::time::SystemTime::now();
+                    for (i, t) in titles.iter().take(3).enumerate() {
+                        let p = app.basket.games_dir("strawberry").join(format!("{t}.gba"));
+                        app.shelf.played_mut().record(&p, now - Duration::from_secs(3_600 * 30 * i as u64), 4_000 * (i as u64 + 1));
+                    }
+                    app.tab = Tab::Library;
+                    app.sheet = size == "narrow" && name == "library-unverified";
+                    setup(&mut app);
+                    app.draw(&UiInput::default(), w, h);
+                    app.canvas.save_png(&dir.join(format!("{name}-{size}-{tname}.png"))).unwrap();
+                }
+            }
+        }
     }
 
     /// The Basket and Downloads states from the mocks, every size and theme.

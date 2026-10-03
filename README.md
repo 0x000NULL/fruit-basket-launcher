@@ -10,9 +10,10 @@ It is built on the same crates as the emulators
 `basket-app`, `basket-build`), so it looks and handles input exactly like them.
 No async runtime, no web view: a `minifb` window drawn with tiny-skia.
 
-Status: early. Installing and updating fruits works (Basket and Downloads
-tabs), as do Settings; the Library, rollback, couch mode and self-update are
-being built milestone by milestone (see the tags and CHANGELOG.md).
+Status: early. The Library (scan, play, play time, compat, dump check),
+Basket and Downloads (install and update) and Settings tabs work; rollback,
+couch mode and self-update are being built milestone by milestone (see the
+tags and CHANGELOG.md).
 
 ## Building
 

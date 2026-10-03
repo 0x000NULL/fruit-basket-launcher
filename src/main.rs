@@ -4,13 +4,19 @@
 mod app;
 mod art;
 mod basket;
+mod compat;
+mod dumps;
 mod feed;
 mod history;
 mod jobs;
 mod key;
+mod launch;
+mod library;
+mod lists;
 mod platform;
 mod queue;
 mod settings;
+mod shelf;
 mod ui;
 mod window;
 

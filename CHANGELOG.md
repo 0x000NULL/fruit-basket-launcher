@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.3.0
+
+The Library tab: every game the installed fruits read, and Play.
+
+- Scans each installed fruit's `games/` folder and the extra folders from
+  Settings (three folders deep); a file in an extra folder goes to the first
+  installed fruit that reads its extension. Titles come from the file name
+  with the region tags dropped.
+- Chips per fruit, Recent / A–Z, Covers / List, FIND by game, console or
+  fruit; Continue shows the last three games played.
+- Play / Continue starts the game in its fruit's current build with the
+  feed's launch template; the launcher times the session and keeps last
+  played and play time in `launcher/played.tsv`. One game at a time.
+- Compat squares from each fruit's compatibility list, matched by serial
+  (GBA header code, disc serial in the file name, or the dump list's) then
+  title. Lists are downloaded once and used only if they match the SHA-256
+  in the signed feed.
+- Dump check against a fruit's No-Intro / Redump list when the site has
+  one: games are hashed in the background once (CHDs by their header's raw
+  SHA-1) and cached in `launcher/hashes.tsv`.
+- The aside: cover, compat, Play, Saves · N (save states named after the
+  game), Show file, Remove (hides the game; the file stays), last played,
+  play time, dump, file. Narrow windows show it as a sheet.
+- Add folder… works here and in Settings; the compact header no longer
+  lets FIND run into the tabs.
+
 ## v0.2.0
 
 The Basket and Downloads tabs: fruits can be installed and updated.

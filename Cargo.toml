@@ -1,6 +1,6 @@
 [package]
 name = "fruitbasket"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.82"
 description = "Fruit Basket launcher: the game library and the emulators, from one window"
@@ -25,6 +25,7 @@ gilrs = "0.11"
 tiny-skia = "0.11"
 png = "0.17"
 toml = "0.8"
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 
 [build-dependencies]
 basket-build = { git = "https://github.com/0x000NULL/fruit-basket", tag = "v0.1.0" }
