@@ -8,12 +8,12 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03; site main is at `ef573f7`, and the live feed is verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03; site main is at `26ceac2`, and the live feed is verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
-| M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done | v0.5.0 |
+| M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
 | M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | next | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
@@ -65,13 +65,14 @@ bumped in the same commit, and the release notes come from a
   - Launchers before v0.4.0 can't start Pomegranate from this feed. With no self-update until M6, update them by hand from GitHub.
   - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
 - **Couch flags** (asked of each emulator on 2026-10-03, with the same convention everywhere): `--fullscreen` for that run only, `--exit-on-quit` (the pause menu's Quit exits with 0), and a pad route to pause (Guide, or SELECT+START held 1 s).
-  - **Pomegranate:** done in ps2emu v0.4.0 (tag commit `58d24fe`). The site still has to mirror it and set `couch --fullscreen --exit-on-quit` with `oldest v0.4.0`, through Ethan.
+  - **Pomegranate:** done in ps2emu v0.4.0 (tag commit `58d24fe`). It is live: the feed (generated 2026-10-03T18:14:23Z, site `26ceac2`) has stable v0.4.0, nightly `58d24fe`, `couch ["--fullscreen","--exit-on-quit"]`, and only v0.4.0 in releases (`oldest v0.4.0`). Launcher v0.5.1 gives `couch` only to builds the feed lists, so an installed or kept v0.3.0 doesn't get it.
   - **Strawberry:** asked, not started. It has no fullscreen and no pad route to its pause menu yet.
   - **Crabapple:** asked for those plus `--slot N`. It isn't in the feed yet.
   - Without the flags a fruit still works from couch mode: in a window, back when the emulator exits.
-- **Site, local and not deployed** (that session, 2026-10-03; deploying is Ethan's call):
-  - `812813b`: Strawberry's nightly becomes the v1.4.0 build (`5b00fe8`), which has `--slot`. Until it's deployed, Load on the nightly passes a flag that build doesn't know.
-  - `5af8902`: the `couch` key (`[]` everywhere for now), `site/fruit-basket/launcher/` for M6, and fetch-release checking a release's own `.sha256` files.
+- **Site, deployed at `26ceac2`** (2026-10-03, by Ethan through the site session):
+  - `812813b`: Strawberry's nightly is now the v1.4.0 build (`5b00fe8`), which has `--slot`.
+  - `5af8902`: the `couch` key, `site/fruit-basket/launcher/` for M6, and fetch-release checking a release's own `.sha256` files.
+  - The launcher entry is still null. The site session was asked to mirror v0.5.1 (not v0.5.0), with Ethan's OK.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 - **Site**: deployed at `ef573f7`. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
   - The feed's LAUNCHER keys: `launch`, `load_slot`, `open` (all may use `{rom}`, `{slot}`, `{data}`), `carry`, and `oldest` (feedgen only; not in the feed).
