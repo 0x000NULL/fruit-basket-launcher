@@ -28,6 +28,13 @@ The e2e test downloads real builds from the live site.
 - **The feed is the root of trust.** Anything downloaded is checked against a SHA-256 in the signed feed before it is used. Never add a path that skips that.
 - **A failure never breaks the running build.** Extract to `.tmp`, rename, then rewrite `current` atomically (`basket::write_atomic`).
 - **Immediate-mode UI.** Drawing code reads view structs and emits `Cmd`s; only `App::apply` changes state. New screens get a state in a `shots` test, compared by eye with the mock.
+- **Dialogs** go through `App::modal` and `ui/modal.rs`. While one is open, the page draws with an empty input and `modal_keys` takes the keys.
+- **Emulator arguments come only from feed templates** (`launch`, `load_slot`, `open`), filled by `launch::args`, which refuses an unfilled placeholder.
+  - A fruit that uses `{data}` keeps its saves in `<fruit>/data/`.
+  - `carry` files move there once (`Basket::migrate_data`), never overwriting.
+- **Tests never touch real files.**
+  - Each test uses its own temp basket.
+  - `Settings::path()` is `None` under `cfg(test)`, so `save()` is a no-op. Keep it that way: a test once overwrote the real settings.toml.
 - **The private signing key never leaves `~/.minisign/`.** Only the public key is in `src/key.rs`.
 
 ## Git and releases

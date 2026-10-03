@@ -8,7 +8,7 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03 (site main at `850ed22`), live feed verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03; site main is at `ef573f7`, and the live feed is verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
@@ -47,7 +47,9 @@ bumped in the same commit, and the release notes come from a
   - Released in v1.4.0 (2026-10-03) and mirrored to the site.
   - `strawberry/LAUNCHER` now has `load_slot {rom} --slot {slot}`, in site commit `0764b32`.
   - Strawberry's nightly is still the v1.3.1 build (`e8bc5e3`), which lacks the flag, so couch Load (M5) must offer Load only on builds that have it.
-- **Pomegranate**: v0.3.0 (2026-10-03, tag commit `f1a2c09`) has both flags. Live on the site since feed `2026-10-03T16:50:55Z` (site `c00efc0`) as stable v0.3.0, with nightly `f1a2c09` (the same zip). `load_slot play {rom} --slot {slot}`; `launch` and `carry` are unchanged.
+- **Pomegranate `--data` and `--slot`**: done.
+  - Both flags shipped in v0.3.0 (2026-10-03, tag commit `f1a2c09`). It is on the site as stable v0.3.0, with nightly `f1a2c09` (the same zip).
+  - The feed has used `--data` since `2026-10-03T17:36:29Z` (details below).
   - `ps2emu play <image> --data <DIR> [--slot N]`. Without a game, `ps2emu --data <DIR>` opens its library.
   - **Slots are 0–9** (`<stem>.s0.state` to `.s9.state`), not 1–8 like Strawberry's. The couch saves view (M5) needs a per-fruit slot range; take it from the slot files, or add a LAUNCHER key.
   - `--data` holds ps2emu.toml, cards/, states/, cache/ and screenshots. Migrate only ps2emu.toml, cards/ and states/; cache/ rebuilds itself. ps2emu migrates nothing. It exits 7 if DIR can't be created.
@@ -59,7 +61,16 @@ bumped in the same commit, and the release notes come from a
   - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
 - **Crabapple**: will need `--slot N` too once it ships.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
-- **Site**: deployed. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
+- **Site**: deployed at `ef573f7`. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
+  - The feed's LAUNCHER keys: `launch`, `load_slot`, `open` (all may use `{rom}`, `{slot}`, `{data}`), `carry`, and `oldest` (feedgen only; not in the feed).
+  - The feed's top-level `launcher` entry is null: the site doesn't host launcher builds yet (M6).
+
+## For M5
+
+- **Slot ranges differ:** Strawberry uses 1–8, Pomegranate 0–9. The saves view needs a per-fruit range: read it from the slot files, or add a LAUNCHER key.
+- **Strawberry's nightly** (`e8bc5e3`) has no `--slot`, so on that build couch mode should offer Play only, not Load.
+- **Where save states live:** `library::save_dirs` gives the folders, the data folder for Pomegranate. `basket_app::slots` reads the state headers.
+- **Map buttons… and the setup list's Controller row** land with pad navigation.
 
 ## Known gaps
 

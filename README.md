@@ -69,7 +69,8 @@ Everything lives under `~/FruitBasket/` (movable in Settings):
     launcher/history.log  launcher/played.tsv  launcher/hashes.tsv  launcher/lists/
 
 `<fruit>/data/` holds saves and settings for a fruit that takes a data
-folder (Pomegranate, once the site switches it over). Settings → Storage →
+folder (Pomegranate). Its memory cards and states move there from the
+build folder the first time it runs. Settings → Storage →
 **Move basket…** moves all of it to another folder or drive.
 
 Settings are in `<config dir>/fruitbasket/settings.toml`.
