@@ -76,7 +76,7 @@ bumped in the same commit, and the release notes come from a
 - **Couch flags** (asked of each emulator on 2026-10-03, with the same convention everywhere): `--fullscreen` for that run only, `--exit-on-quit` (the pause menu's Quit exits with 0), and a pad route to pause (Guide, or SELECT+START held 1 s).
   - **Pomegranate:** done in ps2emu v0.4.0 (tag commit `58d24fe`). It is live: the feed (generated 2026-10-03T18:14:23Z, site `26ceac2`) has stable v0.4.0, nightly `58d24fe`, `couch ["--fullscreen","--exit-on-quit"]`, and only v0.4.0 in releases (`oldest v0.4.0`). Launcher v0.5.1 gives `couch` only to builds the feed lists, so an installed or kept v0.3.0 doesn't get it.
   - **Strawberry:** asked, not started. It has no fullscreen and no pad route to its pause menu yet.
-  - **Crabapple:** asked for those plus `--slot N`. It isn't in the feed yet.
+  - **Crabapple:** all four (`--slot N` 1–8, `--fullscreen`, `--exit-on-quit`, Guide or SELECT+START held 1 s) are on its main at `12c1737`, after v0.9.0 and not yet in a release. It isn't in the feed yet. When it goes in (Ethan's call): `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, and `oldest` set to the first tag with the flags.
   - Without the flags a fruit still works from couch mode: in a window, back when the emulator exits.
 - **Site, deployed at `26ceac2`** (2026-10-03, by Ethan through the site session):
   - `812813b`: Strawberry's nightly is now the v1.4.0 build (`5b00fe8`), which has `--slot`.
