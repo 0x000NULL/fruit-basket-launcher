@@ -43,7 +43,7 @@ bumped in the same commit, and the release notes come from a
   - Released in v1.4.0 (2026-10-03) and mirrored to the site.
   - `strawberry/LAUNCHER` now has `load_slot {rom} --slot {slot}`, in site commit `0764b32`.
   - Strawberry's nightly is still the v1.3.1 build (`e8bc5e3`), which lacks the flag, so couch Load (M5) must offer Load only on builds that have it.
-- **Pomegranate**: v0.3.0 (2026-10-03, tag commit `f1a2c09`) has both flags. The site session is mirroring it and adding `load_slot play {rom} --slot {slot}`.
+- **Pomegranate**: v0.3.0 (2026-10-03, tag commit `f1a2c09`) has both flags. Live on the site since feed `2026-10-03T16:50:55Z` (site `c00efc0`) as stable v0.3.0, with nightly `f1a2c09` (the same zip). `load_slot play {rom} --slot {slot}`; `launch` and `carry` are unchanged.
   - `ps2emu play <image> --data <DIR> [--slot N]`. Without a game, `ps2emu --data <DIR>` opens its library.
   - **Slots are 0–9** (`<stem>.s0.state` to `.s9.state`), not 1–8 like Strawberry's. The couch saves view (M5) needs a per-fruit slot range; take it from the slot files, or add a LAUNCHER key.
   - `--data` holds ps2emu.toml, cards/, states/, cache/ and screenshots. Migrate only ps2emu.toml, cards/ and states/; cache/ rebuilds itself. ps2emu migrates nothing. It exits 7 if DIR can't be created.
