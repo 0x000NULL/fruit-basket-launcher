@@ -12,10 +12,10 @@ No async runtime, no web view: a `minifb` window drawn with tiny-skia.
 
 Status: early. These tabs work:
 - the Library: scan, play, play time, compat, dump check
-- the Basket and Downloads: install and update
-- Settings
+- the Basket and Downloads: install, update, roll back, uninstall
+- Settings, including moving the basket
 
-Rollback, couch mode and self-update come next, a milestone at a time; see
+Couch mode and self-update come next, a milestone at a time; see
 [PROGRESS.md](PROGRESS.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Using it
@@ -23,6 +23,8 @@ Rollback, couch mode and self-update come next, a milestone at a time; see
 - **Basket.**
   - Every fruit from the site, in three sections: in the basket, ready to install, and still growing.
   - Pick one to install it, update it, or open it. Each fruit has its own Stable/Nightly choice.
+  - **Roll back…** goes to a build kept on disk or an older one from the site. **Uninstall** keeps games and saves unless asked.
+  - **Tell me when it's ripe** on a growing fruit shows a banner once it is released.
   - **Update all** in the header queues every fruit with a newer build.
 - **Downloads.**
   - The running job's Download, Verify and Install steps, then the queue, then the history.
@@ -62,9 +64,13 @@ The launcher reads one feed,
 
 Everything lives under `~/FruitBasket/` (movable in Settings):
 
-    <fruit>/builds/<build>/   <fruit>/current   <fruit>/games/
+    <fruit>/builds/<build>/   <fruit>/current   <fruit>/games/   <fruit>/data/
     launcher/feed.json  launcher/feed.json.minisig  launcher/downloads/
     launcher/history.log  launcher/played.tsv  launcher/hashes.tsv  launcher/lists/
+
+`<fruit>/data/` holds saves and settings for a fruit that takes a data
+folder (Pomegranate, once the site switches it over). Settings → Storage →
+**Move basket…** moves all of it to another folder or drive.
 
 Settings are in `<config dir>/fruitbasket/settings.toml`.
 

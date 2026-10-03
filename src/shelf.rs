@@ -164,10 +164,26 @@ impl Shelf {
         let fruit = feed.and_then(|f| f.fruit(&game.fruit)).ok_or("fruit not in the feed")?;
         let bin = fruit.bin.as_deref().ok_or("the fruit has no program")?;
         let exe = basket.exe(&fruit.id, bin).ok_or_else(|| format!("{} is not installed", fruit.name))?;
-        let rx = launch::start(&exe, &launch::args(&fruit.launch, path, None), path).map_err(|e| e.to_string())?;
+        let data = fruit.uses_data().then(|| basket.data_dir(&fruit.id));
+        if data.is_some() {
+            // Installs from before the fruit took `{data}` move over on first play.
+            basket.migrate_data(&fruit.id, fruit.data_carry()).map_err(|e| format!("moving saves to data/: {e}"))?;
+        }
+        let args = launch::args(&fruit.launch, Some(path), None, data.as_deref())?;
+        let rx = launch::start(&exe, &args, path).map_err(|e| e.to_string())?;
         self.running = Some((fruit.name.clone(), rx));
         self.selected = Some(path.to_path_buf());
         Ok(())
+    }
+
+    /// After the basket moves: play history and hashes follow the games.
+    pub fn rebase(&mut self, launcher_dir: &Path, old: &Path, new: &Path) {
+        self.played.rebase(old, new);
+        self.hashes.rebase(old, new);
+        if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.hashes.save(launcher_dir)) {
+            eprintln!("fruitbasket: saving library state: {e}");
+        }
+        self.selected = self.selected.as_deref().map(|p| library::rebase(p, old, new));
     }
 
     pub fn remove(&mut self, path: &Path) {
@@ -249,13 +265,13 @@ impl Shelf {
         let detail = selected.and_then(|p| rows.iter().find(|r| r.game.path == p)).map(|r| {
             let fruit = feed.and_then(|f| f.fruit(&r.game.fruit));
             let (dump, _) = self.dump_state(r.game, fruit);
-            let build = basket.current(&r.game.fruit).map(|c| basket.build_dir(&r.game.fruit, &c.build));
+            let dirs = fruit.map(|f| library::save_dirs(basket, f)).unwrap_or_default();
             let play = match self.running() {
                 Some(name) => PlayState::Running(name.to_string()),
                 None if r.last.is_some() => PlayState::Continue,
                 None => PlayState::Play,
             };
-            GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, build.as_deref()).len(), file: crate::platform::tilde(&r.game.path) }
+            GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, &dirs).len(), file: crate::platform::tilde(&r.game.path) }
         });
 
         let empty = if self.games.is_empty() {

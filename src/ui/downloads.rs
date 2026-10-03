@@ -1,7 +1,7 @@
 //! The Downloads tab: what is running now (with its three steps), what
 //! failed and why, what waits, and the Earlier history.
 
-use basket_ui::fmt::fmt_size;
+use crate::ui::fmt_size;
 use basket_ui::text::Style;
 
 use super::{capitalise, Cmd, Ui};
@@ -67,6 +67,7 @@ pub fn draw(ui: &mut Ui, v: &DownloadsView, top: f32, bottom: f32) {
             Some(FailKind::Signature) => (format!("signature didn't match · {} {}", e.channel.name(), e.build), true),
             Some(FailKind::Network) => (format!("download stopped · {} {}", e.channel.name(), e.build), true),
             Some(FailKind::Install) => (format!("install failed · {} {}", e.channel.name(), e.build), true),
+            Some(FailKind::Space) => (format!("not enough space · {} {}", e.channel.name(), e.build), true),
         };
         let when = basket_ui::fmt::fmt_when(e.when);
         y = row(ui, v, &e.fruit, &text, &when, Some(bad), x0, y, w);
@@ -100,6 +101,7 @@ fn failure(ui: &mut Ui, v: &DownloadsView, f: &Failure, x: f32, y: f32, w: f32) 
         ),
         FailKind::Network => ("download stopped", format!("{}. Nothing on disk changed{still}.", capitalise(&f.message))),
         FailKind::Install => ("install failed", format!("{}. Nothing was switched{still}.", capitalise(&f.message))),
+        FailKind::Space => ("not enough space", format!("{}. Nothing was downloaded{still}.", capitalise(&f.message))),
     };
     let reading = Style::reading(15.0).color(ui.pal.fg);
     let bw = 120.0;

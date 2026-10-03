@@ -13,6 +13,7 @@ mod key;
 mod launch;
 mod library;
 mod lists;
+mod mover;
 mod platform;
 mod queue;
 mod settings;

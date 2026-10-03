@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.4.0
+
+Lifecycle: roll back, uninstall, move the basket, and fruits that ripen.
+
+- **Roll back…** in the Basket aside opens a dialog listing the builds
+  kept on disk, then older builds from the feed (downloaded first). Saves
+  and settings stay. The card then shows "update ready".
+- **Uninstall** removes the program; games and saves stay unless "Also
+  delete games and saves" is ticked.
+- Dialogs take the keys: Z confirms, X or Esc cancels, the arrows pick,
+  Space ticks.
+- **Move basket…** in Settings moves everything to another folder (a
+  rename, or a checked copy across drives), and the library's play times
+  and hashes follow. A failed move changes nothing.
+- Settings → Storage shows free space; each fruit's games size now
+  includes its data folder.
+- An install is refused before downloading if the drive has less than
+  three times the download free ("not enough space").
+- **Ripe alerts**: a watched fruit that is released shows a banner with
+  Install and Later.
+- **Data folders.** A fruit whose feed templates use `{data}` keeps its
+  saves and settings in `<basket>/<fruit>/data/`. The files the feed names
+  in `carry` move there once, on the first install, Play or Open after the
+  change. The feed can give an `open` template for opening a fruit with no
+  game. A template placeholder with nothing to fill it is an error, never
+  passed to the emulator. Pomegranate switches to this once the site's
+  feed does; update the launcher first, because v0.3.0 would pass
+  `{data}` through as text.
+- Sizes from 1 GB up read in GB.
+
 ## v0.3.0
 
 The Library tab: every game the installed fruits read, and Play.

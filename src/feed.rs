@@ -45,6 +45,11 @@ pub struct Fruit {
     pub dump_db: Option<String>,
     pub launch: Vec<String>,
     pub load_slot: Option<Vec<String>>,
+    /// Arguments for opening the fruit with no game (`--data {data}`).
+    #[serde(default)]
+    pub open: Vec<String>,
+    /// Files the emulator keeps beside its exe. They move to each new build;
+    /// for a fruit whose templates use `{data}`, they move into `data/` once.
     #[serde(default)]
     pub carry: Vec<String>,
     pub url: String,
@@ -143,6 +148,23 @@ impl Fruit {
 
     pub fn build(&self, id: &str) -> Option<(Channel, &Build)> {
         self.builds().find(|(_, b)| b.build == id)
+    }
+
+    /// True if any launch template takes `{data}`: the fruit keeps its
+    /// saves and settings in `<root>/<fruit>/data/`, not beside its exe.
+    pub fn uses_data(&self) -> bool {
+        self.launch.iter().chain(self.load_slot.iter().flatten()).chain(&self.open).any(|a| a.contains("{data}"))
+    }
+
+    /// What moves from build to build: `carry`, until the fruit has a data
+    /// folder.
+    pub fn build_carry(&self) -> &[String] {
+        if self.uses_data() { &[] } else { &self.carry }
+    }
+
+    /// What moves into the data folder, once.
+    pub fn data_carry(&self) -> &[String] {
+        if self.uses_data() { &self.carry } else { &[] }
     }
 
     /// True if `path` has one of this fruit's extensions (case-insensitive).

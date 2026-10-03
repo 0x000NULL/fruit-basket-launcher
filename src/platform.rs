@@ -1,5 +1,5 @@
-//! The few things that differ per OS: dark mode, and handing a folder, file
-//! or link to the system.
+//! The few things that differ per OS: dark mode, free space, and handing a
+//! folder, file or link to the system.
 
 use std::path::Path;
 use std::process::Command;
@@ -35,6 +35,36 @@ pub fn os_dark() -> bool {
         output(Command::new("gsettings").args(["get", "org.gnome.desktop.interface", "color-scheme"]))
             .is_some_and(|s| s.contains("dark"))
     }
+}
+
+/// The nearest folder at or above `path` that exists: the basket's root
+/// may not have been made yet.
+fn existing(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|p| p.is_dir())
+}
+
+/// Bytes free for this user on the volume holding `path`.
+#[cfg(windows)]
+pub fn free_space(path: &Path) -> Option<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetDiskFreeSpaceExW(dir: *const u16, avail: *mut u64, total: *mut u64, free: *mut u64) -> i32;
+    }
+    let wide: Vec<u16> = existing(path)?.as_os_str().encode_wide().chain(Some(0)).collect();
+    let mut avail = 0u64;
+    // SAFETY: `wide` is NUL-terminated and outlives the call; the null
+    // out-pointers are optional in the API.
+    let ok = unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut avail, std::ptr::null_mut(), std::ptr::null_mut()) };
+    (ok != 0).then_some(avail)
+}
+
+/// Bytes free for this user on the volume holding `path`.
+#[cfg(not(windows))]
+pub fn free_space(path: &Path) -> Option<u64> {
+    let out = output(Command::new("df").arg("-Pk").arg(existing(path)?))?;
+    let kb: u64 = out.lines().nth(1)?.split_whitespace().nth(3)?.parse().ok()?;
+    Some(kb * 1024)
 }
 
 /// Open a folder, file or URL with whatever the system uses for it.
@@ -75,4 +105,13 @@ pub fn tilde(path: &Path) -> String {
         }
     }
     path.display().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn free_space_of_a_folder_not_made_yet() {
+        let t = tempfile::tempdir().unwrap();
+        assert!(super::free_space(&t.path().join("not/yet")).is_some_and(|n| n > 0));
+    }
 }

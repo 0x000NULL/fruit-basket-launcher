@@ -145,17 +145,27 @@ fn gba_code(path: &Path) -> Option<String> {
     code.iter().all(u8::is_ascii_alphanumeric).then(|| String::from_utf8_lossy(code).to_string())
 }
 
+/// Where `fruit` keeps save states besides the game's own folder: its data
+/// folder when it takes `{data}`, else the current build (Pomegranate's
+/// `<stem>.state` beside its exe before v0.3.0).
+pub fn save_dirs(basket: &Basket, fruit: &Fruit) -> Vec<PathBuf> {
+    let base = if fruit.uses_data() {
+        basket.data_dir(&fruit.id)
+    } else {
+        match basket.current(&fruit.id) {
+            Some(c) => basket.build_dir(&fruit.id, &c.build),
+            None => return Vec::new(),
+        }
+    };
+    vec![base.clone(), base.join("states")]
+}
+
 /// Save files the fruit keeps for this game: slot states named after it,
-/// beside the game or in the build folder (Pomegranate's `<stem>.state`).
-pub fn saves(game: &Path, build_dir: Option<&Path>) -> Vec<PathBuf> {
+/// beside the game or in `dirs` (from `save_dirs`).
+pub fn saves(game: &Path, dirs: &[PathBuf]) -> Vec<PathBuf> {
     let Some(stem) = game.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { return Vec::new() };
-    let mut dirs: Vec<PathBuf> = game.parent().map(Path::to_path_buf).into_iter().collect();
-    if let Some(b) = build_dir {
-        dirs.push(b.to_path_buf());
-        dirs.push(b.join("states"));
-    }
     let mut out = Vec::new();
-    for d in dirs {
+    for d in game.parent().into_iter().chain(dirs.iter().map(PathBuf::as_path)) {
         for e in fs::read_dir(d).into_iter().flatten().flatten() {
             let name = e.file_name().to_string_lossy().to_lowercase();
             if name.starts_with(&format!("{stem}.")) && name.ends_with(".state") {
@@ -164,6 +174,15 @@ pub fn saves(game: &Path, build_dir: Option<&Path>) -> Vec<PathBuf> {
         }
     }
     out
+}
+
+/// `path` with the prefix `old` swapped for `new`, after the basket moves;
+/// a path outside `old` is returned as it was.
+pub fn rebase(path: &Path, old: &Path, new: &Path) -> PathBuf {
+    match path.strip_prefix(old) {
+        Ok(rest) => new.join(rest),
+        Err(_) => path.to_path_buf(),
+    }
 }
 
 /// When each game was last played and for how long, by path.
@@ -208,6 +227,11 @@ impl Played {
     }
 
     /// A session that started at `started` and ran `secs`.
+    /// After the basket moves from `old` to `new`.
+    pub fn rebase(&mut self, old: &Path, new: &Path) {
+        self.map = self.map.drain().map(|(p, v)| (rebase(&p, old, new), v)).collect();
+    }
+
     pub fn record(&mut self, path: &Path, started: SystemTime, secs: u64) {
         let at = started.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
         let e = self.map.entry(path.to_path_buf()).or_insert((0, 0));
@@ -248,6 +272,7 @@ mod tests {
             dump_db: None,
             launch: vec!["{rom}".into()],
             load_slot: None,
+            open: vec![],
             carry: vec![],
             url: String::new(),
             readme_url: String::new(),
@@ -317,6 +342,26 @@ mod tests {
         let build = t.path().join("build");
         fs::create_dir_all(&build).unwrap();
         fs::write(build.join("Game (USA).state"), b"x").unwrap();
-        assert_eq!(saves(&rom, Some(&build)).len(), 3);
+        assert_eq!(saves(&rom, std::slice::from_ref(&build)).len(), 3);
+        assert_eq!(saves(&rom, &[]).len(), 2);
+
+        // The basket moves: paths inside it follow, others stay.
+        let (old, new) = (t.path().to_path_buf(), Path::new("/elsewhere/FruitBasket"));
+        p.rebase(&old, new);
+        assert_eq!(p.secs(&new.join("Game (USA).gba")), 90);
+        assert_eq!(rebase(Path::new("/other/x.gba"), &old, new), Path::new("/other/x.gba"));
+    }
+
+    #[test]
+    fn saves_live_in_data_for_fruits_that_take_it() {
+        let t = tempfile::tempdir().unwrap();
+        let b = Basket::new(t.path());
+        let mut pom = fruit("pomegranate", &[".iso"]);
+        assert!(save_dirs(&b, &pom).is_empty(), "not installed, no data folder");
+        pom.launch = vec!["play".into(), "{rom}".into(), "--data".into(), "{data}".into()];
+        let states = b.data_dir("pomegranate").join("states");
+        fs::create_dir_all(&states).unwrap();
+        fs::write(states.join("Game.s0.state"), b"x").unwrap();
+        assert_eq!(saves(&t.path().join("games/Game.iso"), &save_dirs(&b, &pom)).len(), 1);
     }
 }

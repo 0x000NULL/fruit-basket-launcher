@@ -5,7 +5,9 @@
 use std::path::Path;
 use std::time::SystemTime;
 
-use basket_ui::fmt::{fmt_play, fmt_size};
+use basket_ui::fmt::fmt_play;
+
+use crate::ui::fmt_size;
 use basket_ui::text::Style;
 use basket_ui::tokens::{hex, Rgb};
 use basket_ui::widgets::{self, mix};

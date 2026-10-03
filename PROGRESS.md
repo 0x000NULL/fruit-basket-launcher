@@ -12,8 +12,8 @@ map: `docs/ARCHITECTURE.md`.
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
-| M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space | next | v0.4.0 |
-| M5 | Controller: pad navigation, couch mode, saves view, Map buttons | | v0.5.0 |
+| M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; site side waiting (below) | v0.4.0 |
+| M5 | Controller: pad navigation, couch mode, saves view, Map buttons | next | v0.5.0 |
 | M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/` | | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
@@ -22,20 +22,24 @@ bumped in the same commit, and the release notes come from a
 
 ## Verified
 
-- `cargo test`: 36 pass. Covers:
+- `cargo test`: 47 pass. Covers:
   - feed signature: a real signed feed passes; a tampered feed, the wrong key or an older feed is refused
   - install, switch, prune, uninstall; a bad archive leaves the current build running
   - a wrong hash deletes the download; a network failure changes nothing
   - queue order, dedupe and retry; history; library scan, titles, serials, saves, play time
   - compat matching; SHA-1 and CHD header hashes; the hash cache; launch sessions
-  - renders of every tab state
+  - rollback options and jobs for a build; the rollback, uninstall and move dialogs end to end in `App`
+  - data migration (once, never overwriting, before pruning); `{data}` filled and an unfilled placeholder refused; a fruit's first Play moving its cards into data/ (with this test binary as the emulator)
+  - the free-space check; the mover (destination rules, rename, copy check, a failure leaving the basket, never into itself); paths rebased after a move
+  - renders of every tab state, the dialogs, the ripe banner and the space failure
 - `e2e_install_switch_and_refuse` (opt-in: `FRUITBASKET_E2E=1`; `FRUITBASKET_FEED` can point it at a local copy of the site instead) does all of this over HTTP. On 2026-10-03 it passed against the live feed:
   - installs Strawberry v1.4.0
   - fetches and matches its compat list
   - switches it to nightly with the stable build kept
   - refuses a job with a wrong hash, leaving nothing on disk
+  - (v0.4.0, same day) rolls back to the kept stable build through the dialog and forward again, moves the basket, and uninstalls with the games kept
 - A real window ran against the local site and wrote `settings.toml` on close.
-- Not yet done by hand: starting a real game from the Library. No ROM was available; `launch.rs` is tested with a stand-in program.
+- Not yet done by hand: starting a real game from the Library (no ROM was available; `launch.rs` is tested with a stand-in program), clicking through the dialogs in a real window, and Move basket across two drives. The copy path is unit-tested, but every test move so far stayed on one volume and was a rename.
 
 ## Waiting on other repos
 
@@ -47,24 +51,21 @@ bumped in the same commit, and the release notes come from a
   - `ps2emu play <image> --data <DIR> [--slot N]`. Without a game, `ps2emu --data <DIR>` opens its library.
   - **Slots are 0–9** (`<stem>.s0.state` to `.s9.state`), not 1–8 like Strawberry's. The couch saves view (M5) needs a per-fruit slot range; take it from the slot files, or add a LAUNCHER key.
   - `--data` holds ps2emu.toml, cards/, states/, cache/ and screenshots. Migrate only ps2emu.toml, cards/ and states/; cache/ rebuilds itself. ps2emu migrates nothing. It exits 7 if DIR can't be created.
-  - **M4 work in this repo, as one change:**
-    1. Fill `{data}` as `<root>/<fruit>/data/`.
-    2. Move the current build's carry files there once.
-    3. Change the site's `launch` to `play {rom} --data {data}` and `load_slot` to `play {rom} --data {data} --slot {slot}`.
-    4. Drop `carry`.
-    5. Point `library::saves` at the data folder.
-  - Builds before v0.3.0 don't take `--data`, so a rollback to one has to fall back to the carry behaviour, or stop offering pre-v0.3.0 builds.
-  - v0.2.0 and v0.1.0 releases are kept on the site.
+  - **The launcher side is done in v0.4.0:** `{data}` = `<root>/<fruit>/data/`, the `carry` files move there once, saves are read from it, and Open uses an `open` template.
+  - **Waiting on the site** (asked of its session after the v0.4.0 tag):
+    - `pomegranate/LAUNCHER`: `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, keep `carry`, add `oldest v0.3.0`.
+    - `feedgen.py` writes `open`, and leaves out releases older than `oldest`.
+  - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
+  - Until the site changes, Pomegranate runs exactly as in v0.3.0.
 - **Crabapple**: will need `--slot N` too once it ships.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 - **Site**: deployed. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
 
 ## Known gaps
 
-- Storage in Settings shows space used, not free space (M4).
-- Roll back… and Uninstall are drawn but inactive (M4). `Basket::switch`, `prune` and `uninstall` already work and are tested.
-- Move basket…, Map buttons…, the couch button and the launcher-update banner do nothing yet (M4–M6).
-- "Tell me when it's ripe" saves the watch list but raises no alert yet (M4).
+- Map buttons…, the couch button and the launcher-update banner's Restart now do nothing yet (M5–M6).
+- The ripe banner shows only while the launcher is open; there is no OS notification.
+- Roll back offers only what the feed lists: one nightly, plus the stable releases. Older nightlies can't be re-downloaded.
 - Game covers are the mocks' striped placeholders. Real art (title captures, slot pictures) needs per-fruit probes.
 - The library is rescanned at start and when the tab opens (if "Rescan when the launcher opens" is on). Nothing watches the folders.
 - Library sort and view choices are not saved between runs.
@@ -75,3 +76,5 @@ bumped in the same commit, and the release notes come from a
 - Downloads → Earlier shows one row per job ("installed · stable v1.3.1"). The mock's separate "verified" and "installed" rows would say the same thing twice.
 - A busy install shows "Verifying…" in the aside and the step bars, as in `Installing.png`; a queued one shows "Queued".
 - The Controller row of the Basket's setup list is left out until Map buttons works (M5).
+- The ripe alert has no mock of its own; it uses the launcher-update banner from `Launcher-Update.png`.
+- Move basket… asks to confirm in a dialog like the others. The mocks show only the button.

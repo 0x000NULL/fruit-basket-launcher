@@ -2,7 +2,7 @@
 //! basket, ready to install, still growing), and an aside for the selected
 //! one. When narrow, the aside is a bottom sheet over the list.
 
-use basket_ui::fmt::fmt_size;
+use crate::ui::fmt_size;
 use basket_ui::text::Style;
 use basket_ui::widgets;
 
@@ -55,6 +55,11 @@ pub struct Detail<'a> {
     pub games_size: u64,
     pub watching: bool,
     pub key_id: &'a str,
+    /// Roll back… works: there is something to roll back to, nothing is
+    /// installing, and none of the fruit's games is running.
+    pub can_roll_back: bool,
+    /// Uninstall works: nothing is installing and no game is running.
+    pub can_uninstall: bool,
 }
 
 pub struct BasketView<'a> {
@@ -213,6 +218,7 @@ fn draw_card(ui: &mut Ui, card: &Card, on: bool, x: f32, y: f32, w: f32) {
         CardState::Failed(FailKind::Signature) => ("signature didn't match".to_string(), ui.pal.spot),
         CardState::Failed(FailKind::Network) => ("download stopped".to_string(), ui.pal.spot),
         CardState::Failed(FailKind::Install) => ("install failed".to_string(), ui.pal.spot),
+        CardState::Failed(FailKind::Space) => ("not enough space".to_string(), ui.pal.spot),
         CardState::NotInstalled => ("not installed".to_string(), ui.muted()),
         CardState::NotForThisPc => ("no build for this PC yet".to_string(), ui.muted()),
     };
@@ -231,7 +237,7 @@ fn draw_card(ui: &mut Ui, card: &Card, on: bool, x: f32, y: f32, w: f32) {
 }
 
 /// "NO. 1  PS2" (and "· EMULATOR" in the aside).
-fn number_line(ui: &mut Ui, x: f32, y: f32, f: &Fruit, emulator: bool) {
+pub(crate) fn number_line(ui: &mut Ui, x: f32, y: f32, f: &Fruit, emulator: bool) {
     let no = Style::interface_bold(11.0).upper().tracking(1.6).color(ui.pal.spot);
     let nw = ui.cv.text(x, y, &format!("No. {}", f.no), &no);
     let sys = Style::interface_bold(11.0).upper().tracking(1.6).color(ui.muted());
@@ -306,24 +312,33 @@ fn aside(ui: &mut Ui, d: &Detail, x: f32, top: f32, w: f32, bottom: f32, scroll:
         }
     }
 
-    // Open games/ · Roll back… · Uninstall (the last two land with rollback).
+    // Open games/ · Roll back… · Uninstall.
     if d.current.is_some() {
         y += 10.0;
         let (gw, games) = ui.small_button(x, y, "Open games/");
         if games {
             ui.emit(Cmd::OpenGames(f.id.clone()));
         }
-        ui.small_button_off(x + gw + 14.0, y, "Roll back…");
-        let st = Style::interface(13.0).color(ui.faded());
+        let rx = x + gw + 14.0;
+        if d.can_roll_back {
+            if ui.small_button(rx, y, "Roll back…").1 {
+                ui.emit(Cmd::AskRollback(f.id.clone()));
+            }
+        } else {
+            ui.small_button_off(rx, y, "Roll back…");
+        }
+        let st = Style::interface(13.0);
         let uw = ui.cv.measure("Uninstall", &st);
         let rw = ui.small_button_width("Roll back…");
-        if x + gw + 14.0 + rw + 20.0 + uw <= x + w {
-            ui.cv.text(x + w - uw, y + 9.0, "Uninstall", &st);
-            y += 34.0;
+        let (ux, uy) = if rx + rw + 20.0 + uw <= x + w { (x + w - uw, y + 9.0) } else { (x, y + 50.0) };
+        if d.can_uninstall {
+            if ui.link(ux, uy, "Uninstall", ui.pal.fg).1 {
+                ui.emit(Cmd::AskUninstall(f.id.clone()));
+            }
         } else {
-            ui.cv.text(x, y + 50.0, "Uninstall", &st);
-            y += 70.0;
+            ui.cv.text(ux, uy, "Uninstall", &st.color(ui.faded()));
         }
+        y += if uy == y + 9.0 { 34.0 } else { 70.0 };
     }
 
     // Setup, or what install does.

@@ -1,7 +1,7 @@
 //! The launcher's state and its frame: gather input, draw, apply commands.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
@@ -14,19 +14,21 @@ use gilrs::Button;
 use minifb::Key;
 
 use crate::art::Art;
-use crate::basket::{Basket, Current};
+use crate::basket::{Basket, Current, Games};
 use crate::feed::{self, Channel, Feed, FeedError, Fetched, Fruit, Status};
 use crate::history::{self, Entry};
 use crate::jobs::{Job, Worker};
 use crate::key;
+use crate::mover;
 use crate::platform;
-use crate::queue::{self, Finished, Queue};
+use crate::queue::{self, Finished, Queue, RollOpt};
 use crate::settings::{Settings, ThemePref};
 use crate::shelf::Shelf;
 use crate::ui::basket::{BasketView, Card, CardState, Detail, Primary};
 use crate::ui::downloads::DownloadsView;
 use crate::ui::library::Row;
-use crate::ui::frame::{self, FrameView};
+use crate::ui::frame::{self, Banner, FrameView};
+use crate::ui::modal::{self, ModalView};
 use crate::ui::settings::{FruitStorage, SettingsView};
 use crate::ui::{self, capitalise, Cmd, Flag, Size, Tab, Ui};
 use crate::window::Video;
@@ -118,13 +120,30 @@ pub struct App {
     pub shelf: Shelf,
     /// Why the last Play didn't start, shown in the footer.
     play_error: Option<String>,
+    /// The open dialog, if any; it takes all input.
+    modal: Option<Modal>,
+    /// A basket move under way: from, to, percent, and its thread.
+    moving: Option<(PathBuf, PathBuf, u8, Receiver<mover::Progress>)>,
+    /// The last thing that went wrong outside a download, for the footer.
+    notice: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+/// A dialog, with what it was opened on.
+#[derive(Debug, Clone)]
+pub enum Modal {
+    /// The options are read when the dialog opens.
+    Rollback { fruit: String, options: Vec<RollOpt>, pick: usize },
+    Uninstall { fruit: String, delete: bool },
+    Move { to: PathBuf },
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct Disk {
     pub program: u64,
     pub games_size: u64,
     pub games: usize,
+    /// Builds on disk, newest first: what Roll back can switch to.
+    pub builds: Vec<String>,
 }
 
 impl App {
@@ -174,6 +193,9 @@ impl App {
             chosen: HashMap::new(),
             shelf,
             play_error: None,
+            modal: None,
+            moving: None,
+            notice: None,
             settings,
             basket,
         };
@@ -210,6 +232,7 @@ impl App {
             chosen: &self.chosen,
             find: &self.find,
             selected: self.selected.as_deref(),
+            running: self.shelf.running(),
         }
     }
 
@@ -281,6 +304,7 @@ impl App {
             self.history.truncate(history::SHOWN);
             self.refresh_installed();
         }
+        self.poll_move();
         if self.shelf.poll(&self.basket.launcher_dir(), self.feed.as_ref()) && self.shelf.running().is_none() {
             self.play_error = None;
         }
@@ -342,6 +366,7 @@ impl App {
             chosen: &self.chosen,
             find: &self.find,
             selected: self.selected.as_deref(),
+            running: self.shelf.running(),
         };
         let root = format!("{}{}", platform::tilde(&self.basket.root), std::path::MAIN_SEPARATOR);
         let no_disk = HashMap::new();
@@ -362,15 +387,20 @@ impl App {
             scroll: self.scroll,
         });
         let lv = (self.tab == Tab::Library).then(|| self.shelf.view(&self.basket, self.feed.as_ref(), &self.find, self.sheet, self.scroll, self.aside_scroll));
+        let banner = banner(self.launcher_update.as_deref(), &ctx);
+        let mv = self.modal.as_ref().and_then(|m| modal_view(m, self.feed.as_ref(), &self.basket, &self.installed));
+        // Under a dialog the page draws, but nothing on it can be clicked.
+        let blind = UiInput { mouse: (-1.0e6, -1.0e6), ..UiInput::default() };
+        let page_input = if mv.is_some() { &blind } else { input };
         let mut cmds = {
-            let mut ui = Ui::new(&mut self.canvas, input, &self.art, night, self.pad_used);
+            let mut ui = Ui::new(&mut self.canvas, page_input, &self.art, night, self.pad_used);
             let fv = FrameView {
                 tab: self.tab,
                 find: &self.find,
                 find_focused: self.find_focused,
                 updates: ctx.update_count(),
                 downloads: self.queue.count(),
-                launcher_update: self.launcher_update.as_deref(),
+                banner: banner.as_ref(),
                 hints: &hints,
                 status: &status,
                 controller: self.pad_used,
@@ -389,11 +419,39 @@ impl App {
             frame::footer(&mut ui, &fv);
             ui.cmds
         };
-        drop((sv, bv, dv, lv));
-        cmds.extend(self.keys(input));
+        if let Some(mv) = &mv {
+            let mut ui = Ui::new(&mut self.canvas, input, &self.art, night, self.pad_used);
+            modal::draw(&mut ui, mv);
+            cmds.extend(ui.cmds);
+        }
+        let modal_open = mv.is_some();
+        drop((sv, bv, dv, lv, mv));
+        cmds.extend(if modal_open { self.modal_keys(input) } else { self.keys(input) });
         for cmd in cmds {
             self.apply(cmd);
         }
+    }
+
+    /// Keys while a dialog is open: Z confirms, X or Esc cancels, the
+    /// arrows pick a row, Space ticks the box.
+    fn modal_keys(&self, input: &UiInput) -> Vec<Cmd> {
+        let mut out = Vec::new();
+        if input.action(Action::Confirm) {
+            out.push(Cmd::ModalConfirm);
+        } else if input.action(Action::Back) || input.pressed(Key::Escape) {
+            out.push(Cmd::ModalCancel);
+        }
+        if let Some(Modal::Rollback { options, pick, .. }) = &self.modal {
+            if input.action(Action::Up) && *pick > 0 {
+                out.push(Cmd::ModalPick(pick - 1));
+            } else if input.action(Action::Down) && pick + 1 < options.len() {
+                out.push(Cmd::ModalPick(pick + 1));
+            }
+        }
+        if input.pressed(Key::Space) {
+            out.push(Cmd::ModalToggle);
+        }
+        out
     }
 
     /// Keyboard and pad shortcuts that aren't tied to something drawn.
@@ -471,6 +529,7 @@ impl App {
             Cmd::Tab(tab) => {
                 if tab != self.tab {
                     self.tab = tab;
+                    self.notice = None;
                     self.scroll = 0.0;
                     self.aside_scroll = 0.0;
                     self.sheet = false;
@@ -555,9 +614,9 @@ impl App {
             }
             Cmd::ShowFile(p) => platform::reveal(&p),
             Cmd::ShowSaves(p) => {
-                let fruit = self.shelf.games.iter().find(|g| g.path == p).map(|g| g.fruit.clone());
-                let build = fruit.and_then(|f| self.basket.current(&f).map(|c| self.basket.build_dir(&f, &c.build)));
-                if let Some(save) = crate::library::saves(&p, build.as_deref()).first() {
+                let fruit = self.shelf.games.iter().find(|g| g.path == p).and_then(|g| self.feed.as_ref()?.fruit(&g.fruit));
+                let dirs = fruit.map(|f| crate::library::save_dirs(&self.basket, f)).unwrap_or_default();
+                if let Some(save) = crate::library::saves(&p, &dirs).first() {
                     platform::reveal(save);
                 }
             }
@@ -569,6 +628,9 @@ impl App {
                 self.shelf.remove(&p);
             }
             Cmd::ClearOldBuilds(id) => {
+                if self.queue.busy(&id).is_some() {
+                    return;
+                }
                 if let Err(e) = self.basket.prune(&id, 0) {
                     eprintln!("fruitbasket: clearing old {id} builds: {e}");
                 }
@@ -632,9 +694,152 @@ impl App {
                 platform::open(&dir.to_string_lossy());
             }
             Cmd::Open(id) => self.open(&id),
+            Cmd::AskRollback(id) => {
+                let options = match (self.feed.as_ref().and_then(|f| f.fruit(&id)), self.installed.get(&id)) {
+                    (Some(f), Some(c)) => queue::rollback_options(f, c, &self.basket.builds(&id)),
+                    _ => Vec::new(),
+                };
+                let running = self.shelf.running().is_some_and(|name| Some(name) == self.feed.as_ref().and_then(|f| f.fruit(&id)).map(|f| f.name.as_str()));
+                if !options.is_empty() && self.queue.busy(&id).is_none() && !self.queue.is_waiting(&id) && !running {
+                    self.modal = Some(Modal::Rollback { fruit: id, options, pick: 0 });
+                }
+            }
+            Cmd::AskUninstall(id) => {
+                if self.ctx().can_uninstall(&id) {
+                    self.modal = Some(Modal::Uninstall { fruit: id, delete: false });
+                }
+            }
+            Cmd::MoveBasket => {
+                if let Some(why) = self.cant_move() {
+                    self.notice = Some(why);
+                } else if let Some(picked) = rfd::FileDialog::new().set_title("Move the basket to").pick_folder() {
+                    match mover::destination(&self.basket.root, &picked) {
+                        Ok(to) => self.modal = Some(Modal::Move { to }),
+                        Err(e) => self.notice = Some(format!("can't move the basket there: {e}")),
+                    }
+                }
+            }
+            Cmd::ModalPick(i) => {
+                if let Some(Modal::Rollback { options, pick, .. }) = &mut self.modal {
+                    *pick = i.min(options.len().saturating_sub(1));
+                }
+            }
+            Cmd::ModalToggle => {
+                if let Some(Modal::Uninstall { delete, .. }) = &mut self.modal {
+                    *delete = !*delete;
+                }
+            }
+            Cmd::ModalCancel => self.modal = None,
+            Cmd::ModalConfirm => {
+                if let Some(m) = self.modal.take() {
+                    self.confirm(m);
+                }
+            }
+            Cmd::RipeInstall(id) => {
+                self.unwatch(&id);
+                self.selected = Some(id.clone());
+                self.apply(Cmd::Tab(Tab::Basket));
+                self.apply(Cmd::Install(id));
+            }
+            Cmd::RipeDismiss(id) => self.unwatch(&id),
             // Wired up in later milestones.
-            Cmd::Couch | Cmd::MoveBasket | Cmd::MapButtons | Cmd::RestartForUpdate => {}
+            Cmd::Couch | Cmd::MapButtons | Cmd::RestartForUpdate => {}
         }
+    }
+
+    fn unwatch(&mut self, id: &str) {
+        self.settings.watch.retain(|w| w != id);
+        self.settings.save();
+    }
+
+    /// Do what a dialog asked, once it is confirmed.
+    fn confirm(&mut self, m: Modal) {
+        match m {
+            Modal::Rollback { fruit, options, pick } => {
+                let Some(opt) = options.get(pick) else { return };
+                if opt.download.is_some() {
+                    let f = self.feed.as_ref().and_then(|f| f.fruit(&fruit));
+                    if let Some(job) = f.and_then(|f| queue::job_for_build(f, &opt.build, self.settings.keep as usize)) {
+                        self.enqueue(job);
+                    }
+                } else {
+                    self.switch_to(&fruit, Current { build: opt.build.clone(), channel: opt.channel });
+                }
+            }
+            Modal::Uninstall { fruit, delete } => {
+                if !self.ctx().can_uninstall(&fruit) {
+                    return;
+                }
+                let games = if delete { Games::Delete } else { Games::Keep };
+                if let Err(e) = self.basket.uninstall(&fruit, games) {
+                    self.notice = Some(format!("uninstalling {}: {e}", self.ctx().name(&fruit)));
+                }
+                self.selected = None;
+                self.refresh_installed();
+            }
+            Modal::Move { to } => {
+                if let Some(why) = self.cant_move() {
+                    self.notice = Some(why);
+                    return;
+                }
+                let from = self.basket.root.clone();
+                let rx = mover::start(from.clone(), to.clone());
+                self.moving = Some((from, to, 0, rx));
+            }
+        }
+    }
+
+    /// Why the basket can't move now, if it can't.
+    fn cant_move(&self) -> Option<String> {
+        if self.moving.is_some() {
+            Some("the basket is already moving".into())
+        } else if self.queue.active().is_some() || self.queue.waiting().next().is_some() {
+            Some("wait for the downloads to finish before moving the basket".into())
+        } else if self.shelf.running().is_some() {
+            Some("close the game before moving the basket".into())
+        } else {
+            None
+        }
+    }
+
+    /// Pick up the mover's progress; on success, the basket lives at the new
+    /// place from now on.
+    fn poll_move(&mut self) {
+        let Some((from, to, pct, rx)) = &mut self.moving else { return };
+        let mut done = None;
+        while let Ok(p) = rx.try_recv() {
+            match p {
+                mover::Progress::Pct(n) => *pct = n,
+                mover::Progress::Done(r) => done = Some(r),
+            }
+        }
+        let Some(result) = done else { return };
+        let (from, to) = (from.clone(), to.clone());
+        self.moving = None;
+        if let Err(e) = result {
+            self.notice = Some(format!("the basket didn't move: {e}. Nothing changed"));
+            return;
+        }
+        let s = &mut self.settings;
+        s.root = Some(to.clone());
+        for p in s.folders.iter_mut().chain(s.hidden.iter_mut()) {
+            *p = crate::library::rebase(p, &from, &to);
+        }
+        s.save();
+        self.basket = self.settings.basket();
+        self.worker = Worker::start(self.basket.clone());
+        self.shelf.rebase(&self.basket.launcher_dir(), &from, &to);
+        self.refresh_installed();
+        self.notice = Some(format!("the basket is now in {}", platform::tilde(&to)));
+    }
+
+    /// Make a build on disk current, then re-read what is installed.
+    fn switch_to(&mut self, id: &str, to: Current) {
+        let carry = self.feed.as_ref().and_then(|f| f.fruit(id)).map(|f| f.build_carry().to_vec()).unwrap_or_default();
+        if let Err(e) = self.basket.switch(id, to, &carry) {
+            self.notice = Some(format!("switching {}: {e}", self.ctx().name(id)));
+        }
+        self.refresh_installed();
     }
 
     /// Switch an installed fruit's channel: to a build already on disk if
@@ -651,29 +856,36 @@ impl App {
         }
         let Some(build) = fruit.channel(ch) else { return };
         if self.basket.build_dir(id, &build.build).join(".installed").exists() {
-            let to = Current { build: build.build.clone(), channel: ch };
-            if let Err(e) = self.basket.switch(id, to, &fruit.carry) {
-                eprintln!("fruitbasket: switching {id} to {}: {e}", ch.name());
-            }
-            self.refresh_installed();
+            self.switch_to(id, Current { build: build.build.clone(), channel: ch });
         } else if let Some(job) = queue::job_for(&fruit, ch, self.settings.keep as usize) {
             self.enqueue(job);
         }
     }
 
     /// Start the fruit's emulator with no game: it opens its own library.
-    fn open(&self, id: &str) {
-        let Some(bin) = self.feed.as_ref().and_then(|f| f.fruit(id)).and_then(|f| f.bin.clone()) else { return };
-        let Some(exe) = self.basket.exe(id, &bin) else {
-            eprintln!("fruitbasket: no {bin} in {id}'s current build");
+    fn open(&mut self, id: &str) {
+        let Some(fruit) = self.feed.as_ref().and_then(|f| f.fruit(id)) else { return };
+        let Some(bin) = fruit.bin.as_deref() else { return };
+        let Some(exe) = self.basket.exe(id, bin) else {
+            self.notice = Some(format!("no {bin} in {}'s current build", fruit.name));
             return;
         };
-        let mut cmd = Command::new(&exe);
-        if let Some(dir) = exe.parent() {
-            cmd.current_dir(dir);
+        let data = fruit.uses_data().then(|| self.basket.data_dir(id));
+        let started = match &data {
+            Some(_) => self.basket.migrate_data(id, fruit.data_carry()).map(|_| ()).map_err(|e| format!("moving saves to data/: {e}")),
+            None => Ok(()),
         }
-        if let Err(e) = cmd.spawn() {
-            eprintln!("fruitbasket: starting {}: {e}", exe.display());
+        .and_then(|_| crate::launch::args(&fruit.open, None, None, data.as_deref()))
+        .and_then(|args| {
+            let mut cmd = Command::new(&exe);
+            cmd.args(args);
+            if let Some(dir) = exe.parent() {
+                cmd.current_dir(dir);
+            }
+            cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+        });
+        if let Err(e) = started {
+            self.notice = Some(format!("couldn't open {}: {e}", fruit.name));
         }
     }
 
@@ -681,8 +893,14 @@ impl App {
         if let Some(a) = self.queue.active() {
             return format!("{} {} · {}%", a.step.name(), self.ctx().name(&a.job.fruit), a.pct);
         }
+        if let Some((_, to, pct, _)) = &self.moving {
+            return format!("moving the basket to {} · {pct}%", platform::tilde(to));
+        }
         if let Some(e) = &self.play_error {
             return format!("couldn't start: {e}");
+        }
+        if let Some(n) = &self.notice {
+            return n.clone();
         }
         if let Some(name) = self.shelf.running() {
             return format!("running in {name}");
@@ -733,6 +951,8 @@ struct Ctx<'a> {
     chosen: &'a HashMap<String, Channel>,
     find: &'a str,
     selected: Option<&'a str>,
+    /// The fruit name a game is running in.
+    running: Option<&'a str>,
 }
 
 impl<'a> Ctx<'a> {
@@ -846,6 +1066,12 @@ impl<'a> Ctx<'a> {
         self.selected_id().and_then(|id| self.fruit(id))
     }
 
+    /// Nothing is installing the fruit and none of its games is running.
+    fn can_uninstall(&self, id: &str) -> bool {
+        let Some(f) = self.fruit(id) else { return false };
+        self.installed.contains_key(id) && self.queue.busy(id).is_none() && !self.queue.is_waiting(id) && self.running != Some(f.name.as_str())
+    }
+
     /// Fruits Update all would update: an update ready and nothing running.
     fn update_count(&self) -> usize {
         self.installed.keys().filter_map(|id| self.fruit(id)).filter(|f| self.primary(f) == Primary::Update).count()
@@ -870,7 +1096,8 @@ impl<'a> Ctx<'a> {
                 Some(fail) => f.build(&fail.job.build).map(|(_, b)| b),
                 None => f.channel(channel),
             };
-            let d = disk.get(&f.id).copied().unwrap_or_default();
+            let d = disk.get(&f.id).cloned().unwrap_or_default();
+            let idle = self.queue.busy(&f.id).is_none() && !self.queue.is_waiting(&f.id) && self.running != Some(f.name.as_str());
             Detail {
                 fruit: f,
                 current,
@@ -882,6 +1109,8 @@ impl<'a> Ctx<'a> {
                 games_size: d.games_size,
                 watching: self.settings.watch.iter().any(|w| *w == f.id),
                 key_id: key::KEY_ID,
+                can_roll_back: idle && current.is_some_and(|c| !queue::rollback_options(f, c, &d.builds).is_empty()),
+                can_uninstall: self.can_uninstall(&f.id),
             }
         });
         let feed_note = match (self.feed, feed_note) {
@@ -901,6 +1130,92 @@ impl<'a> Ctx<'a> {
             aside_scroll,
             feed_note,
         }
+    }
+}
+
+/// The banner: a launcher update staged, else the first watched fruit
+/// that has ripened (released, with a build for this PC, not installed).
+fn banner(launcher_update: Option<&str>, ctx: &Ctx) -> Option<Banner> {
+    if let Some(v) = launcher_update {
+        return Some(Banner {
+            lead: format!("Launcher {v}"),
+            text: "is downloaded and verified. It installs the next time the launcher opens.".into(),
+            action: ("Restart now".into(), Cmd::RestartForUpdate),
+            later: Cmd::DismissLauncherUpdate,
+        });
+    }
+    let f = ctx.settings.watch.iter().filter_map(|id| ctx.fruit(id)).find(|f| {
+        f.status == Status::Released && !ctx.installed.contains_key(&f.id) && queue::job_for(f, ctx.new_channel(f), 0).is_some()
+    })?;
+    let build = f.channel(ctx.new_channel(f)).map_or(String::new(), |b| b.build.clone());
+    Some(Banner {
+        lead: format!("{} is ripe", f.name),
+        text: format!("{build} for {} is ready to install.", f.system),
+        action: ("Install".into(), Cmd::RipeInstall(f.id.clone())),
+        later: Cmd::RipeDismiss(f.id.clone()),
+    })
+}
+
+/// What the open dialog shows, from the mocks' Rollback and Uninstall.
+fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, installed: &HashMap<String, Current>) -> Option<ModalView<'a>> {
+    let sep = std::path::MAIN_SEPARATOR;
+    match m {
+        Modal::Rollback { fruit, options, pick } => {
+            let f = feed?.fruit(fruit)?;
+            let current = installed.get(fruit)?;
+            Some(ModalView {
+                fruit: Some(f),
+                title: format!("Roll back {}?", f.name),
+                body: "Saves, settings and controller maps stay as they are. You can update again any time.".into(),
+                current: Some((format!("{} {}", current.channel.name(), current.build), "installed now".into())),
+                rows: options
+                    .iter()
+                    .map(|o| {
+                        let note = match o.download {
+                            None => "kept on disk".to_string(),
+                            Some(size) => format!("download · {}", crate::ui::fmt_size(size)),
+                        };
+                        (format!("{} {}", o.channel.name(), o.build), note)
+                    })
+                    .collect(),
+                pick: *pick,
+                tick: None,
+                cancel: "Cancel",
+                confirm: "Roll back",
+            })
+        }
+        Modal::Uninstall { fruit, delete } => {
+            let f = feed?.fruit(fruit)?;
+            Some(ModalView {
+                fruit: Some(f),
+                title: format!("Uninstall {}?", f.name),
+                body: format!(
+                    "The program is removed. Your games and saves stay in {}{sep} unless you tick the box.",
+                    platform::tilde(&basket.games_dir(fruit))
+                ),
+                current: None,
+                rows: Vec::new(),
+                pick: 0,
+                tick: Some(("Also delete games and saves", *delete)),
+                cancel: "Keep it",
+                confirm: "Uninstall",
+            })
+        }
+        Modal::Move { to } => Some(ModalView {
+            fruit: None,
+            title: "Move the basket?".into(),
+            body: format!(
+                "Everything in {}{sep} moves to {}{sep}: the programs, games and saves. The launcher keeps working from the new place.",
+                platform::tilde(&basket.root),
+                platform::tilde(to)
+            ),
+            current: None,
+            rows: Vec::new(),
+            pick: 0,
+            tick: None,
+            cancel: "Cancel",
+            confirm: "Move",
+        }),
     }
 }
 
@@ -944,7 +1259,7 @@ fn storage(basket: &Basket, feed: Option<&Feed>) -> (String, Vec<FruitStorage>) 
             let current = basket.current(&f.id)?;
             let builds = basket.builds(&f.id);
             let program = dir_size(&basket.build_dir(&f.id, &current.build));
-            let games = dir_size(&basket.games_dir(&f.id));
+            let games = dir_size(&basket.games_dir(&f.id)) + dir_size(&basket.data_dir(&f.id));
             let old = builds.len().saturating_sub(1);
             let kept = match old {
                 0 => "no old builds".to_string(),
@@ -954,11 +1269,16 @@ fn storage(basket: &Basket, feed: Option<&Feed>) -> (String, Vec<FruitStorage>) 
             Some(FruitStorage {
                 id: f.id.clone(),
                 name: f.name.clone(),
-                detail: format!("program {} · games {} · {kept}", basket_ui::fmt::fmt_size(program), basket_ui::fmt::fmt_size(games)),
+                detail: format!("program {} · games {} · {kept}", crate::ui::fmt_size(program), crate::ui::fmt_size(games)),
             })
         })
         .collect();
-    (format!("{} used", basket_ui::fmt::fmt_size(used)), rows)
+    let used = format!("{} used", crate::ui::fmt_size(used));
+    let detail = match platform::free_space(&basket.root) {
+        Some(free) => format!("{used} · {} free", crate::ui::fmt_size(free)),
+        None => used,
+    };
+    (detail, rows)
 }
 
 /// Program and games sizes and game counts, for the Basket aside.
@@ -974,6 +1294,7 @@ fn disk(basket: &Basket, feed: Option<&Feed>) -> HashMap<String, Disk> {
                     program: dir_size(&basket.build_dir(&f.id, &current.build)),
                     games_size: dir_size(&games_dir),
                     games: count_games(&games_dir, f, 3),
+                    builds: basket.builds(&f.id),
                 },
             ))
         })
@@ -1031,8 +1352,9 @@ mod tests {
 
     /// End to end through the real worker: fetch and verify the live feed
     /// (or `FRUITBASKET_FEED`), install Strawberry with the Install command,
-    /// match a game against its compat list, switch it to nightly, then
-    /// feed a job a wrong hash. Downloads real builds. Run with
+    /// match a game against its compat list, switch it to nightly, roll
+    /// back and forward, feed a job a wrong hash, move the basket and
+    /// uninstall. Downloads real builds. Run with
     /// `FRUITBASKET_E2E=1 cargo test e2e -- --ignored --nocapture`.
     #[test]
     #[ignore]
@@ -1083,6 +1405,15 @@ mod tests {
         assert_eq!(app.installed["strawberry"].channel, Channel::Nightly);
         assert_eq!(app.basket.builds("strawberry").len(), 2, "the stable build is kept for rolling back");
 
+        // Roll back to the kept stable build through the dialog, and forward.
+        let nightly = app.installed["strawberry"].build.clone();
+        app.apply(Cmd::AskRollback("strawberry".into()));
+        app.apply(Cmd::ModalConfirm);
+        assert_eq!(app.installed["strawberry"], cur, "back on the kept stable build");
+        app.apply(Cmd::AskRollback("strawberry".into()));
+        app.apply(Cmd::ModalConfirm);
+        assert_eq!(app.installed["strawberry"].build, nightly);
+
         let mut bad = job(&app, "pomegranate");
         bad.asset.sha256 = "0".repeat(64);
         app.enqueue(bad);
@@ -1091,6 +1422,22 @@ mod tests {
         assert!(!app.installed.contains_key("pomegranate"));
         assert!(!app.basket.builds_dir("pomegranate").exists(), "nothing written");
         assert_eq!(history::read(&app.basket.launcher_dir()).len(), 3);
+
+        // Move the basket, then uninstall keeping the games.
+        let elsewhere = tempfile::tempdir().unwrap();
+        let to = elsewhere.path().join("FruitBasket");
+        app.modal = Some(Modal::Move { to: to.clone() });
+        app.apply(Cmd::ModalConfirm);
+        while app.moving.is_some() {
+            app.poll();
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(app.basket.root, to, "{:?}", app.notice);
+        assert!(app.basket.exe("strawberry", "strawberry").is_some(), "the build still runs from the new place");
+        app.apply(Cmd::AskUninstall("strawberry".into()));
+        app.apply(Cmd::ModalConfirm);
+        assert!(!app.installed.contains_key("strawberry"));
+        assert!(app.basket.games_dir("strawberry").join("Final Fantasy IV Advance (USA).gba").is_file());
     }
 
     /// A basket with Strawberry installed one build behind the feed.
@@ -1102,6 +1449,108 @@ mod tests {
         std::fs::create_dir_all(b.games_dir("strawberry")).unwrap();
         std::fs::write(b.games_dir("strawberry").join("homebrew.gba"), "x").unwrap();
         b
+    }
+
+    /// An older Strawberry build on disk beside the current one.
+    fn keep_build(app: &App, build: &str) {
+        let dir = app.basket.build_dir("strawberry", build);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(".installed"), "").unwrap();
+    }
+
+    /// Roll back to a kept build and forward again, uninstall keeping the
+    /// games, and move the basket; dialogs open, pick and confirm by command.
+    #[test]
+    fn rollback_uninstall_and_move() {
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("FruitBasket");
+        let mut app = App::with(Settings { root: Some(root.clone()), ..Settings::default() }, stocked(&root), Some(feed));
+        keep_build(&app, "v1.2.0");
+        let current = |app: &App| app.installed.get("strawberry").map(|c| c.build.clone());
+
+        app.apply(Cmd::AskRollback("strawberry".into()));
+        match &app.modal {
+            Some(Modal::Rollback { options, .. }) => assert_eq!(options[0], RollOpt { build: "v1.2.0".into(), channel: Channel::Stable, download: None }),
+            other => panic!("{other:?}"),
+        }
+        app.apply(Cmd::ModalCancel);
+        assert!(app.modal.is_none());
+        assert_eq!(current(&app).as_deref(), Some("v1.3.0"), "cancel changes nothing");
+
+        app.apply(Cmd::AskRollback("strawberry".into()));
+        app.apply(Cmd::ModalConfirm);
+        assert_eq!(current(&app).as_deref(), Some("v1.2.0"));
+        app.apply(Cmd::AskRollback("strawberry".into()));
+        app.apply(Cmd::ModalConfirm);
+        assert_eq!(current(&app).as_deref(), Some("v1.3.0"), "and forward again");
+
+        // A dialog takes the keys: Esc closes it instead of quitting.
+        app.apply(Cmd::AskUninstall("strawberry".into()));
+        let esc = UiInput { pressed: vec![Key::Escape], ..UiInput::default() };
+        app.draw(&esc, 1280, 900);
+        assert!(app.modal.is_none() && !app.quit);
+
+        let games = app.basket.games_dir("strawberry");
+        app.apply(Cmd::AskUninstall("strawberry".into()));
+        app.apply(Cmd::ModalConfirm);
+        assert_eq!(current(&app), None);
+        assert!(games.join("homebrew.gba").is_file(), "games stay unless ticked");
+
+        // Move: the games and play history follow, and settings point there.
+        let rom = games.join("homebrew.gba");
+        app.shelf.played_mut().record(&rom, std::time::SystemTime::now(), 60);
+        let to = tmp.path().join("Elsewhere/FruitBasket");
+        app.modal = Some(Modal::Move { to: to.clone() });
+        app.apply(Cmd::ModalConfirm);
+        let start = Instant::now();
+        while app.moving.is_some() {
+            assert!(start.elapsed() < Duration::from_secs(30), "move timed out");
+            app.poll();
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(app.settings.root.as_deref(), Some(to.as_path()));
+        assert_eq!(app.basket.root, to);
+        assert!(!root.exists());
+        let moved = to.join("strawberry/games/homebrew.gba");
+        assert!(moved.is_file());
+        assert_eq!(app.shelf.played_mut().secs(&moved), 60);
+    }
+
+    /// A fruit whose launch takes `{data}`: its first Play moves the cards
+    /// from beside the exe into data/, and the emulator gets that folder.
+    /// The "emulator" is this test binary, which `--list` makes exit at once.
+    #[test]
+    fn data_moves_on_first_play() {
+        let mut feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let pom = feed.fruits.iter_mut().find(|f| f.id == "pomegranate").unwrap();
+        pom.bin = Some("pom".into());
+        pom.launch = ["--list", "{rom}", "{data}"].map(String::from).to_vec();
+        pom.carry = ["ps2emu.toml", "cards", "states"].map(String::from).to_vec();
+        let tmp = tempfile::tempdir().unwrap();
+        let b = Basket::new(tmp.path());
+        let build = b.build_dir("pomegranate", "v0.3.0");
+        std::fs::create_dir_all(build.join("cards")).unwrap();
+        std::fs::write(build.join(".installed"), "").unwrap();
+        std::fs::write(build.join("cards/card1.ps2"), "save").unwrap();
+        let exe = build.join(if cfg!(windows) { "pom.exe" } else { "pom" });
+        std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
+        std::fs::write(b.fruit_dir("pomegranate").join("current"), "v0.3.0\tstable\n").unwrap();
+        std::fs::create_dir_all(b.games_dir("pomegranate")).unwrap();
+        let game = b.games_dir("pomegranate").join("Game.iso");
+        std::fs::write(&game, "x").unwrap();
+
+        let mut app = App::with(Settings::default(), b, Some(feed));
+        app.apply(Cmd::Play(game));
+        assert_eq!(app.play_error, None);
+        assert!(app.basket.data_dir("pomegranate").join("cards/card1.ps2").is_file());
+        assert!(!build.join("cards").exists());
+        let start = Instant::now();
+        while app.shelf.running().is_some() {
+            assert!(start.elapsed() < Duration::from_secs(30), "the stand-in never exited");
+            app.poll();
+            thread::sleep(Duration::from_millis(20));
+        }
     }
 
     fn job(app: &App, id: &str) -> Job {
@@ -1180,7 +1629,7 @@ mod tests {
             return; // the test feed only has Windows builds
         }
         type Setup = fn(&mut App);
-        let states: [(&str, Tab, bool, Setup); 7] = [
+        let states: [(&str, Tab, bool, Setup); 11] = [
             ("basket-first-run", Tab::Basket, false, |_| {}),
             ("basket-update", Tab::Basket, true, |_| {}),
             ("basket-busy", Tab::Basket, true, |app| {
@@ -1207,6 +1656,19 @@ mod tests {
                 app.queue.enqueue(j);
                 app.queue.on_event(&Event::Failed { fruit: "pomegranate".into(), kind: FailKind::Signature, message: "hash".into() });
             }),
+            ("downloads-space", Tab::Downloads, true, |app| {
+                let j = job(app, "pomegranate");
+                app.queue.enqueue(j);
+                let message = "not enough space: it needs 120 MB, and 80 MB is free".into();
+                app.queue.on_event(&Event::Failed { fruit: "pomegranate".into(), kind: FailKind::Space, message });
+            }),
+            ("basket-rollback", Tab::Basket, true, |app| {
+                keep_build(app, "v1.2.0");
+                app.apply(Cmd::AskRollback("strawberry".into()));
+                app.apply(Cmd::ModalPick(1));
+            }),
+            ("basket-uninstall", Tab::Basket, true, |app| app.apply(Cmd::AskUninstall("strawberry".into()))),
+            ("library-ripe", Tab::Library, true, |app| app.settings.watch = vec!["pomegranate".into()]),
         ];
         for (theme, tname) in [(ThemePref::Paper, "paper"), (ThemePref::Night, "night")] {
             for (w, h, size) in [(1280, 900, "regular"), (1024, 680, "compact"), (640, 880, "narrow")] {

@@ -82,7 +82,11 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// None in tests, so no test reads or overwrites the real file.
     pub fn path() -> Option<PathBuf> {
+        if cfg!(test) {
+            return None;
+        }
         prefs::config_path(APP_DIR)
     }
 

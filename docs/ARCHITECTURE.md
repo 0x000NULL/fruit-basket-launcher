@@ -30,6 +30,7 @@ Debug builds also accept `FRUITBASKET_KEY` so tests can use a throwaway key.
   <fruit>/builds/<build>/         one extracted build; .installed marks when it was installed
   <fruit>/current                 "<build>\t<channel>\n", rewritten atomically
   <fruit>/games/                  always scanned
+  <fruit>/data/                   saves and settings, for fruits whose templates use {data}
   launcher/feed.json(.minisig)    last accepted feed, re-verified on load
   launcher/downloads/*.part       in-flight downloads
   launcher/history.log            Downloads → Earlier (history.rs)
@@ -39,10 +40,26 @@ Debug builds also accept `FRUITBASKET_KEY` so tests can use a throwaway key.
 <config dir>/fruitbasket/settings.toml   (settings.rs, via basket_app::prefs)
 ```
 
-Pomegranate keeps its settings, memory cards and states beside its exe. The
-feed's `carry` list (`ps2emu.toml cards states`) names those files, and
-`Basket::switch` moves them to each new build. A `--data DIR` flag in ps2emu
-would make this unnecessary (see PROGRESS.md).
+### Saves: `carry` and `{data}`
+
+An emulator that keeps saves and settings beside its exe names them in the
+feed's `carry` list (Pomegranate: `ps2emu.toml cards states`). What happens
+to them depends on the fruit's templates (`launch`, `load_slot`, `open`):
+
+- **No `{data}`:** `Basket::switch` moves the `carry` files from the old
+  build to the new one on every install, switch and rollback
+  (`Fruit::build_carry`).
+- **With `{data}`:** the fruit keeps them in `<fruit>/data/`, passed as
+  `--data <dir>`. `Basket::migrate_data` moves the `carry` files there
+  once, from the current build or else the newest that has them, and
+  never overwrites (`Fruit::data_carry`). It runs after an install (before
+  pruning, so no card is deleted with an old build), and before Play and
+  Open, so an install from before the change moves over on first use.
+
+`launch::args` fills `{rom}`, `{slot}` and `{data}`, and refuses a
+placeholder it has nothing for, so a literal `{data}` never reaches an
+emulator. Pomegranate builds before v0.3.0 have no `--data`; the site
+leaves them out of the feed (`oldest` in its LAUNCHER file).
 
 ## Modules
 
@@ -52,22 +69,24 @@ would make this unnecessary (see PROGRESS.md).
 | `app.rs` | `App`: state, the frame loop (poll → draw → apply `Cmd`s), `Ctx` (read-only view of the state shared by views and commands), the render and e2e tests |
 | `key.rs` | embedded public key, key ID, feed URL (`FRUITBASKET_FEED` overrides) |
 | `feed.rs` | feed types, `verify` / `fetch` / `load_cached` / `save_cached`, platform keys |
-| `basket.rs` | the on-disk basket: install (extract to `.tmp`, flatten, rename, switch), switch, prune, uninstall, `exe` |
-| `jobs.rs` | the download worker thread: Download 0–70 %, Verify 70–85 %, Install 85–100 % |
-| `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `update_for`, `updates` |
+| `basket.rs` | the on-disk basket: install (extract to `.tmp`, flatten, rename, switch), switch, prune, uninstall, `migrate_data`, `exe`, `move_path` / `copy_tree` |
+| `jobs.rs` | the download worker thread: a free-space check, then Download 0–70 %, Verify 70–85 %, Install 85–100 % |
+| `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `job_for_build`, `update_for`, `updates`, `rollback_options` |
 | `history.rs` | `history.log` append and read |
-| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files, `Played` |
+| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `Played`, `rebase` (paths after a move) |
 | `lists.rs` | fetches and caches compat and dump lists, checked against the feed |
 | `compat.rs` | `compat.txt` parse; level by serial, then title |
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
-| `launch.rs` | launch template expansion, start, a thread that times the session |
+| `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), start, a thread that times the session |
+| `mover.rs` | Move basket: where it goes, then rename or a checked copy on a thread |
 | `shelf.rs` | the Library's state: games, lists, hashing, the running game, `view()` |
 | `settings.rs` | `Settings`, unknown keys kept |
-| `platform.rs` | OS dark mode, open / reveal, `~` paths |
+| `platform.rs` | OS dark mode, free space, open / reveal, `~` paths |
 | `art.rs` | fruit icons (128 px, drawn at 64 and 32) and the basket mark |
 | `window.rs` | the `minifb` window and input gathering |
 | `ui/mod.rs` | `Tab`, `Size` (regular ≥ 1180, compact ≥ 820, narrow), `Cmd`, the `Ui` drawing context and shared controls |
-| `ui/frame.rs` | header (tabs, FIND, Update all, couch button), update banner, footer |
+| `ui/frame.rs` | header (tabs, FIND, Update all, couch button), the banner (launcher update, ripe fruit), footer |
+| `ui/modal.rs` | the dialog: Roll back, Uninstall, Move basket |
 | `ui/library.rs`, `ui/basket.rs`, `ui/downloads.rs`, `ui/settings.rs` | the four tabs |
 
 ## The frame
@@ -83,6 +102,10 @@ would make this unnecessary (see PROGRESS.md).
 3. `apply()` runs each `Cmd` after the frame: change state, save settings,
    queue a job, start a game.
 
+While a dialog (`App::modal`) is open, the page under it is drawn with an
+empty input, so nothing on it reacts. The dialog gets the real input, and
+`modal_keys` replaces the page's shortcuts.
+
 The view structs (`BasketView`, `LibraryView`, …) hold everything a tab
 needs, so the tabs can be rendered headless. The `shots` tests in `app.rs`
 render every state at 1280×900, 1024×680 and 640×880 in both themes to
@@ -97,6 +120,7 @@ render every state at 1280×900, 1024×680 and 640×880 in both themes to
 | list fetch | `Shelf::lists` | `(fruit, Kind)` per list saved |
 | `hashing` | `Shelf::start_hashing` | `((path, size, mtime), sha1)` |
 | game session | `launch::start` | `Session` when the emulator exits |
+| basket move | `mover::start` | `Progress` (percent, then done or the error) |
 
 ## Releases
 

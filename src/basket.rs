@@ -5,6 +5,7 @@
 //!   <fruit>/builds/<build>/    one extracted build per folder
 //!   <fruit>/current            "<build>\t<channel>\n", the build that runs
 //!   <fruit>/games/             always scanned; saves sit beside the games
+//!   <fruit>/data/              saves and settings, for fruits that take `{data}`
 //!   launcher/                  feed cache, history, downloads, library state
 //! ```
 //!
@@ -60,6 +61,11 @@ impl Basket {
 
     pub fn games_dir(&self, fruit: &str) -> PathBuf {
         self.fruit_dir(fruit).join("games")
+    }
+
+    /// Where a fruit that takes `{data}` keeps its saves and settings.
+    pub fn data_dir(&self, fruit: &str) -> PathBuf {
+        self.fruit_dir(fruit).join("data")
     }
 
     pub fn launcher_dir(&self) -> PathBuf {
@@ -156,15 +162,45 @@ impl Basket {
         Ok(removed)
     }
 
-    /// Remove the program. Games and saves stay unless asked.
+    /// Move `names` from the builds into the data folder, once: from the
+    /// current build if it has them, else the newest build that does. A
+    /// name already in `data/` is left alone, so this never overwrites and
+    /// running it again does nothing. Returns what moved.
+    pub fn migrate_data(&self, fruit: &str, names: &[String]) -> io::Result<Vec<String>> {
+        let data = self.data_dir(fruit);
+        let mut builds = self.builds(fruit);
+        if let Some(c) = self.current(fruit) {
+            builds.retain(|b| *b != c.build);
+            builds.insert(0, c.build);
+        }
+        let mut moved = Vec::new();
+        for name in names.iter().filter(|n| plain_name(n)) {
+            let dst = data.join(name);
+            if dst.exists() {
+                continue;
+            }
+            let Some(src) = builds.iter().map(|b| self.build_dir(fruit, b).join(name)).find(|p| p.exists()) else { continue };
+            fs::create_dir_all(&data)?;
+            move_path(&src, &dst)?;
+            moved.push(name.clone());
+        }
+        Ok(moved)
+    }
+
+    /// Remove the program. Games and saves stay unless asked; asked, the
+    /// data folder goes too.
     pub fn uninstall(&self, fruit: &str, games: Games) -> io::Result<()> {
         let dir = self.fruit_dir(fruit);
         let _ = fs::remove_file(dir.join("current"));
         if self.builds_dir(fruit).exists() {
             fs::remove_dir_all(self.builds_dir(fruit))?;
         }
-        if games == Games::Delete && self.games_dir(fruit).exists() {
-            fs::remove_dir_all(self.games_dir(fruit))?;
+        if games == Games::Delete {
+            for d in [self.games_dir(fruit), self.data_dir(fruit)] {
+                if d.exists() {
+                    fs::remove_dir_all(d)?;
+                }
+            }
         }
         Ok(())
     }
@@ -219,9 +255,43 @@ fn flatten(dir: &Path) -> io::Result<PathBuf> {
     Ok(dir.to_path_buf())
 }
 
+/// One path component: no separators, no `..`.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains("..") && !name.contains('/') && !name.contains('\\')
+}
+
+/// Rename, or copy and delete when `from` and `to` are on different volumes.
+/// A failed copy is cleaned up and `from` is left as it was.
+pub fn move_path(from: &Path, to: &Path) -> io::Result<()> {
+    if fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    if let Err(e) = copy_tree(from, to, &mut |_| {}) {
+        let _ = if to.is_dir() { fs::remove_dir_all(to) } else { fs::remove_file(to) };
+        return Err(e);
+    }
+    if from.is_dir() { fs::remove_dir_all(from) } else { fs::remove_file(from) }
+}
+
+/// Copy a file or a folder and everything in it; `copied` hears each
+/// file's size as it lands.
+pub fn copy_tree(from: &Path, to: &Path, copied: &mut dyn FnMut(u64)) -> io::Result<()> {
+    if from.is_dir() {
+        fs::create_dir_all(to)?;
+        for e in fs::read_dir(from)? {
+            let e = e?;
+            copy_tree(&e.path(), &to.join(e.file_name()), copied)?;
+        }
+        Ok(())
+    } else {
+        copied(fs::copy(from, to)?);
+        Ok(())
+    }
+}
+
 fn carry_over(from: &Path, to: &Path, names: &[String]) -> io::Result<()> {
     for name in names {
-        if name.contains("..") || name.contains('/') || name.contains('\\') {
+        if !plain_name(name) {
             continue;
         }
         let src = from.join(name);
@@ -354,6 +424,36 @@ mod tests {
         assert!(b.games_dir("berry").join("game.gba").is_file());
         b.uninstall("berry", Games::Delete).unwrap();
         assert!(!b.games_dir("berry").exists());
+    }
+
+    #[test]
+    fn data_migrates_once_and_never_overwrites() {
+        let t = tempfile::tempdir().unwrap();
+        let b = Basket::new(t.path());
+        let a1 = t.path().join("a1.zip");
+        let a2 = t.path().join("a2.zip");
+        zip_with(&a1, &[(&exe("pom"), b"one"), ("cards/card.ps2", b"old card"), ("ps2emu.toml", b"old")]);
+        zip_with(&a2, &[(&exe("pom"), b"two"), ("cards/card.ps2", b"new card")]);
+        b.install("pom", "v1", Channel::Stable, &a1, &[]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        b.install("pom", "v2", Channel::Stable, &a2, &[]).unwrap();
+        let names: Vec<String> = ["ps2emu.toml", "cards", "states", "../x"].map(String::from).to_vec();
+
+        // The current build's cards win; the toml only v1 has comes from v1.
+        assert_eq!(b.migrate_data("pom", &names).unwrap(), vec!["ps2emu.toml", "cards"]);
+        assert_eq!(fs::read(b.data_dir("pom").join("cards/card.ps2")).unwrap(), b"new card");
+        assert_eq!(fs::read(b.data_dir("pom").join("ps2emu.toml")).unwrap(), b"old");
+        assert!(!b.build_dir("pom", "v2").join("cards").exists());
+
+        // Again: nothing moves, and v1's leftover card doesn't replace it.
+        assert!(b.migrate_data("pom", &names).unwrap().is_empty());
+        assert_eq!(fs::read(b.data_dir("pom").join("cards/card.ps2")).unwrap(), b"new card");
+        assert!(b.build_dir("pom", "v1").join("cards/card.ps2").is_file());
+
+        b.uninstall("pom", Games::Keep).unwrap();
+        assert!(b.data_dir("pom").is_dir(), "saves stay");
+        b.uninstall("pom", Games::Delete).unwrap();
+        assert!(!b.data_dir("pom").exists());
     }
 
     #[test]

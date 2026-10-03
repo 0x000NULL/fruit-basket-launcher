@@ -114,16 +114,56 @@ impl Queue {
 
 /// A job installing `fruit`'s `channel` build for this PC, if there is one.
 pub fn job_for(fruit: &Fruit, channel: Channel, keep: usize) -> Option<Job> {
-    let build = fruit.channel(channel)?;
-    let asset = build.assets.get(feed::this_platform())?;
+    job_for_build(fruit, &fruit.channel(channel)?.build, keep)
+}
+
+/// A job installing one of `fruit`'s builds, by ID, for this PC: its
+/// channel is the one the feed lists it under.
+pub fn job_for_build(fruit: &Fruit, build: &str, keep: usize) -> Option<Job> {
+    let (channel, b) = fruit.build(build)?;
+    let asset = b.assets.get(feed::this_platform())?;
     Some(Job {
         fruit: fruit.id.clone(),
-        build: build.build.clone(),
+        build: b.build.clone(),
         channel,
         asset: asset.clone(),
-        carry: fruit.carry.clone(),
+        carry: fruit.build_carry().to_vec(),
+        migrate: fruit.data_carry().to_vec(),
         keep,
     })
+}
+
+/// A build the Roll back dialog offers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RollOpt {
+    pub build: String,
+    pub channel: Channel,
+    /// `None`: kept on disk. `Some(size)`: downloaded first.
+    pub download: Option<u64>,
+}
+
+/// Most rows the Roll back dialog shows.
+pub const ROLL_ROWS: usize = 5;
+
+/// What `fruit` can roll back to from `current`: the builds kept on disk
+/// (`on_disk`, newest first), then older builds from the feed that have a
+/// download for this PC. Not the current build, and not the channel's
+/// latest, which is what Update is for.
+pub fn rollback_options(fruit: &Fruit, current: &Current, on_disk: &[String]) -> Vec<RollOpt> {
+    let latest = fruit.channel(current.channel).map(|b| b.build.as_str());
+    let kept = on_disk.iter().filter(|b| **b != current.build).map(|b| RollOpt {
+        build: b.clone(),
+        channel: fruit.build(b).map_or(current.channel, |(c, _)| c),
+        download: None,
+    });
+    let fetch = fruit
+        .builds()
+        .filter(|(_, b)| b.build != current.build && Some(b.build.as_str()) != latest && !on_disk.contains(&b.build))
+        .filter_map(|(channel, b)| {
+            let size = b.assets.get(feed::this_platform())?.size;
+            Some(RollOpt { build: b.build.clone(), channel, download: Some(size) })
+        });
+    kept.chain(fetch).take(ROLL_ROWS).collect()
 }
 
 /// The build `fruit` would update to: its channel's build in the feed, if
@@ -158,6 +198,7 @@ mod tests {
             channel: Channel::Stable,
             asset: Asset { name: "a.zip".into(), url: "https://x.test/a.zip".into(), size: 1, sha256: "00".into() },
             carry: vec![],
+            migrate: vec![],
             keep: 2,
         }
     }
@@ -226,5 +267,34 @@ mod tests {
         }
         assert!(updates(&feed, |id| (id == "strawberry").then_some(&fresh), 2).is_empty());
         assert!(updates(&feed, |_| None, 2).is_empty(), "nothing installed, nothing to update");
+    }
+
+    #[test]
+    fn rollback_offers_kept_builds_then_older_downloads() {
+        let feed = crate::feed::verify(crate::feed::tests::FEED, crate::feed::tests::SIG, crate::key::PUBLIC_KEY, None).unwrap();
+        let mut f = feed.fruit("strawberry").unwrap().clone();
+        let mk = |id: &str| {
+            let mut b = f.releases[0].clone();
+            b.build = id.into();
+            b
+        };
+        f.stable = Some(mk("v3"));
+        f.nightly = Some(mk("n9"));
+        f.releases = vec![mk("v3"), mk("v2"), mk("v1")];
+        let current = Current { build: "v3".into(), channel: Channel::Stable };
+
+        let got = rollback_options(&f, &current, &["v3".into(), "n9".into()]);
+        let ids: Vec<_> = got.iter().map(|o| (o.build.as_str(), o.channel, o.download.is_some())).collect();
+        assert_eq!(ids, [("n9", Channel::Nightly, false), ("v2", Channel::Stable, true), ("v1", Channel::Stable, true)]);
+
+        // Rolled back to v1: v3 is Update's job, v2 is still offered.
+        let back = Current { build: "v1".into(), channel: Channel::Stable };
+        let ids: Vec<_> = rollback_options(&f, &back, &["v1".into(), "v3".into()]).into_iter().map(|o| o.build).collect();
+        assert_eq!(ids, ["v3", "n9", "v2"]);
+
+        let j = job_for_build(&f, "v2", 2).unwrap();
+        assert_eq!((j.build.as_str(), j.channel), ("v2", Channel::Stable));
+        assert_eq!(job_for_build(&f, "n9", 2).unwrap().channel, Channel::Nightly);
+        assert!(job_for_build(&f, "v0", 2).is_none());
     }
 }

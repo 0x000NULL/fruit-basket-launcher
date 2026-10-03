@@ -1,5 +1,6 @@
 //! The window frame every tab shares: header (lockup, tabs, FIND, Update
-//! all, couch button), the launcher-update banner, and the footer.
+//! all, couch button), the banner (a launcher update, a ripe fruit), and
+//! the footer.
 
 use basket_ui::text::Style;
 use minifb::Key;
@@ -15,8 +16,8 @@ pub struct FrameView<'a> {
     pub updates: usize,
     /// Downloads badge: busy + queued + failed.
     pub downloads: usize,
-    /// "Launcher v0.2.0" when a verified update is staged.
-    pub launcher_update: Option<&'a str>,
+    /// A launcher update staged, or a watched fruit ripe.
+    pub banner: Option<&'a Banner>,
     /// Footer key hints: (key, verb).
     pub hints: &'a [(&'a str, &'a str)],
     /// Footer status line: progress, a running game, or the basket path.
@@ -113,8 +114,8 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
     ui.cv.fill_rect(x0, rule_y, w - 2.0 * x0, 3.0, fg);
     let mut body = rule_y + 3.0;
 
-    if let Some(version) = v.launcher_update {
-        body = banner(ui, body, version);
+    if let Some(b) = v.banner {
+        body = banner(ui, body, b);
     }
     body
 }
@@ -159,29 +160,50 @@ fn find_field(ui: &mut Ui, x: f32, y: f32, w: f32, text: &str, placeholder: &str
     }
 }
 
-/// "Launcher v0.2.0 is downloaded and verified. It installs the next time
-/// the launcher opens."  Restart now · Later. Returns the y below it.
-fn banner(ui: &mut Ui, y: f32, version: &str) -> f32 {
+/// The strip under the header: a dot, a bold lead, a sentence, an action
+/// and Later. "Launcher v0.5.0 is downloaded and verified…"; "Fig is ripe:
+/// v0.1.0 for PS1 is ready to install."
+pub struct Banner {
+    pub lead: String,
+    pub text: String,
+    pub action: (String, Cmd),
+    pub later: Cmd,
+}
+
+/// Draw the banner, as `Launcher-Update.png`: the lead in small capitals,
+/// the sentence in the reading face, the action filled and Later as a
+/// link. Returns the y below it.
+fn banner(ui: &mut Ui, y: f32, b: &Banner) -> f32 {
     let (x0, w) = (ui.pad_x(), ui.w());
-    let h = 56.0;
+    let h = 58.0;
     let panel = ui.panel();
     ui.cv.fill_rect(x0, y, w - 2.0 * x0, h, panel);
-    ui.cv.circle(x0 + 20.0, y + h / 2.0, 4.0, ui.pal.spot);
-    let strong = Style::interface_bold(14.0).color(ui.pal.fg);
-    let lw = ui.cv.text(x0 + 34.0, y + 19.0, &format!("Launcher {version}"), &strong);
-    let body = ui.body();
-    if ui.size != Size::Narrow {
-        ui.cv.text(x0 + 40.0 + lw, y + 19.0, "is downloaded and verified. It installs the next time the launcher opens.", &body);
+    ui.cv.stroke_rect(x0, y, w - 2.0 * x0, h, 1.0, ui.pal.line);
+    ui.cv.circle(x0 + 23.0, y + h / 2.0, 4.0, ui.pal.spot);
+    let lead = Style::interface_bold(12.0).upper().tracking(2.0).color(ui.pal.fg);
+    let lw = ui.cv.text(x0 + 45.0, y + 22.0, &b.lead, &lead);
+
+    let later = Style::interface(14.0);
+    let later_w = ui.cv.measure("Later", &later);
+    let later_x = w - x0 - 22.0 - later_w;
+    let (_, later_hit) = ui.link(later_x, y + 20.0, "Later", ui.pal.fg);
+    let act = Style::interface_bold(14.0);
+    let aw = (ui.cv.measure(&b.action.0, &act) + 32.0).round();
+    let ax = later_x - 26.0 - aw;
+    ui.cv.fill_rect(ax, y + 11.0, aw, 36.0, ui.pal.fg);
+    ui.cv.text_center(ax + aw / 2.0, y + 20.0, &b.action.0, &act.color(ui.pal.bg));
+    let act_hit = ui.clicked(ax, y + 11.0, aw, 36.0);
+
+    let reading = Style::reading(16.0).color(ui.pal.fg);
+    let tx = x0 + 45.0 + lw + 18.0;
+    if ui.size != Size::Narrow && ui.cv.measure(&b.text, &reading) <= ax - 16.0 - tx {
+        ui.cv.text(tx, y + 18.0, &b.text, &reading);
     }
-    let bx = w - x0 - 12.0 - ui.small_button_width("Later");
-    let (_, later_hit) = ui.small_button(bx, y + 11.0, "Later");
-    let rw = ui.small_button_width("Restart now");
-    let (_, restart) = ui.small_button(bx - 10.0 - rw, y + 11.0, "Restart now");
     if later_hit {
-        ui.emit(Cmd::DismissLauncherUpdate);
+        ui.emit(b.later.clone());
     }
-    if restart {
-        ui.emit(Cmd::RestartForUpdate);
+    if act_hit {
+        ui.emit(b.action.1.clone());
     }
     y + h
 }

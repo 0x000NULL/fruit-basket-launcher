@@ -23,7 +23,10 @@ pub struct Job {
     pub build: String,
     pub channel: Channel,
     pub asset: Asset,
+    /// Files that move from the old build to the new one.
     pub carry: Vec<String>,
+    /// Files that move from the builds into `data/`, once.
+    pub migrate: Vec<String>,
     /// Builds to keep for rolling back, besides the current one.
     pub keep: usize,
 }
@@ -53,6 +56,8 @@ pub enum FailKind {
     Signature,
     /// The archive was bad or the disk refused; the old build still runs.
     Install,
+    /// Too little free space to start; nothing was downloaded.
+    Space,
 }
 
 #[derive(Debug, Clone)]
@@ -135,6 +140,12 @@ fn run(basket: &Basket, job: &Job, tx: &Sender<Event>, fetch: &mut Fetch) {
     let progress = |step: Step, frac: f32| Event::Progress { fruit: fruit.clone(), step, pct: overall(step, frac) };
     let fail = |kind: FailKind, message: String| Event::Failed { fruit: fruit.clone(), kind, message };
 
+    let free = crate::platform::free_space(&basket.root);
+    if let Some(message) = short_of_space(job.asset.size, free) {
+        send(fail(FailKind::Space, message));
+        return;
+    }
+
     send(progress(Step::Download, 0.0));
     let part = part_path(basket, &job.asset.name);
     let mut last = 0u8;
@@ -165,6 +176,8 @@ fn run(basket: &Basket, job: &Job, tx: &Sender<Event>, fetch: &mut Fetch) {
     send(progress(Step::Install, 0.0));
     let result = basket
         .install(&job.fruit, &job.build, job.channel, &part, &job.carry)
+        // Before pruning, so an old build's cards are moved, not deleted.
+        .and_then(|_| basket.migrate_data(&job.fruit, &job.migrate))
         .and_then(|_| basket.prune(&job.fruit, job.keep).map(|_| ()));
     let _ = fs::remove_file(&part);
     match result {
@@ -174,6 +187,18 @@ fn run(basket: &Basket, job: &Job, tx: &Sender<Event>, fetch: &mut Fetch) {
         }
         Err(e) => send(fail(FailKind::Install, e.to_string())),
     }
+}
+
+/// Why a job of `size` bytes can't start with `free` bytes free, if it
+/// can't: it needs room for the download, the extracted build, and the
+/// build it replaces, kept for rolling back.
+fn short_of_space(size: u64, free: Option<u64>) -> Option<String> {
+    let need = size.saturating_mul(3);
+    let free = free?;
+    (free < need).then(|| {
+        use crate::ui::fmt_size;
+        format!("not enough space: it needs {}, and {} is free", fmt_size(need), fmt_size(free))
+    })
 }
 
 fn part_path(basket: &Basket, name: &str) -> PathBuf {
@@ -228,6 +253,7 @@ mod tests {
             channel: Channel::Stable,
             asset: Asset { name: "berry-v1.zip".into(), url: "https://example.test/berry-v1.zip".into(), size: data.len() as u64, sha256 },
             carry: vec![],
+            migrate: vec![],
             keep: 2,
         }
     }
@@ -280,6 +306,22 @@ mod tests {
             other => panic!("{other:?}"),
         }
         assert!(!b.fruit_dir("berry").exists());
+    }
+
+    #[test]
+    fn too_little_space_fails_before_downloading() {
+        assert!(short_of_space(100, Some(300)).is_none());
+        assert!(short_of_space(100, None).is_none(), "unknown free space doesn't block");
+        assert!(short_of_space(100, Some(299)).unwrap().starts_with("not enough space"));
+        assert!(short_of_space(u64::MAX, Some(1)).is_some());
+
+        let t = tempfile::tempdir().unwrap();
+        let b = Basket::new(t.path());
+        let mut j = job(b"x", "00".repeat(32));
+        j.asset.size = u64::MAX / 2;
+        let ev = events(&b, &j, vec![], true);
+        assert!(matches!(ev.as_slice(), [Event::Failed { kind: FailKind::Space, .. }]));
+        assert!(!b.downloads_dir().exists());
     }
 
     #[test]

@@ -122,6 +122,11 @@ impl Hashes {
         self.map.get(path).filter(|(s, m, _)| *s == size && *m == mtime).map(|(_, _, h)| h.as_str())
     }
 
+    /// After the basket moves from `old` to `new`.
+    pub fn rebase(&mut self, old: &Path, new: &Path) {
+        self.map = self.map.drain().map(|(p, v)| (crate::library::rebase(&p, old, new), v)).collect();
+    }
+
     pub fn insert(&mut self, path: PathBuf, size: u64, mtime: i64, sha1: String) {
         self.map.insert(path, (size, mtime, sha1));
     }

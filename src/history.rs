@@ -38,6 +38,7 @@ impl Entry {
             Some(FailKind::Network) => "network",
             Some(FailKind::Signature) => "signature",
             Some(FailKind::Install) => "install",
+            Some(FailKind::Space) => "space",
         };
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
         format!("{secs}\t{}\t{}\t{}\t{result}\t{}\n", clean(&self.fruit), clean(&self.build), self.channel.name(), clean(&self.message))
@@ -54,6 +55,7 @@ impl Entry {
             "network" => Some(FailKind::Network),
             "signature" => Some(FailKind::Signature),
             "install" => Some(FailKind::Install),
+            "space" => Some(FailKind::Space),
             _ => return None,
         };
         let message = f.next().unwrap_or("").trim_end().to_string();
@@ -101,7 +103,9 @@ mod tests {
         append(t.path(), &entry(100, "strawberry", None)).unwrap();
         fs::OpenOptions::new().append(true).open(path(t.path())).unwrap().write_all(b"garbage\n1\tx\n").unwrap();
         append(t.path(), &entry(200, "pomegranate", Some(FailKind::Signature))).unwrap();
-        let got = read(t.path());
+        append(t.path(), &entry(300, "pomegranate", Some(FailKind::Space))).unwrap();
+        let mut got = read(t.path());
+        assert_eq!(got.remove(0).failed, Some(FailKind::Space));
         assert_eq!(got.len(), 2);
         assert_eq!(got[0].fruit, "pomegranate");
         assert_eq!(got[0].failed, Some(FailKind::Signature));

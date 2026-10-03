@@ -6,6 +6,7 @@ pub mod basket;
 pub mod downloads;
 pub mod frame;
 pub mod library;
+pub mod modal;
 pub mod settings;
 
 use basket_ui::canvas::Clip;
@@ -122,6 +123,16 @@ pub enum Cmd {
     ShowFile(std::path::PathBuf),
     ShowSaves(std::path::PathBuf),
     RemoveGame(std::path::PathBuf),
+    // Dialogs: asked from the Basket aside or Settings, answered in the dialog.
+    AskRollback(String),
+    AskUninstall(String),
+    ModalPick(usize),
+    ModalToggle,
+    ModalConfirm,
+    ModalCancel,
+    // The ripe banner.
+    RipeInstall(String),
+    RipeDismiss(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +141,17 @@ pub enum Flag {
     CheckOnOpen,
     InstallWithoutAsking,
     CouchOnController,
+}
+
+/// A size for people: basket-ui's KB and MB, and GB from 1 GB up (disc
+/// images, free space).
+pub fn fmt_size(bytes: u64) -> String {
+    const GB: u64 = 1 << 30;
+    if bytes >= GB {
+        format!("{:.1} GB", bytes as f64 / GB as f64)
+    } else {
+        basket_ui::fmt::fmt_size(bytes)
+    }
 }
 
 /// `verifying` → `Verifying`.
