@@ -176,6 +176,63 @@ pub fn saves(game: &Path, dirs: &[PathBuf]) -> Vec<PathBuf> {
     out
 }
 
+/// A save-state slot of one game.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Slot {
+    pub n: u8,
+    pub path: PathBuf,
+    /// When it was saved: the `saved_at` beside it if the emulator writes
+    /// one (Pomegranate's `.sN.toml`), else the file's time.
+    pub saved: SystemTime,
+    /// Files that go with it: its picture and notes, and for slot 0 a
+    /// pre-slots `<stem>.state` that Pomegranate would copy back in.
+    pub extra: Vec<PathBuf>,
+}
+
+/// The game's slots, newest first: `<stem>.s<N>.state` beside the game or
+/// in `dirs`. The numbers come from the files, so Strawberry's 1–8 and
+/// Pomegranate's 0–9 both work.
+pub fn slots(game: &Path, dirs: &[PathBuf]) -> Vec<Slot> {
+    let Some(stem) = game.file_stem().map(|s| s.to_string_lossy().to_lowercase()) else { return Vec::new() };
+    let mut out: Vec<Slot> = Vec::new();
+    for d in game.parent().into_iter().chain(dirs.iter().map(PathBuf::as_path)) {
+        let names: Vec<(String, PathBuf)> = fs::read_dir(d).into_iter().flatten().flatten().map(|e| (e.file_name().to_string_lossy().to_lowercase(), e.path())).collect();
+        for (name, path) in &names {
+            let Some(n) = name.strip_prefix(&format!("{stem}.s")).and_then(|r| r.strip_suffix(".state")).and_then(|n| n.parse::<u8>().ok()) else { continue };
+            if out.iter().any(|s| s.n == n) {
+                continue;
+            }
+            let sibling = |ext: &str| names.iter().find(|(m, _)| *m == format!("{stem}.s{n}.{ext}")).map(|(_, p)| p.clone());
+            let mut extra: Vec<PathBuf> = ["png", "toml"].iter().filter_map(|e| sibling(e)).collect();
+            if n == 0 {
+                extra.extend(names.iter().filter(|(m, _)| *m == format!("{stem}.state")).map(|(_, p)| p.clone()));
+            }
+            let mtime = fs::metadata(path).and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
+            let saved = sibling("toml").and_then(|t| saved_at(&t)).unwrap_or(mtime);
+            out.push(Slot { n, path: path.clone(), saved, extra });
+        }
+    }
+    out.sort_by(|a, b| b.saved.cmp(&a.saved).then(a.n.cmp(&b.n)));
+    out
+}
+
+/// `saved_at = <unix secs>` from a slot's notes.
+fn saved_at(toml: &Path) -> Option<SystemTime> {
+    let text = fs::read_to_string(toml).ok()?;
+    let line = text.lines().find(|l| l.trim_start().starts_with("saved_at"))?;
+    let secs: u64 = line.split('=').nth(1)?.trim().parse().ok()?;
+    Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+}
+
+/// Delete a slot and the files that go with it.
+pub fn delete_slot(slot: &Slot) -> std::io::Result<()> {
+    fs::remove_file(&slot.path)?;
+    for p in &slot.extra {
+        let _ = fs::remove_file(p);
+    }
+    Ok(())
+}
+
 /// `path` with the prefix `old` swapped for `new`, after the basket moves;
 /// a path outside `old` is returned as it was.
 pub fn rebase(path: &Path, old: &Path, new: &Path) -> PathBuf {
@@ -273,6 +330,7 @@ mod tests {
             launch: vec!["{rom}".into()],
             load_slot: None,
             open: vec![],
+            couch: vec![],
             carry: vec![],
             url: String::new(),
             readme_url: String::new(),
@@ -363,5 +421,47 @@ mod tests {
         fs::create_dir_all(&states).unwrap();
         fs::write(states.join("Game.s0.state"), b"x").unwrap();
         assert_eq!(saves(&t.path().join("games/Game.iso"), &save_dirs(&b, &pom)).len(), 1);
+    }
+
+    #[test]
+    fn slots_from_either_numbering_with_their_files() {
+        let t = tempfile::tempdir().unwrap();
+        let games = t.path().join("games");
+        let states = t.path().join("data/states");
+        fs::create_dir_all(&games).unwrap();
+        fs::create_dir_all(&states).unwrap();
+        // Strawberry: 1-8 beside the ROM.
+        let rom = games.join("Golden Sun.gba");
+        fs::write(&rom, b"x").unwrap();
+        fs::write(games.join("Golden Sun.s1.state"), b"x").unwrap();
+        fs::write(games.join("golden sun.S8.state"), b"x").unwrap();
+        fs::write(games.join("Golden Sun.sav"), b"x").unwrap();
+        let got: Vec<u8> = { let mut v: Vec<u8> = slots(&rom, &[]).iter().map(|s| s.n).collect(); v.sort(); v };
+        assert_eq!(got, vec![1, 8]);
+
+        // Pomegranate: 0-9 in data/states, with a picture, notes and a pre-slots state for 0.
+        let iso = games.join("Game.iso");
+        fs::write(&iso, b"x").unwrap();
+        for n in [0, 9] {
+            fs::write(states.join(format!("Game.s{n}.state")), b"x").unwrap();
+            fs::write(states.join(format!("Game.s{n}.png")), b"x").unwrap();
+        }
+        fs::write(states.join("Game.s0.toml"), "frame = 3
+saved_at = 2000000000
+").unwrap();
+        fs::write(states.join("Game.s9.toml"), "saved_at = 1000000000
+").unwrap();
+        fs::write(states.join("Game.state"), b"old").unwrap();
+        let dirs = vec![t.path().join("data"), states.clone()];
+        let s = slots(&iso, &dirs);
+        assert_eq!(s.iter().map(|s| s.n).collect::<Vec<_>>(), vec![0, 9], "newest first, by saved_at");
+        assert_eq!(s[0].saved, SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(2_000_000_000));
+        assert_eq!(s[0].extra.len(), 3, "png, toml and the pre-slots state");
+        assert_eq!(s[1].extra.len(), 2);
+
+        delete_slot(&s[0]).unwrap();
+        assert!(!states.join("Game.s0.state").exists() && !states.join("Game.s0.png").exists());
+        assert!(!states.join("Game.state").exists(), "or Pomegranate would copy it back into slot 0");
+        assert_eq!(slots(&iso, &dirs).len(), 1);
     }
 }

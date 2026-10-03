@@ -155,8 +155,9 @@ impl Shelf {
         self.running.as_ref().map(|(name, _)| name.as_str())
     }
 
-    /// Start a game in its fruit's current build. One game at a time.
-    pub fn play(&mut self, path: &Path, basket: &Basket, feed: Option<&Feed>) -> Result<(), String> {
+    /// Start a game in its fruit's current build, from save `slot` if
+    /// given, with the fruit's couch arguments if `couch`. One game at a time.
+    pub fn play(&mut self, path: &Path, basket: &Basket, feed: Option<&Feed>, slot: Option<u8>, couch: bool) -> Result<(), String> {
         if self.running.is_some() {
             return Err("a game is already running".into());
         }
@@ -169,7 +170,14 @@ impl Shelf {
             // Installs from before the fruit took `{data}` move over on first play.
             basket.migrate_data(&fruit.id, fruit.data_carry()).map_err(|e| format!("moving saves to data/: {e}"))?;
         }
-        let args = launch::args(&fruit.launch, Some(path), None, data.as_deref())?;
+        let template = match slot {
+            Some(_) => fruit.load_slot.as_ref().filter(|t| !t.is_empty()).ok_or_else(|| format!("{} can't start from a save", fruit.name))?,
+            None => &fruit.launch,
+        };
+        let mut args = launch::args(template, Some(path), slot, data.as_deref())?;
+        if couch {
+            args.extend(launch::args(&fruit.couch, Some(path), slot, data.as_deref())?);
+        }
         let rx = launch::start(&exe, &args, path).map_err(|e| e.to_string())?;
         self.running = Some((fruit.name.clone(), rx));
         self.selected = Some(path.to_path_buf());
@@ -218,6 +226,27 @@ impl Shelf {
         }
     }
 
+    /// Everything the aside (or couch mode's Details) shows about a game.
+    pub fn detail<'a>(&'a self, r: &Row<'a>, basket: &Basket, feed: Option<&'a Feed>) -> GameDetail<'a> {
+        let fruit = feed.and_then(|f| f.fruit(&r.game.fruit));
+        let (dump, _) = self.dump_state(r.game, fruit);
+        let dirs = fruit.map(|f| library::save_dirs(basket, f)).unwrap_or_default();
+        let play = match self.running() {
+            Some(name) => PlayState::Running(name.to_string()),
+            None if r.last.is_some() => PlayState::Continue,
+            None => PlayState::Play,
+        };
+        GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, &dirs).len(), file: crate::platform::tilde(&r.game.path) }
+    }
+
+    /// Couch mode's games: one fruit's (or all), most recently played
+    /// first. Couch mode ignores the desktop's chip, sort and FIND.
+    pub fn couch_rows<'a>(&'a self, feed: Option<&'a Feed>, fruit: Option<&str>) -> Vec<Row<'a>> {
+        let mut rows: Vec<Row> = self.games.iter().filter(|g| fruit.is_none_or(|f| f == g.fruit)).map(|g| self.row(g, feed)).collect();
+        rows.sort_by(|a, b| b.last.cmp(&a.last).then_with(|| a.game.title.to_lowercase().cmp(&b.game.title.to_lowercase())));
+        rows
+    }
+
     /// The games the chip and FIND leave, in the chosen order.
     pub fn rows<'a>(&'a self, feed: Option<&'a Feed>, find: &str) -> Vec<Row<'a>> {
         let q = find.trim().to_lowercase();
@@ -262,17 +291,7 @@ impl Shelf {
             None => "All games".to_string(),
         };
 
-        let detail = selected.and_then(|p| rows.iter().find(|r| r.game.path == p)).map(|r| {
-            let fruit = feed.and_then(|f| f.fruit(&r.game.fruit));
-            let (dump, _) = self.dump_state(r.game, fruit);
-            let dirs = fruit.map(|f| library::save_dirs(basket, f)).unwrap_or_default();
-            let play = match self.running() {
-                Some(name) => PlayState::Running(name.to_string()),
-                None if r.last.is_some() => PlayState::Continue,
-                None => PlayState::Play,
-            };
-            GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, &dirs).len(), file: crate::platform::tilde(&r.game.path) }
-        });
+        let detail = selected.and_then(|p| rows.iter().find(|r| r.game.path == p)).map(|r| self.detail(r, basket, feed));
 
         let empty = if self.games.is_empty() {
             Empty::NoGames

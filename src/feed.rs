@@ -48,6 +48,10 @@ pub struct Fruit {
     /// Arguments for opening the fruit with no game (`--data {data}`).
     #[serde(default)]
     pub open: Vec<String>,
+    /// Arguments added after `launch` or `load_slot` when a game starts
+    /// from couch mode (`--fullscreen --exit-on-quit`).
+    #[serde(default)]
+    pub couch: Vec<String>,
     /// Files the emulator keeps beside its exe. They move to each new build;
     /// for a fruit whose templates use `{data}`, they move into `data/` once.
     #[serde(default)]
@@ -153,7 +157,12 @@ impl Fruit {
     /// True if any launch template takes `{data}`: the fruit keeps its
     /// saves and settings in `<root>/<fruit>/data/`, not beside its exe.
     pub fn uses_data(&self) -> bool {
-        self.launch.iter().chain(self.load_slot.iter().flatten()).chain(&self.open).any(|a| a.contains("{data}"))
+        self.launch.iter().chain(self.load_slot.iter().flatten()).chain(&self.open).chain(&self.couch).any(|a| a.contains("{data}"))
+    }
+
+    /// The emulator can start a game from a save slot.
+    pub fn loads_slots(&self) -> bool {
+        self.load_slot.as_ref().is_some_and(|t| !t.is_empty())
     }
 
     /// What moves from build to build: `carry`, until the fruit has a data

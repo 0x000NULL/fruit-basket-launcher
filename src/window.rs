@@ -23,6 +23,9 @@ impl InputCallback for CharSink {
 
 pub struct Video {
     pub window: Window,
+    /// Couch mode: borderless over the whole screen. Holds the windowed
+    /// size to go back to.
+    pub couch: Option<(usize, usize)>,
     buf: Vec<u32>,
     chars: Arc<Mutex<Vec<char>>>,
     mouse_was_down: bool,
@@ -31,12 +34,31 @@ pub struct Video {
 
 impl Video {
     pub fn new(title: &str, w: usize, h: usize, map: &KeyMap) -> Result<Video, String> {
-        let opts = WindowOptions { resize: true, scale: Scale::X1, scale_mode: ScaleMode::Stretch, ..WindowOptions::default() };
-        let mut window = Window::new(title, w, h, opts).map_err(|e| format!("creating window: {e}"))?;
-        window.set_target_fps(0);
         let chars = Arc::new(Mutex::new(Vec::new()));
-        window.set_input_callback(Box::new(CharSink(chars.clone())));
-        Ok(Video { window, buf: Vec::new(), chars, mouse_was_down: false, pad_repeat: PadRepeat::new(map.set()) })
+        let window = open(title, w, h, false, &chars)?;
+        Ok(Video { window, couch: None, buf: Vec::new(), chars, mouse_was_down: false, pad_repeat: PadRepeat::new(map.set()) })
+    }
+
+    /// Into couch mode (a borderless window the size of the screen) or
+    /// back to the window it came from. minifb fixes a window's style when
+    /// it is made, so this makes a new one.
+    pub fn set_couch(&mut self, on: bool) -> Result<(), String> {
+        if on == self.couch.is_some() {
+            return Ok(());
+        }
+        let (w, h) = match self.couch {
+            Some(windowed) => windowed,
+            None => crate::platform::screen_size().unwrap_or_else(|| self.size()),
+        };
+        let windowed = self.size();
+        let mut window = open("Fruit Basket", w, h, on, &self.chars)?;
+        if on {
+            window.set_position(0, 0);
+        }
+        self.window = window;
+        self.couch = on.then_some(windowed);
+        self.mouse_was_down = false;
+        Ok(())
     }
 
     pub fn is_open(&self) -> bool {
@@ -75,7 +97,20 @@ impl Video {
         UiInput { pressed, repeated, down, chars, mouse, mouse_down, clicked, wheel, actions: acts, pad_buttons: pad.pressed, game_mask }
     }
 
+    /// The windowed size, also while in couch mode: what to save on exit.
+    pub fn windowed_size(&self) -> (usize, usize) {
+        self.couch.unwrap_or_else(|| self.size())
+    }
+
     pub fn ctrl(&self) -> bool {
         self.window.is_key_down(Key::LeftCtrl) || self.window.is_key_down(Key::RightCtrl)
     }
+}
+
+fn open(title: &str, w: usize, h: usize, borderless: bool, chars: &Arc<Mutex<Vec<char>>>) -> Result<Window, String> {
+    let opts = WindowOptions { resize: !borderless, borderless, scale: Scale::X1, scale_mode: ScaleMode::Stretch, ..WindowOptions::default() };
+    let mut window = Window::new(title, w, h, opts).map_err(|e| format!("creating window: {e}"))?;
+    window.set_target_fps(0);
+    window.set_input_callback(Box::new(CharSink(chars.clone())));
+    Ok(window)
 }

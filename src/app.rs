@@ -8,7 +8,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use basket_app::pads::{Gamepads, PadPoll, Ports};
-use basket_ui::input::{Action, ButtonSet, KeyMap, MenuRoles, PadMap, UiInput};
+use basket_app::prefs::PadBindings;
+use basket_ui::input::{pad_button_name, Action, ButtonSet, KeyMap, MenuRoles, PadMap, UiInput};
 use basket_ui::{Canvas, Fonts};
 use gilrs::Button;
 use minifb::Key;
@@ -16,15 +17,18 @@ use minifb::Key;
 use crate::art::Art;
 use crate::basket::{Basket, Current, Games};
 use crate::feed::{self, Channel, Feed, FeedError, Fetched, Fruit, Status};
+use crate::focus::{self, Area, Dir, Spot};
 use crate::history::{self, Entry};
 use crate::jobs::{Job, Worker};
 use crate::key;
+use crate::library::{self, Slot};
 use crate::mover;
 use crate::platform;
 use crate::queue::{self, Finished, Queue, RollOpt};
 use crate::settings::{Settings, ThemePref};
 use crate::shelf::Shelf;
 use crate::ui::basket::{BasketView, Card, CardState, Detail, Primary};
+use crate::ui::couch::{self, CouchView, Panel};
 use crate::ui::downloads::DownloadsView;
 use crate::ui::library::Row;
 use crate::ui::frame::{self, Banner, FrameView};
@@ -57,7 +61,18 @@ pub const BUTTONS: ButtonSet = ButtonSet {
 fn keymap() -> KeyMap {
     KeyMap::new(
         BUTTONS,
-        &[(Key::Up, UP), (Key::Down, DOWN), (Key::Left, LEFT), (Key::Right, RIGHT), (Key::Z, A), (Key::X, B), (Key::PageUp, LB), (Key::PageDown, RB), (Key::Enter, START)],
+        &[
+            (Key::Up, UP),
+            (Key::Down, DOWN),
+            (Key::Left, LEFT),
+            (Key::Right, RIGHT),
+            (Key::Z, A),
+            (Key::X, B),
+            (Key::C, Y),
+            (Key::PageUp, LB),
+            (Key::PageDown, RB),
+            (Key::Enter, START),
+        ],
     )
 }
 
@@ -126,6 +141,36 @@ pub struct App {
     moving: Option<(PathBuf, PathBuf, u8, Receiver<mover::Progress>)>,
     /// The last thing that went wrong outside a download, for the footer.
     notice: Option<String>,
+    /// The focused control (a `Ui::hot` key). `None` on the Library and
+    /// Basket is the grid: the D-pad moves the selection instead.
+    focus: Option<String>,
+    /// The controls the last frame drew, for the D-pad.
+    spots: Vec<Spot>,
+    /// Scroll the focused control into view on the next frame.
+    reveal: bool,
+    /// Where the page scrolls: below the header, above the footer.
+    band: (f32, f32),
+    /// Couch mode, when it is on.
+    pub couch: Option<Couch>,
+    /// The connected controllers' names.
+    pub controllers: Vec<String>,
+}
+
+/// Couch mode's place: the system tab, the game, and what the hero shows.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Couch {
+    /// 0 is All; then the installed fruits in feed order.
+    pub system: usize,
+    pub pick: usize,
+    pub panel: CouchPanel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CouchPanel {
+    Buttons,
+    /// The saves list, with the picked row (one past the saves is Start fresh).
+    Saves(usize),
+    Details,
 }
 
 /// A dialog, with what it was opened on.
@@ -135,7 +180,18 @@ pub enum Modal {
     Rollback { fruit: String, options: Vec<RollOpt>, pick: usize },
     Uninstall { fruit: String, delete: bool },
     Move { to: PathBuf },
+    /// A game's saves (desktop: the aside's Saves button).
+    Saves { game: PathBuf, title: String, slots: Vec<Slot>, pick: usize },
+    /// `back`: reopen the saves dialog afterwards.
+    DeleteSave { game: PathBuf, title: String, slot: Slot, back: bool },
+    /// Map buttons: a copy of the map being changed; `listening` waits for
+    /// a pad button for the picked row.
+    Map { map: PadMap, pick: usize, listening: bool },
 }
+
+/// Map buttons' rows: the launcher's buttons as people name them.
+const MAP_ROWS: [(&str, u16); 11] =
+    [("A", A), ("B", B), ("X", X), ("Y", Y), ("LB", LB), ("RB", RB), ("Start", START), ("Up", UP), ("Down", DOWN), ("Left", LEFT), ("Right", RIGHT)];
 
 #[derive(Debug, Clone, Default)]
 pub struct Disk {
@@ -181,7 +237,7 @@ impl App {
             launcher_update: None,
             storage: None,
             keymap: keymap(),
-            padmap: padmap(),
+            padmap: settings.gamepad.as_ref().map_or_else(padmap, |b| b.to_padmap(padmap())),
             queue: Queue::default(),
             history,
             installed: HashMap::new(),
@@ -196,6 +252,12 @@ impl App {
             modal: None,
             moving: None,
             notice: None,
+            focus: None,
+            spots: Vec::new(),
+            reveal: false,
+            band: (0.0, 0.0),
+            couch: None,
+            controllers: Vec::new(),
             settings,
             basket,
         };
@@ -233,6 +295,7 @@ impl App {
             find: &self.find,
             selected: self.selected.as_deref(),
             running: self.shelf.running(),
+            controller: self.controllers.first().map(String::as_str),
         }
     }
 
@@ -324,6 +387,12 @@ impl App {
 
     pub fn gather(&mut self, video: &mut Video, pads: &mut Gamepads) -> UiInput {
         let pad: PadPoll = pads.poll(&self.padmap);
+        if !pad.connected.is_empty() || !pad.disconnected.is_empty() {
+            self.controllers = pads.connected();
+            if !pad.connected.is_empty() && self.settings.couch_on_controller && self.couch.is_none() {
+                self.apply(Cmd::Couch);
+            }
+        }
         let input = video.gather_input(&self.keymap, pad, Instant::now());
         if !input.pad_buttons.is_empty() {
             self.pad_used = true;
@@ -344,10 +413,13 @@ impl App {
     /// Draw at `w`×`h` and apply the frame's commands. No window needed.
     pub fn draw(&mut self, input: &UiInput, w: u32, h: u32) {
         self.canvas.resize(w, h);
+        if input.clicked {
+            self.focus = None;
+        }
 
         let status = self.status();
         let hints: Vec<(&str, &str)> = self.hints();
-        let night = self.night();
+        let night = self.night() || self.couch.is_some();
         if self.tab == Tab::Settings && self.storage.is_none() {
             self.storage = Some(storage(&self.basket, self.feed.as_ref()));
         }
@@ -355,7 +427,7 @@ impl App {
             self.disk = Some(disk(&self.basket, self.feed.as_ref()));
         }
         let sv = match (&self.storage, self.tab) {
-            (Some(st), Tab::Settings) => Some(settings_view(&self.settings, &self.basket, self.feed.as_ref(), st, self.scroll, self.os_dark)),
+            (Some(st), Tab::Settings) => Some(settings_view(&self.settings, &self.basket, self.feed.as_ref(), st, self.scroll, self.os_dark, self.controllers.first().cloned())),
             _ => None,
         };
         let ctx = Ctx {
@@ -367,6 +439,7 @@ impl App {
             find: &self.find,
             selected: self.selected.as_deref(),
             running: self.shelf.running(),
+            controller: self.controllers.first().map(String::as_str),
         };
         let root = format!("{}{}", platform::tilde(&self.basket.root), std::path::MAIN_SEPARATOR);
         let no_disk = HashMap::new();
@@ -390,10 +463,14 @@ impl App {
         let banner = banner(self.launcher_update.as_deref(), &ctx);
         let mv = self.modal.as_ref().and_then(|m| modal_view(m, self.feed.as_ref(), &self.basket, &self.installed));
         // Under a dialog the page draws, but nothing on it can be clicked.
+        let cview = self.couch.as_ref().map(|c| couch_view(c, &self.shelf, self.feed.as_ref(), &self.basket, &self.installed, &self.controllers));
         let blind = UiInput { mouse: (-1.0e6, -1.0e6), ..UiInput::default() };
         let page_input = if mv.is_some() { &blind } else { input };
-        let mut cmds = {
+        let activate = mv.is_none() && !self.find_focused && self.focus.is_some() && input.action(Action::Confirm);
+        let (mut cmds, spots) = {
             let mut ui = Ui::new(&mut self.canvas, page_input, &self.art, night, self.pad_used);
+            ui.focus = if mv.is_none() { self.focus.as_deref() } else { None };
+            ui.activate = activate;
             let fv = FrameView {
                 tab: self.tab,
                 find: &self.find,
@@ -405,28 +482,45 @@ impl App {
                 status: &status,
                 controller: self.pad_used,
             };
-            let top = frame::header(&mut ui, &fv);
-            let bottom = ui.h() - 52.0;
-            if let Some(sv) = &sv {
-                ui::settings::draw(&mut ui, sv, top, bottom);
-            } else if let Some(bv) = &bv {
-                ui::basket::draw(&mut ui, bv, top, bottom);
-            } else if let Some(dv) = &dv {
-                ui::downloads::draw(&mut ui, dv, top, bottom);
-            } else if let Some(lv) = &lv {
-                ui::library::draw(&mut ui, lv, top, bottom);
+            if let Some(cv) = &cview {
+                couch::draw(&mut ui, cv);
+            } else {
+                let top = frame::header(&mut ui, &fv);
+                let bottom = ui.h() - 52.0;
+                self.band = (top, bottom);
+                if let Some(sv) = &sv {
+                    ui::settings::draw(&mut ui, sv, top, bottom);
+                } else if let Some(bv) = &bv {
+                    ui::basket::draw(&mut ui, bv, top, bottom);
+                } else if let Some(dv) = &dv {
+                    ui::downloads::draw(&mut ui, dv, top, bottom);
+                } else if let Some(lv) = &lv {
+                    ui::library::draw(&mut ui, lv, top, bottom);
+                }
+                frame::footer(&mut ui, &fv);
             }
-            frame::footer(&mut ui, &fv);
-            ui.cmds
+            (ui.cmds, ui.spots)
         };
+        if mv.is_none() {
+            self.spots = spots;
+        }
+        if std::mem::take(&mut self.reveal) {
+            cmds.extend(self.reveal_focus());
+        }
         if let Some(mv) = &mv {
             let mut ui = Ui::new(&mut self.canvas, input, &self.art, night, self.pad_used);
             modal::draw(&mut ui, mv);
             cmds.extend(ui.cmds);
         }
         let modal_open = mv.is_some();
-        drop((sv, bv, dv, lv, mv));
-        cmds.extend(if modal_open { self.modal_keys(input) } else { self.keys(input) });
+        drop((sv, bv, dv, lv, mv, cview));
+        cmds.extend(if modal_open {
+            self.modal_keys(input)
+        } else if self.couch.is_some() {
+            self.couch_keys(input)
+        } else {
+            self.keys(input)
+        });
         for cmd in cmds {
             self.apply(cmd);
         }
@@ -436,17 +530,53 @@ impl App {
     /// arrows pick a row, Space ticks the box.
     fn modal_keys(&self, input: &UiInput) -> Vec<Cmd> {
         let mut out = Vec::new();
+        if let Some(Modal::Map { pick, listening, .. }) = &self.modal {
+            // Waiting for a button: the first pad button pressed is the answer.
+            if *listening {
+                if let Some(b) = input.pad_buttons.first() {
+                    out.push(Cmd::ModalBind(*b));
+                } else if input.pressed(Key::Escape) {
+                    out.push(Cmd::ModalToggle);
+                }
+                return out;
+            }
+            if input.action(Action::Up) && *pick > 0 {
+                out.push(Cmd::ModalPick(pick - 1));
+            } else if input.action(Action::Down) && pick + 1 < MAP_ROWS.len() {
+                out.push(Cmd::ModalPick(pick + 1));
+            }
+            // A listens for the picked row; Start (or Enter) is Done.
+            if input.action(Action::Confirm) {
+                out.push(Cmd::ModalToggle);
+            } else if input.action(Action::Start) {
+                out.push(Cmd::ModalConfirm);
+            } else if input.action(Action::Back) || input.pressed(Key::Escape) {
+                out.push(Cmd::ModalCancel);
+            }
+            if input.pad_buttons.contains(&self.padmap.button_for(X)) || input.pressed(Key::Delete) {
+                out.push(Cmd::ModalExtra);
+            }
+            return out;
+        }
         if input.action(Action::Confirm) {
             out.push(Cmd::ModalConfirm);
         } else if input.action(Action::Back) || input.pressed(Key::Escape) {
             out.push(Cmd::ModalCancel);
         }
-        if let Some(Modal::Rollback { options, pick, .. }) = &self.modal {
-            if input.action(Action::Up) && *pick > 0 {
+        let rows = match &self.modal {
+            Some(Modal::Rollback { options, pick, .. }) => Some((*pick, options.len())),
+            Some(Modal::Saves { slots, pick, .. }) => Some((*pick, slots.len())),
+            _ => None,
+        };
+        if let Some((pick, n)) = rows {
+            if input.action(Action::Up) && pick > 0 {
                 out.push(Cmd::ModalPick(pick - 1));
-            } else if input.action(Action::Down) && pick + 1 < options.len() {
+            } else if input.action(Action::Down) && pick + 1 < n {
                 out.push(Cmd::ModalPick(pick + 1));
             }
+        }
+        if input.pad_buttons.contains(&self.padmap.button_for(X)) || input.pressed(Key::Delete) {
+            out.push(Cmd::ModalExtra);
         }
         if input.pressed(Key::Space) {
             out.push(Cmd::ModalToggle);
@@ -460,7 +590,39 @@ impl App {
         if self.find_focused {
             return out;
         }
-        if self.tab == Tab::Library {
+        let grid = matches!(self.tab, Tab::Library | Tab::Basket);
+        let dir = [(Action::Up, Dir::Up), (Action::Down, Dir::Down), (Action::Left, Dir::Left), (Action::Right, Dir::Right)]
+            .into_iter()
+            .find(|(a, _)| input.action(*a))
+            .map(|(_, d)| d);
+        if input.pressed(Key::Tab) {
+            let back = input.is_down(Key::LeftShift) || input.is_down(Key::RightShift);
+            if let Some(s) = focus::cycle(&self.spots, self.focus.as_deref(), back) {
+                out.push(Cmd::Focus(Some(s.key.clone())));
+            }
+        }
+        if self.focus.is_some() || !grid {
+            // On the controls: the D-pad walks them, B goes back to the grid.
+            if let Some(s) = dir.and_then(|d| focus::next(&self.spots, self.focus.as_deref(), d)) {
+                out.push(Cmd::Focus(Some(s.key.clone())));
+            }
+            if grid && (input.action(Action::Back) || input.pressed(Key::Escape)) {
+                out.push(Cmd::Focus(None));
+                return out;
+            }
+        } else if input.action(Action::Back) && self.sheet && Size::of(self.canvas.width()) == Size::Narrow {
+            out.push(Cmd::CloseSheet);
+        } else if self.y_pressed(input) {
+            // Y: Details, into the aside (or the narrow sheet).
+            let first = self.spots.iter().find(|s| s.area == Area::Aside).or_else(|| self.spots.iter().find(|s| s.area == Area::Main));
+            if let Some(s) = first {
+                out.push(Cmd::Focus(Some(s.key.clone())));
+            }
+        }
+        if input.action(Action::Start) {
+            out.push(Cmd::Couch);
+        }
+        if self.tab == Tab::Library && self.focus.is_none() {
             let rows = self.shelf.rows(self.feed.as_ref(), &self.find);
             let at = self.shelf.selected_in(&rows).and_then(|p| rows.iter().position(|r| r.game.path == p));
             let cols = if self.shelf.list { 1 } else if Size::of(self.canvas.width()) == Size::Narrow { 4 } else { 5 };
@@ -485,7 +647,7 @@ impl App {
                 }
             }
         }
-        if self.tab == Tab::Basket {
+        if self.tab == Tab::Basket && self.focus.is_none() {
             let ctx = self.ctx();
             let order = ctx.order();
             let at = ctx.selected_id().and_then(|id| order.iter().position(|f| f.id == id));
@@ -511,7 +673,7 @@ impl App {
         }
         // Esc closes the narrow sheet first (the sheet emits that itself).
         let sheet_open = self.sheet && matches!(self.tab, Tab::Basket | Tab::Library) && Size::of(self.canvas.width()) == Size::Narrow;
-        if input.pressed(Key::Escape) && !sheet_open {
+        if input.pressed(Key::Escape) && !sheet_open && (self.focus.is_none() || !grid) {
             out.push(Cmd::Quit);
         }
         if input.action(Action::PrevPage) {
@@ -523,12 +685,147 @@ impl App {
         out
     }
 
+    /// Keys in couch mode. While a game runs the emulator has the pad, so
+    /// nothing here reacts.
+    fn couch_keys(&self, input: &UiInput) -> Vec<Cmd> {
+        let mut out = Vec::new();
+        let Some(c) = &self.couch else { return out };
+        if self.shelf.running().is_some() {
+            return out;
+        }
+        let systems = self.couch_systems().len() + 1;
+        if input.action(Action::PrevPage) {
+            out.push(Cmd::CouchSystem((c.system + systems - 1) % systems));
+        }
+        if input.action(Action::NextPage) {
+            out.push(Cmd::CouchSystem((c.system + 1) % systems));
+        }
+        match c.panel {
+            CouchPanel::Saves(i) => {
+                let n = self.couch_slots().len();
+                if input.action(Action::Up) && i > 0 {
+                    out.push(Cmd::CouchSavePick(i - 1));
+                } else if input.action(Action::Down) && i < n {
+                    out.push(Cmd::CouchSavePick(i + 1));
+                }
+            }
+            _ => {
+                let n = self.shelf.couch_rows(self.feed.as_ref(), self.couch_fruit()).len();
+                if input.action(Action::Left) && c.pick > 0 {
+                    out.push(Cmd::CouchPick(c.pick - 1));
+                } else if input.action(Action::Right) && c.pick + 1 < n {
+                    out.push(Cmd::CouchPick(c.pick + 1));
+                }
+            }
+        }
+        if input.action(Action::Confirm) {
+            out.push(Cmd::CouchContinue);
+        }
+        // X: the pad's X, or S (and Delete) on the keyboard, where X is B.
+        if input.pad_buttons.contains(&self.padmap.button_for(X)) || input.pressed(Key::S) || input.pressed(Key::Delete) {
+            out.push(Cmd::CouchSaves);
+        }
+        if self.y_pressed(input) {
+            out.push(Cmd::CouchDetails);
+        }
+        if input.action(Action::Back) {
+            out.push(Cmd::CouchBack);
+        }
+        if input.action(Action::Start) || input.pressed(Key::Escape) {
+            out.push(Cmd::Couch);
+        }
+        out
+    }
+
+    /// Couch mode's system tabs after All: the installed fruits.
+    fn couch_systems(&self) -> Vec<&Fruit> {
+        self.feed.iter().flat_map(|f| f.fruits.iter()).filter(|f| self.installed.contains_key(&f.id)).collect()
+    }
+
+    /// The fruit couch mode's tab shows; `None` is All.
+    fn couch_fruit(&self) -> Option<&str> {
+        let c = self.couch.as_ref()?;
+        let i = c.system.checked_sub(1)?;
+        self.couch_systems().get(i).map(|f| f.id.as_str())
+    }
+
+    /// Couch mode's picked game.
+    fn couch_game(&self) -> Option<PathBuf> {
+        let c = self.couch.as_ref()?;
+        let rows = self.shelf.couch_rows(self.feed.as_ref(), self.couch_fruit());
+        rows.get(c.pick.min(rows.len().saturating_sub(1))).map(|r| r.game.path.clone())
+    }
+
+    fn game_fruit(&self, game: &Path) -> Option<&Fruit> {
+        let g = self.shelf.games.iter().find(|g| g.path == game)?;
+        self.feed.as_ref()?.fruit(&g.fruit)
+    }
+
+    fn game_slots(&self, game: &Path) -> Vec<Slot> {
+        match self.game_fruit(game) {
+            Some(f) => library::slots(game, &library::save_dirs(&self.basket, f)),
+            None => Vec::new(),
+        }
+    }
+
+    fn couch_slots(&self) -> Vec<Slot> {
+        self.couch_game().map(|g| self.game_slots(&g)).unwrap_or_default()
+    }
+
+    fn game_title(&self, game: &Path) -> String {
+        self.shelf.games.iter().find(|g| g.path == game).map(|g| g.title.clone()).unwrap_or_default()
+    }
+
+    /// Start `game` from `slot` (or fresh); the reason it can't, if not.
+    fn play_from(&mut self, game: &Path, slot: Option<u8>) -> bool {
+        if slot.is_some() && !self.game_fruit(game).is_some_and(Fruit::loads_slots) {
+            let name = self.game_fruit(game).map(|f| f.name.clone()).unwrap_or_default();
+            self.play_error = Some(format!("{name} can't start from a save yet"));
+            return false;
+        }
+        let couch = self.couch.is_some();
+        self.play_error = self.shelf.play(game, &self.basket, self.feed.as_ref(), slot, couch).err();
+        self.play_error.is_none()
+    }
+
+    /// Y went down: the pad's Y, or C on the keyboard.
+    fn y_pressed(&self, input: &UiInput) -> bool {
+        input.pad_buttons.contains(&self.padmap.button_for(Y)) || input.pressed(Key::C)
+    }
+
+    /// Scroll so the focused control is in view.
+    fn reveal_focus(&self) -> Vec<Cmd> {
+        let Some(s) = self.focus.as_deref().and_then(|k| self.spots.iter().find(|s| s.key == k)) else { return Vec::new() };
+        let (top, bottom) = (self.band.0 + 16.0, self.band.1 - 16.0);
+        let dy = if s.y < top {
+            s.y - top
+        } else if s.y + s.h > bottom {
+            (s.y + s.h - bottom).min(s.y - top)
+        } else {
+            return Vec::new();
+        };
+        match s.area {
+            Area::Main => vec![Cmd::Scroll(dy)],
+            Area::Aside => vec![Cmd::AsideScroll(dy)],
+            Area::Fixed => Vec::new(),
+        }
+    }
+
     fn apply(&mut self, cmd: Cmd) {
         let s = &mut self.settings;
         match cmd {
+            Cmd::Focus(key) => {
+                // Into the narrow sheet's controls: open it.
+                if key.as_deref().is_some_and(|k| self.spots.iter().any(|s| s.key == k && s.area == Area::Aside)) {
+                    self.sheet = true;
+                }
+                self.focus = key;
+                self.reveal = true;
+            }
             Cmd::Tab(tab) => {
                 if tab != self.tab {
                     self.tab = tab;
+                    self.focus = None;
                     self.notice = None;
                     self.scroll = 0.0;
                     self.aside_scroll = 0.0;
@@ -610,14 +907,14 @@ impl App {
                 self.sheet = true;
             }
             Cmd::Play(p) => {
-                self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref()).err();
+                self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref(), None, false).err();
             }
             Cmd::ShowFile(p) => platform::reveal(&p),
             Cmd::ShowSaves(p) => {
-                let fruit = self.shelf.games.iter().find(|g| g.path == p).and_then(|g| self.feed.as_ref()?.fruit(&g.fruit));
-                let dirs = fruit.map(|f| crate::library::save_dirs(&self.basket, f)).unwrap_or_default();
-                if let Some(save) = crate::library::saves(&p, &dirs).first() {
-                    platform::reveal(save);
+                let slots = self.game_slots(&p);
+                if !slots.is_empty() {
+                    let title = self.game_title(&p);
+                    self.modal = Some(Modal::Saves { game: p, title, slots, pick: 0 });
                 }
             }
             Cmd::RemoveGame(p) => {
@@ -719,16 +1016,38 @@ impl App {
                     }
                 }
             }
-            Cmd::ModalPick(i) => {
-                if let Some(Modal::Rollback { options, pick, .. }) = &mut self.modal {
-                    *pick = i.min(options.len().saturating_sub(1));
+            Cmd::ModalPick(i) => match &mut self.modal {
+                Some(Modal::Rollback { options, pick, .. }) => *pick = i.min(options.len().saturating_sub(1)),
+                Some(Modal::Saves { slots, pick, .. }) => *pick = i.min(slots.len().saturating_sub(1)),
+                Some(Modal::Map { pick, .. }) => *pick = i.min(MAP_ROWS.len() - 1),
+                _ => {}
+            },
+            Cmd::ModalBind(button) => {
+                if let Some(Modal::Map { map, pick, listening }) = &mut self.modal {
+                    map.rebind(MAP_ROWS[*pick].1, button);
+                    *listening = false;
                 }
             }
-            Cmd::ModalToggle => {
-                if let Some(Modal::Uninstall { delete, .. }) = &mut self.modal {
-                    *delete = !*delete;
+            Cmd::ModalExtra => {
+                if let Some(Modal::Map { map, listening, .. }) = &mut self.modal {
+                    *map = padmap();
+                    *listening = false;
+                }
+                if let Some(Modal::Saves { game, title, slots, pick }) = &self.modal {
+                    if let Some(slot) = slots.get(*pick) {
+                        if self.shelf.running().is_some() {
+                            self.notice = Some("close the game before deleting a save".into());
+                        } else {
+                            self.modal = Some(Modal::DeleteSave { game: game.clone(), title: title.clone(), slot: slot.clone(), back: true });
+                        }
+                    }
                 }
             }
+            Cmd::ModalToggle => match &mut self.modal {
+                Some(Modal::Uninstall { delete, .. }) => *delete = !*delete,
+                Some(Modal::Map { listening, .. }) => *listening = !*listening,
+                _ => {}
+            },
             Cmd::ModalCancel => self.modal = None,
             Cmd::ModalConfirm => {
                 if let Some(m) = self.modal.take() {
@@ -742,8 +1061,74 @@ impl App {
                 self.apply(Cmd::Install(id));
             }
             Cmd::RipeDismiss(id) => self.unwatch(&id),
-            // Wired up in later milestones.
-            Cmd::Couch | Cmd::MapButtons | Cmd::RestartForUpdate => {}
+            Cmd::Couch => {
+                self.couch = match self.couch {
+                    Some(_) => None,
+                    None => Some(Couch { system: 0, pick: 0, panel: CouchPanel::Buttons }),
+                };
+                self.focus = None;
+            }
+            Cmd::CouchSystem(i) => {
+                if let Some(c) = &mut self.couch {
+                    *c = Couch { system: i, pick: 0, panel: CouchPanel::Buttons };
+                }
+            }
+            Cmd::CouchPick(i) => {
+                if let Some(c) = &mut self.couch {
+                    c.pick = i;
+                    if matches!(c.panel, CouchPanel::Saves(_)) {
+                        c.panel = CouchPanel::Buttons;
+                    }
+                }
+            }
+            Cmd::CouchSavePick(i) => {
+                if let Some(c) = &mut self.couch {
+                    c.panel = CouchPanel::Saves(i);
+                }
+            }
+            Cmd::CouchDetails => {
+                if let Some(c) = &mut self.couch {
+                    c.panel = if c.panel == CouchPanel::Details { CouchPanel::Buttons } else { CouchPanel::Details };
+                }
+            }
+            Cmd::CouchBack => match &mut self.couch {
+                Some(c) if c.panel != CouchPanel::Buttons => c.panel = CouchPanel::Buttons,
+                _ => self.apply(Cmd::Couch),
+            },
+            Cmd::CouchContinue => {
+                let Some(game) = self.couch_game() else { return };
+                let slot = match self.couch.as_ref().map(|c| c.panel) {
+                    Some(CouchPanel::Saves(i)) => self.couch_slots().get(i).map(|s| s.n),
+                    _ => None,
+                };
+                if self.play_from(&game, slot) {
+                    if let Some(c) = &mut self.couch {
+                        c.panel = CouchPanel::Buttons;
+                    }
+                }
+            }
+            Cmd::CouchSaves => {
+                let Some(game) = self.couch_game() else { return };
+                match self.couch.as_ref().map(|c| c.panel) {
+                    Some(CouchPanel::Saves(i)) => {
+                        if let Some(slot) = self.couch_slots().get(i).cloned() {
+                            if self.shelf.running().is_none() {
+                                let title = self.game_title(&game);
+                                self.modal = Some(Modal::DeleteSave { game, title, slot, back: false });
+                            }
+                        }
+                    }
+                    Some(_) => {
+                        if let Some(c) = &mut self.couch {
+                            c.panel = CouchPanel::Saves(0);
+                        }
+                    }
+                    None => {}
+                }
+            }
+            Cmd::MapButtons => self.modal = Some(Modal::Map { map: self.padmap.clone(), pick: 0, listening: false }),
+            // Wired up in M6.
+            Cmd::RestartForUpdate => {}
         }
     }
 
@@ -776,6 +1161,39 @@ impl App {
                 }
                 self.selected = None;
                 self.refresh_installed();
+            }
+            Modal::Saves { game, slots, pick, .. } => {
+                let Some(slot) = slots.get(pick) else { return };
+                if self.game_fruit(&game).is_some_and(Fruit::loads_slots) {
+                    self.play_from(&game, Some(slot.n));
+                } else {
+                    platform::reveal(&slot.path);
+                }
+            }
+            Modal::Map { map, .. } => {
+                let (a, b) = (map.button_for(A), map.button_for(B));
+                if a == Button::Unknown || b == Button::Unknown || a == b {
+                    self.notice = Some("A and B must each have a button".into());
+                    self.modal = Some(Modal::Map { map, pick: 0, listening: false });
+                    return;
+                }
+                self.settings.gamepad = Some(PadBindings::from_padmap(&map));
+                self.settings.save();
+                self.padmap = map;
+            }
+            Modal::DeleteSave { game, title, slot, back } => {
+                if self.shelf.running().is_some() {
+                    self.notice = Some("close the game before deleting a save".into());
+                    return;
+                }
+                if let Err(e) = library::delete_slot(&slot) {
+                    self.notice = Some(format!("deleting the save: {e}"));
+                }
+                self.rescan();
+                let slots = self.game_slots(&game);
+                if back && !slots.is_empty() {
+                    self.modal = Some(Modal::Saves { game, title, slots, pick: 0 });
+                }
             }
             Modal::Move { to } => {
                 if let Some(why) = self.cant_move() {
@@ -911,8 +1329,13 @@ impl App {
 
     fn hints(&self) -> Vec<(&'static str, &'static str)> {
         if self.pad_used {
-            let first = if self.tab == Tab::Library { ("A", "Play") } else { ("A", "Select") };
-            return vec![first, ("B", "Back"), ("Y", "Details"), ("LB RB", "Tabs")];
+            let grid = matches!(self.tab, Tab::Library | Tab::Basket) && self.focus.is_none();
+            return match (grid, self.tab) {
+                (true, Tab::Library) => vec![("A", "Play"), ("Y", "Details"), ("LB RB", "Tabs")],
+                (true, _) => vec![("A", "Select"), ("Y", "Details"), ("LB RB", "Tabs")],
+                (false, Tab::Library | Tab::Basket) => vec![("A", "Select"), ("B", "Back"), ("LB RB", "Tabs")],
+                (false, _) => vec![("A", "Select"), ("LB RB", "Tabs")],
+            };
         }
         match self.tab {
             Tab::Library => {
@@ -953,6 +1376,7 @@ struct Ctx<'a> {
     selected: Option<&'a str>,
     /// The fruit name a game is running in.
     running: Option<&'a str>,
+    controller: Option<&'a str>,
 }
 
 impl<'a> Ctx<'a> {
@@ -1111,6 +1535,7 @@ impl<'a> Ctx<'a> {
                 key_id: key::KEY_ID,
                 can_roll_back: idle && current.is_some_and(|c| !queue::rollback_options(f, c, &d.builds).is_empty()),
                 can_uninstall: self.can_uninstall(&f.id),
+                controller: self.controller,
             }
         });
         let feed_note = match (self.feed, feed_note) {
@@ -1182,6 +1607,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
                 tick: None,
                 cancel: "Cancel",
                 confirm: "Roll back",
+                extra: None,
             })
         }
         Modal::Uninstall { fruit, delete } => {
@@ -1199,6 +1625,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
                 tick: Some(("Also delete games and saves", *delete)),
                 cancel: "Keep it",
                 confirm: "Uninstall",
+                extra: None,
             })
         }
         Modal::Move { to } => Some(ModalView {
@@ -1215,7 +1642,121 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
             tick: None,
             cancel: "Cancel",
             confirm: "Move",
+            extra: None,
         }),
+        Modal::Saves { game, title, slots, pick } => {
+            let f = feed?.fruit(&game_fruit_id(basket, game)?)?;
+            let loads = f.loads_slots();
+            Some(ModalView {
+                fruit: Some(f),
+                title: title.clone(),
+                body: if loads {
+                    "Load starts the game from the save you pick.".into()
+                } else {
+                    format!("{} can't start from a save yet: start the game, then load it there.", f.name)
+                },
+                current: None,
+                rows: slots.iter().map(|s| (format!("Slot {}", s.n), basket_ui::fmt::fmt_when(s.saved))).collect(),
+                pick: *pick,
+                tick: None,
+                cancel: "Close",
+                confirm: if loads { "Load" } else { "Show file" },
+                extra: Some("Delete"),
+            })
+        }
+        Modal::Map { map, pick, listening } => Some(ModalView {
+            fruit: None,
+            title: "Map buttons".into(),
+            body: "For the launcher's menus and couch mode. Pick a button with A, then press the one you want for it. The keyboard always works, and each emulator keeps its own map.".into(),
+            current: None,
+            rows: MAP_ROWS
+                .iter()
+                .enumerate()
+                .map(|(i, (name, bit))| {
+                    let bound = if *listening && i == *pick { "press a button…".to_string() } else { pad_button_name(map.button_for(*bit)).to_string() };
+                    (name.to_string(), bound)
+                })
+                .collect(),
+            pick: *pick,
+            tick: None,
+            cancel: "Cancel",
+            confirm: "Done",
+            extra: Some("Reset"),
+        }),
+        Modal::DeleteSave { title, slot, .. } => Some(ModalView {
+            fruit: None,
+            title: "Delete this save?".into(),
+            body: format!("Slot {} of {title}, saved {}, is deleted for good.", slot.n, basket_ui::fmt::fmt_when(slot.saved)),
+            current: None,
+            rows: Vec::new(),
+            pick: 0,
+            tick: None,
+            cancel: "Keep it",
+            confirm: "Delete",
+            extra: None,
+        }),
+    }
+}
+
+/// The fruit whose games/ (or data/) folder holds `game`, from the path:
+/// the dialog has no shelf to ask.
+fn game_fruit_id(basket: &Basket, game: &Path) -> Option<String> {
+    let rel = game.strip_prefix(&basket.root).ok()?;
+    rel.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned())
+}
+
+/// Couch mode's view: the system tabs, the games, and the hero's panel.
+fn couch_view<'a>(
+    c: &Couch,
+    shelf: &'a crate::shelf::Shelf,
+    feed: Option<&'a Feed>,
+    basket: &Basket,
+    installed: &HashMap<String, Current>,
+    controllers: &'a [String],
+) -> CouchView<'a> {
+    let systems: Vec<&'a Fruit> = feed.iter().flat_map(|f| f.fruits.iter()).filter(|f| installed.contains_key(&f.id)).collect();
+    let fruit = c.system.checked_sub(1).and_then(|i| systems.get(i)).copied();
+    let rows = shelf.couch_rows(feed, fruit.map(|f| f.id.as_str()));
+    let heading = match fruit {
+        Some(f) => format!("{} · {}", f.name, rows.len()),
+        None => format!("All games · {}", rows.len()),
+    };
+    let pick = c.pick.min(rows.len().saturating_sub(1));
+    let game = rows.get(pick);
+    let gfruit = game.and_then(|r| feed?.fruit(&r.game.fruit));
+    let slots = match (game, gfruit) {
+        (Some(r), Some(f)) => library::slots(&r.game.path, &library::save_dirs(basket, f)),
+        _ => Vec::new(),
+    };
+    let panel = match (c.panel, game) {
+        (CouchPanel::Details, Some(r)) => Panel::Details(shelf.detail(r, basket, feed)),
+        (CouchPanel::Saves(i), Some(_)) => Panel::Saves {
+            rows: slots
+                .iter()
+                .map(|s| (format!("Slot {}", s.n), basket_ui::fmt::fmt_when(s.saved)))
+                .chain(std::iter::once(("Start fresh".to_string(), String::new())))
+                .collect(),
+            pick: i.min(slots.len()),
+            note: gfruit.filter(|f| !f.loads_slots() && !slots.is_empty()).map(|f| format!("{} can't start from a save yet: Start fresh, then load in the game.", f.name)),
+        },
+        _ => Panel::Buttons,
+    };
+    let hints = match c.panel {
+        CouchPanel::Buttons => vec![("A", "Continue"), ("B", "Back"), ("X", "Saves"), ("LB RB", "Switch system")],
+        CouchPanel::Saves(_) => vec![("A", "Load"), ("B", "Back"), ("X", "Delete save")],
+        CouchPanel::Details => vec![("B", "Back"), ("LB RB", "Switch system")],
+    };
+    CouchView {
+        systems: std::iter::once("All").chain(systems.iter().map(|f| f.name.as_str())).collect(),
+        system: c.system.min(systems.len()),
+        heading,
+        rows,
+        pick,
+        controller: controllers.first().map(String::as_str),
+        panel,
+        saves: slots.len(),
+        playing: shelf.running(),
+        hints,
     }
 }
 
@@ -1226,6 +1767,7 @@ fn settings_view<'a>(
     storage: &(String, Vec<FruitStorage>),
     scroll: f32,
     os_dark: bool,
+    controller: Option<String>,
 ) -> SettingsView<'a> {
     let sep = std::path::MAIN_SEPARATOR;
     let fruit_folders = feed
@@ -1240,7 +1782,7 @@ fn settings_view<'a>(
         root: format!("{}{sep}", platform::tilde(&basket.root)),
         root_detail: storage.0.clone(),
         storage: storage.1.clone(),
-        controller: None,
+        controller,
         os_dark,
         version: VERSION,
         key_id: key::KEY_ID,
@@ -1553,6 +2095,202 @@ mod tests {
         }
     }
 
+    /// The controller reaches every control: the D-pad walks Settings and
+    /// A ticks a box; Y goes into the Library aside and B comes back.
+    #[test]
+    fn pad_walks_the_controls() {
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App::with(Settings::default(), stocked(tmp.path()), Some(feed));
+        let act = |a: Action| UiInput { actions: vec![a], ..UiInput::default() };
+        let idle = UiInput::default();
+
+        app.tab = Tab::Settings;
+        app.draw(&idle, 1280, 900);
+        app.draw(&act(Action::Down), 1280, 900);
+        let first = app.focus.clone().expect("the D-pad picks a control");
+        app.draw(&act(Action::Down), 1280, 900);
+        assert_ne!(app.focus.as_ref(), Some(&first), "and moves on");
+
+        let label = "Rescan when the launcher opens";
+        app.apply(Cmd::Focus(Some(label.into())));
+        app.draw(&idle, 1280, 900);
+        assert!(app.spots.iter().any(|s| s.key == label));
+        let was = app.settings.rescan_on_open;
+        app.draw(&act(Action::Confirm), 1280, 900);
+        assert_eq!(app.settings.rescan_on_open, !was, "A presses the focused control");
+
+        // Far down the page: focusing it scrolls it into view.
+        let last = app.spots.iter().filter(|s| s.area == Area::Main).max_by(|a, b| a.y.total_cmp(&b.y)).unwrap().key.clone();
+        app.apply(Cmd::Focus(Some(last.clone())));
+        app.draw(&idle, 1280, 680);
+        app.draw(&idle, 1280, 680);
+        let s = app.spots.iter().find(|s| s.key == last).unwrap();
+        assert!(s.y + s.h <= app.band.1, "scrolled into view: {} > {}", s.y + s.h, app.band.1);
+
+        app.apply(Cmd::Tab(Tab::Library));
+        assert_eq!(app.focus, None);
+        app.draw(&idle, 1280, 900);
+        let y = UiInput { pressed: vec![Key::C], ..UiInput::default() };
+        app.draw(&y, 1280, 900);
+        let spot = app.focus.as_deref().and_then(|k| app.spots.iter().find(|s| s.key == k)).expect("Y focuses the aside");
+        assert_eq!(spot.area, Area::Aside);
+        app.draw(&act(Action::Back), 1280, 900);
+        assert_eq!(app.focus, None, "B goes back to the grid");
+        assert!(!app.quit);
+    }
+
+    /// Strawberry installed with this test binary as its program (`--list`
+    /// makes it exit at once), a game, and saves in slots 2 and 5.
+    fn couch_basket(root: &Path) -> (Basket, Feed, PathBuf) {
+        let mut feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let sb = feed.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap();
+        sb.bin = Some("sb".into());
+        sb.launch = ["--list", "{rom}"].map(String::from).to_vec();
+        sb.load_slot = Some(["--list", "{rom}", "--slot", "{slot}"].map(String::from).to_vec());
+        sb.couch = vec!["--fullscreen".into()];
+        let b = stocked(root);
+        let exe = b.build_dir("strawberry", "v1.3.0").join(if cfg!(windows) { "sb.exe" } else { "sb" });
+        std::fs::copy(std::env::current_exe().unwrap(), &exe).unwrap();
+        let rom = b.games_dir("strawberry").join("homebrew.gba");
+        for n in [2, 5] {
+            std::fs::write(b.games_dir("strawberry").join(format!("homebrew.s{n}.state")), "x").unwrap();
+        }
+        (b, feed, rom)
+    }
+
+    /// Couch mode end to end: in by Start, switch system, open the saves,
+    /// delete one through the dialog, load another, back out with B.
+    #[test]
+    fn couch_saves_load_and_delete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, feed, rom) = couch_basket(tmp.path());
+        let mut app = App::with(Settings::default(), b, Some(feed));
+        let act = |a: Action| UiInput { actions: vec![a], ..UiInput::default() };
+        let key = |k: Key| UiInput { pressed: vec![k], ..UiInput::default() };
+
+        app.draw(&act(Action::Start), 1280, 720);
+        assert!(app.couch.is_some(), "Start opens couch mode");
+        app.draw(&act(Action::NextPage), 1280, 720);
+        assert_eq!(app.couch_fruit(), Some("strawberry"));
+        assert_eq!(app.couch_game().as_deref(), Some(rom.as_path()));
+
+        app.draw(&key(Key::S), 1280, 720);
+        assert_eq!(app.couch.as_ref().unwrap().panel, CouchPanel::Saves(0));
+        assert_eq!(app.couch_slots().len(), 2);
+        // Delete the first listed save: X asks, the dialog's A confirms.
+        let first = app.couch_slots()[0].clone();
+        app.draw(&key(Key::S), 1280, 720);
+        assert!(matches!(app.modal, Some(Modal::DeleteSave { .. })));
+        app.draw(&act(Action::Confirm), 1280, 720);
+        assert!(!first.path.exists());
+        assert_eq!(app.couch_slots().len(), 1);
+
+        // Load the one left; the emulator gets its slot.
+        let left = app.couch_slots()[0].n;
+        app.draw(&act(Action::Confirm), 1280, 720);
+        assert_eq!(app.play_error, None, "loading slot {left}");
+        assert!(app.shelf.running().is_some());
+        assert!(app.couch_keys(&act(Action::Back)).is_empty(), "the emulator has the pad while it runs");
+        let start = Instant::now();
+        while app.shelf.running().is_some() {
+            assert!(start.elapsed() < Duration::from_secs(30), "the stand-in never exited");
+            app.poll();
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        app.draw(&act(Action::Back), 1280, 720);
+        assert!(app.couch.is_none(), "B on the top level leaves couch mode");
+        assert!(!app.quit);
+    }
+
+    /// Map buttons: A listens, the next pad button binds (swapping), Done
+    /// keeps the map; Reset goes back to the defaults.
+    #[test]
+    fn map_buttons() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App::with(Settings::default(), Basket::new(tmp.path()), None);
+        let act = |a: Action| UiInput { actions: vec![a], ..UiInput::default() };
+        app.apply(Cmd::MapButtons);
+        app.draw(&act(Action::Confirm), 1280, 900);
+        assert!(matches!(app.modal, Some(Modal::Map { listening: true, pick: 0, .. })), "A listens for row A");
+        // While listening, even the pad's B is an answer, not Cancel.
+        let east = UiInput { pad_buttons: vec![Button::East], actions: vec![Action::Back], ..UiInput::default() };
+        app.draw(&east, 1280, 900);
+        match &app.modal {
+            Some(Modal::Map { map, listening: false, .. }) => {
+                assert_eq!(map.button_for(A), Button::East);
+                assert_eq!(map.button_for(B), Button::South, "swapped");
+            }
+            other => panic!("{other:?}"),
+        }
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        app.settings.theme = ThemePref::Paper;
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("settings-map-regular-paper.png")).unwrap();
+        app.draw(&act(Action::Start), 1280, 900);
+        assert!(app.modal.is_none());
+        assert_eq!(app.padmap.button_for(A), Button::East);
+        assert_eq!(app.settings.gamepad.as_ref().and_then(|g| g.0.get("A")).map(String::as_str), Some("East"));
+
+        app.apply(Cmd::MapButtons);
+        app.apply(Cmd::ModalExtra);
+        app.apply(Cmd::ModalConfirm);
+        assert_eq!(app.padmap, padmap(), "Reset");
+    }
+
+    /// Couch mode and the saves dialogs at TV sizes, for comparing with
+    /// Couch*.png by eye.
+    #[test]
+    fn couch_shots() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        type Setup = fn(&mut App);
+        let states: [(&str, Setup); 6] = [
+            ("couch-all", |_| {}),
+            ("couch-strawberry", |app| app.apply(Cmd::CouchSystem(1))),
+            ("couch-saves", |app| app.apply(Cmd::CouchSaves)),
+            ("couch-details", |app| app.apply(Cmd::CouchDetails)),
+            ("couch-delete", |app| {
+                app.apply(Cmd::CouchSaves);
+                app.apply(Cmd::CouchSaves);
+            }),
+            ("couch-empty", |app| app.shelf.games.clear()),
+        ];
+        for (w, h) in [(1280, 720), (1920, 1080)] {
+            for (name, setup) in states {
+                let tmp = tempfile::tempdir().unwrap();
+                let (b, feed, _) = couch_basket(tmp.path());
+                for t in ["Golden Sun (USA)", "Metroid Fusion (USA)", "Mario Kart - Super Circuit (USA)"] {
+                    std::fs::write(b.games_dir("strawberry").join(format!("{t}.gba")), "x").unwrap();
+                }
+                let mut app = App::with(Settings::default(), b, Some(feed));
+                app.controllers = vec!["Xbox Wireless Controller".into()];
+                app.apply(Cmd::Couch);
+                let rom = app.basket.games_dir("strawberry").join("homebrew.gba");
+                app.shelf.played_mut().record(&rom, std::time::SystemTime::now(), 5_400);
+                setup(&mut app);
+                app.draw(&UiInput::default(), w, h);
+                app.canvas.save_png(&dir.join(format!("{name}-{w}.png"))).unwrap();
+            }
+        }
+        // The desktop saves dialog, and the focus ring on Settings.
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, feed, rom) = couch_basket(tmp.path());
+        let mut app = App::with(Settings { theme: ThemePref::Paper, ..Settings::default() }, b, Some(feed));
+        app.apply(Cmd::ShowSaves(rom));
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-saves-regular-paper.png")).unwrap();
+        app.modal = None;
+        app.tab = Tab::Settings;
+        app.pad_used = true;
+        app.draw(&UiInput::default(), 1280, 900);
+        app.apply(Cmd::Focus(Some("Map buttons…".into())));
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("settings-pad-regular-paper.png")).unwrap();
+    }
+
     fn job(app: &App, id: &str) -> Job {
         let f = app.feed.as_ref().unwrap().fruit(id).unwrap();
         queue::job_for(f, app.ctx().new_channel(f), 2).expect("a build for this PC")
@@ -1704,12 +2442,20 @@ pub fn run() -> Result<(), String> {
     let (w, h) = app.window_size();
     let mut video = Video::new("Fruit Basket", w, h, &app.keymap)?;
     let mut pads = Gamepads::new(Ports::Shared);
+    app.controllers = pads.connected();
+    if !app.controllers.is_empty() && app.settings.couch_on_controller {
+        app.apply(Cmd::Couch);
+    }
     while video.is_open() && !app.quit {
         let input = app.gather(&mut video, &mut pads);
         app.frame(&mut video, &input);
+        if let Err(e) = video.set_couch(app.couch.is_some()) {
+            app.notice = Some(e);
+            app.couch = None;
+        }
         thread::sleep(Duration::from_millis(12));
     }
-    let size = video.size();
+    let size = video.windowed_size();
     app.shutdown(size);
     Ok(())
 }

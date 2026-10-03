@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use basket_app::prefs::{self, Hidden};
+use basket_app::prefs::{self, Hidden, PadBindings};
 use serde::{Deserialize, Serialize};
 
 use crate::basket::Basket;
@@ -41,11 +41,14 @@ pub struct Settings {
     /// Games hidden from the library with Remove (the files stay).
     pub hidden: Vec<PathBuf>,
     pub window: Option<(u32, u32)>,
+    /// The launcher's own controller map (Map buttons…), as
+    /// `A = "South"`; buttons left out keep their defaults.
+    pub gamepad: Option<PadBindings>,
     #[serde(skip)]
     pub extra: Hidden<toml::Table>,
 }
 
-const KNOWN_KEYS: [&str; 12] = [
+const KNOWN_KEYS: [&str; 13] = [
     "root",
     "folders",
     "rescan_on_open",
@@ -58,6 +61,7 @@ const KNOWN_KEYS: [&str; 12] = [
     "watch",
     "hidden",
     "window",
+    "gamepad",
 ];
 
 impl Default for Settings {
@@ -76,6 +80,7 @@ impl Default for Settings {
             watch: vec!["pear".to_string()],
             hidden: Vec::new(),
             window: None,
+            gamepad: None,
             extra: Hidden::default(),
         }
     }
@@ -104,7 +109,7 @@ impl Settings {
             )*};
         }
         take!(root, folders, rescan_on_open, new_channel, check_on_open, install_without_asking, keep,
-              couch_on_controller, theme, watch, hidden, window);
+              couch_on_controller, theme, watch, hidden, window, gamepad);
         s.keep = s.keep.clamp(1, 3);
         s.extra = Hidden(t);
         s
@@ -157,6 +162,23 @@ mod tests {
         let back = Settings::from_table(prefs::read(&path).unwrap());
         assert_eq!(back.theme, ThemePref::Night);
         assert_eq!(back.keep, 3);
+        assert!(back.extra.0.contains_key("future"));
+    }
+
+    #[test]
+    fn gamepad_map_round_trips() {
+        let t: toml::Table = toml::from_str("theme = \"paper\"\nfuture = 1\n").unwrap();
+        let mut s = Settings::from_table(t);
+        let mut bindings = std::collections::BTreeMap::new();
+        bindings.insert("A".to_string(), "East".to_string());
+        bindings.insert("B".to_string(), "South".to_string());
+        s.gamepad = Some(PadBindings(bindings));
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        prefs::write(&path, APP_NAME, &s.extra.0, &KNOWN_KEYS, &s).unwrap();
+        let back = Settings::from_table(prefs::read(&path).unwrap());
+        assert_eq!(back.gamepad, s.gamepad);
+        assert_eq!(back.theme, ThemePref::Paper);
         assert!(back.extra.0.contains_key("future"));
     }
 }

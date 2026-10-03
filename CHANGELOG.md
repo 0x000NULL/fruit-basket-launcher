@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.5.0
+
+Controller: the whole launcher from a pad, couch mode, saves, and Map buttons.
+
+- **A controller reaches everything.**
+  - On the Library and Basket, the D-pad moves the selection and A plays or opens.
+  - **Y** goes into the aside, where the D-pad walks every button, tick box and link. A presses the one with the ring, and **B** comes back.
+  - Downloads and Settings are walked the same way.
+  - LB and RB change tabs, and **Start** opens couch mode.
+  - On the keyboard, Tab and Shift+Tab walk the controls, Z presses, and C is Y.
+- **Couch mode**, from Start, ☰ or the header's controller button.
+  - It is a full-screen view for the TV: the system tabs (LB/RB), a big cover, Continue, Saves and Details, and a strip of covers.
+  - B, Esc or ☰ goes back to the desktop.
+  - It opens by itself when a controller connects, unless that is turned off in Settings.
+  - While a game runs, the emulator has the pad and the launcher waits.
+- **Saves.** **Saves · N** lists the game's save states, newest first. **Load** starts the game from one, and **Delete** removes it after asking.
+  - Couch mode has the same list, with Start fresh at the end.
+  - Strawberry's slots 1–8 and Pomegranate's 0–9 both work.
+  - A deleted Pomegranate save takes its picture and notes with it.
+- **Couch arguments.** A fruit's new feed key `couch` (e.g. `--fullscreen --exit-on-quit`) is added after its launch arguments when a game starts from couch mode.
+- **Map buttons…** (Settings → Controller) remaps the launcher's own controller buttons.
+  - It is saved in settings.toml as `[gamepad]`, and Reset brings back the defaults.
+  - The keyboard always works, and each emulator keeps its own map.
+- Settings and the Basket's setup list show the connected controller.
+- Built on fruit-basket v0.2.0.
+
 ## v0.4.0
 
 Lifecycle: roll back, uninstall, move the basket, and fruits that ripen.

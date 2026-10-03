@@ -10,12 +10,13 @@ It is built on the same crates as the emulators
 `basket-app`, `basket-build`), so it looks and handles input exactly like them.
 No async runtime, no web view: a `minifb` window drawn with tiny-skia.
 
-Status: early. These tabs work:
-- the Library: scan, play, play time, compat, dump check
+Status: early. These work:
+- the Library: scan, play, play time, compat, dump check, saves
 - the Basket and Downloads: install, update, roll back, uninstall
-- Settings, including moving the basket
+- Settings, including moving the basket and mapping the controller
+- a controller everywhere, and couch mode
 
-Couch mode and self-update come next, a milestone at a time; see
+Self-update comes next; see
 [PROGRESS.md](PROGRESS.md) and [CHANGELOG.md](CHANGELOG.md).
 
 ## Using it
@@ -34,12 +35,22 @@ Couch mode and self-update come next, a milestone at a time; see
   - **Play** or **Continue** starts the game in its fruit. The launcher keeps last played and play time.
   - Compat squares come from each fruit's compatibility list on the site. Where the site has a No-Intro or Redump list, each game is checked against it.
   - **Remove** hides a game and never deletes the file.
-- **Keys.**
-  - **Z**: the big button
-  - **arrows**: move the selection
+  - **Saves · N** lists the game's save states: **Load** starts the game from one, **Delete** removes it.
+- **Couch mode.**
+  - A full-screen view for a TV and a controller: **Start** or the header's controller button opens it, and **B** or **☰** goes back.
+  - **LB/RB** switch system, **←/→** pick a game, **A** continues, **X** opens its saves, and **Y** shows details.
+  - It opens by itself when a controller connects (Settings → Controller).
+  - Fruits whose emulators support it start full screen, and go back to the launcher when you quit.
+- **Keys and buttons.**
+  - **Z** / **A**: the big button, or the control with the ring
+  - **arrows** / **D-pad**: move the selection, or the ring
+  - **C** / **Y**: into the aside; **X** / **B**: back
+  - **Tab**, **Shift+Tab**: walk the controls
   - **/**: FIND
-  - **PgUp/PgDn**: change tabs
-  - **Esc**: quit
+  - **PgUp/PgDn** / **LB/RB**: change tabs
+  - **Enter** / **Start**: couch mode
+  - **Esc**: quit (in couch mode: back to the desktop)
+  - **Map buttons…** in Settings changes the controller's buttons.
 
 ## Building
 

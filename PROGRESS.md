@@ -13,8 +13,8 @@ map: `docs/ARCHITECTURE.md`.
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
-| M5 | Controller: pad navigation, couch mode, saves view, Map buttons | next | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/` | | v1.0.0 |
+| M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done | v0.5.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | next | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -22,7 +22,7 @@ bumped in the same commit, and the release notes come from a
 
 ## Verified
 
-- `cargo test`: 47 pass. Covers:
+- `cargo test`: 56 pass. Covers:
   - feed signature: a real signed feed passes; a tampered feed, the wrong key or an older feed is refused
   - install, switch, prune, uninstall; a bad archive leaves the current build running
   - a wrong hash deletes the download; a network failure changes nothing
@@ -31,7 +31,11 @@ bumped in the same commit, and the release notes come from a
   - rollback options and jobs for a build; the rollback, uninstall and move dialogs end to end in `App`
   - data migration (once, never overwriting, before pruning); `{data}` filled and an unfilled placeholder refused; a fruit's first Play moving its cards into data/ (with this test binary as the emulator)
   - the free-space check; the mover (destination rules, rename, copy check, a failure leaving the basket, never into itself); paths rebased after a move
-  - renders of every tab state, the dialogs, the ripe banner and the space failure
+  - the controller's focus (direction, Tab order, a vanished focus), and in `App`: the D-pad walking Settings, A ticking a box, a far control scrolled into view, Y into the aside and B back
+  - save slots in both numberings with their pictures and notes; deleting one (and a pre-slots state with slot 0)
+  - couch mode end to end: Start, LB/RB, the saves list, delete through the dialog, Load (the stand-in emulator gets `--slot`), no input while the game runs, B out
+  - Map buttons: listen, bind with a swap, Done saves `[gamepad]`, Reset; the settings round trip keeps unknown keys
+  - renders of every tab state, the dialogs, the ripe banner, the space failure, couch mode at 1280×720 and 1920×1080, the focus ring and the Map dialog
 - `e2e_install_switch_and_refuse` (opt-in: `FRUITBASKET_E2E=1`; `FRUITBASKET_FEED` can point it at a local copy of the site instead) does all of this over HTTP. On 2026-10-03 it passed against the live feed:
   - installs Strawberry v1.4.0
   - fetches and matches its compat list
@@ -39,6 +43,7 @@ bumped in the same commit, and the release notes come from a
   - refuses a job with a wrong hash, leaving nothing on disk
   - (v0.4.0, same day) rolls back to the kept stable build through the dialog and forward again, moves the basket, and uninstalls with the games kept
 - A real window ran against the local site and wrote `settings.toml` on close.
+- Not yet done by hand for M5: anything with a real controller. Untested by hand: the pad walking each tab, hot-plugging with "open in couch mode" on, couch mode's borderless window entering and leaving on each OS, and Map buttons with a real pad. CI builds the macOS (CoreGraphics) and Linux (xrandr) screen-size code but nothing runs it.
 - Not yet done by hand: starting a real game from the Library (no ROM was available; `launch.rs` is tested with a stand-in program), clicking through the dialogs in a real window, and Move basket across two drives. The copy path is unit-tested, but every test move so far stayed on one volume and was a rename.
 
 ## Waiting on other repos
@@ -59,22 +64,33 @@ bumped in the same commit, and the release notes come from a
     - Releases are only v0.3.0 (`oldest v0.3.0`), with stable v0.3.0 and nightly `f1a2c09`. Strawberry is unchanged apart from `open: []`.
   - Launchers before v0.4.0 can't start Pomegranate from this feed. With no self-update until M6, update them by hand from GitHub.
   - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
-- **Crabapple**: will need `--slot N` too once it ships.
+- **Couch flags** (asked of each emulator on 2026-10-03, with the same convention everywhere): `--fullscreen` for that run only, `--exit-on-quit` (the pause menu's Quit exits with 0), and a pad route to pause (Guide, or SELECT+START held 1 s).
+  - **Pomegranate:** done in ps2emu v0.4.0 (tag commit `58d24fe`). The site still has to mirror it and set `couch --fullscreen --exit-on-quit` with `oldest v0.4.0`, through Ethan.
+  - **Strawberry:** asked, not started. It has no fullscreen and no pad route to its pause menu yet.
+  - **Crabapple:** asked for those plus `--slot N`. It isn't in the feed yet.
+  - Without the flags a fruit still works from couch mode: in a window, back when the emulator exits.
+- **Site, local and not deployed** (that session, 2026-10-03; deploying is Ethan's call):
+  - `812813b`: Strawberry's nightly becomes the v1.4.0 build (`5b00fe8`), which has `--slot`. Until it's deployed, Load on the nightly passes a flag that build doesn't know.
+  - `5af8902`: the `couch` key (`[]` everywhere for now), `site/fruit-basket/launcher/` for M6, and fetch-release checking a release's own `.sha256` files.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 - **Site**: deployed at `ef573f7`. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
   - The feed's LAUNCHER keys: `launch`, `load_slot`, `open` (all may use `{rom}`, `{slot}`, `{data}`), `carry`, and `oldest` (feedgen only; not in the feed).
   - The feed's top-level `launcher` entry is null: the site doesn't host launcher builds yet (M6).
 
-## For M5
+## For M6
 
-- **Slot ranges differ:** Strawberry uses 1–8, Pomegranate 0–9. The saves view needs a per-fruit range: read it from the slot files, or add a LAUNCHER key.
-- **Strawberry's nightly** (`e8bc5e3`) has no `--slot`, so on that build couch mode should offer Play only, not Load.
-- **Where save states live:** `library::save_dirs` gives the folders, the data folder for Pomegranate. `basket_app::slots` reads the state headers.
-- **Map buttons… and the setup list's Controller row** land with pad navigation.
+- **Hosting:** the site is ready (`5af8902`). Mirror each launcher release with `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`, then deploy. The feed's `launcher` entry is then the newest release.
+- **Notes:** feedgen's `launcher.notes` come from a CHANGELOG line in the site repo that is edited by hand. The site session takes them from this repo's `## vX.Y.Z` sections.
+- **Wired already, waiting for M6:**
+  - `App::launcher_update` and the banner's "Restart now" (`Cmd::RestartForUpdate`, a no-op today)
+  - `jobs::download`, the hash check, and `basket::extract` (all reusable)
 
 ## Known gaps
 
-- Map buttons…, the couch button and the launcher-update banner's Restart now do nothing yet (M5–M6).
+- The launcher-update banner's Restart now does nothing yet (M6).
+- Couch mode's covers are placeholders, like the Library's. The saves list has no pictures, though Pomegranate writes a `.png` for each slot.
+- The Map buttons dialog is taller than a 680-high window, and its bottom gets cut off there.
+- Saves on a fruit without `load_slot` can be shown and deleted but not loaded. The dialog's button becomes Show file.
 - The ripe banner shows only while the launcher is open; there is no OS notification.
 - Roll back offers only what the feed lists: one nightly, plus the stable releases. Older nightlies can't be re-downloaded.
 - Game covers are the mocks' striped placeholders. Real art (title captures, slot pictures) needs per-fruit probes.
@@ -86,6 +102,7 @@ bumped in the same commit, and the release notes come from a
 
 - Downloads → Earlier shows one row per job ("installed · stable v1.3.1"). The mock's separate "verified" and "installed" rows would say the same thing twice.
 - A busy install shows "Verifying…" in the aside and the step bars, as in `Installing.png`; a queued one shows "Queued".
-- The Controller row of the Basket's setup list is left out until Map buttons works (M5).
+- `Couch-Saves.png` lists memory cards. The launcher lists save-state slots, because those are what an emulator can start from.
+- Couch mode's Details shows the dump, saves and file in the hero; the mocks don't draw it.
 - The ripe alert has no mock of its own; it uses the launcher-update banner from `Launcher-Update.png`.
 - Move basket… asks to confirm in a dialog like the others. The mocks show only the button.

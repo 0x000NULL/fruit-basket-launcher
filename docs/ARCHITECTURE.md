@@ -58,7 +58,21 @@ to them depends on the fruit's templates (`launch`, `load_slot`, `open`):
 
 `launch::args` fills `{rom}`, `{slot}` and `{data}`, and refuses a
 placeholder it has nothing for, so a literal `{data}` never reaches an
-emulator. Pomegranate builds before v0.3.0 have no `--data`; the site
+emulator.
+
+A game started from couch mode gets the fruit's `couch` arguments after
+its `launch` or `load_slot` ones (never after `open`), filled the same way:
+e.g. `--fullscreen --exit-on-quit`, so the emulator fills the TV and its
+pause menu's Quit comes back to the launcher. The site sets `couch` only
+for a fruit whose released builds all take those flags (it raises `oldest`
+with it).
+
+Save states are `<stem>.s<N>.state`, beside the game or in `save_dirs`.
+`library::slots` reads the numbers from the files (Strawberry 1–8,
+Pomegranate 0–9), the time from Pomegranate's `.sN.toml` `saved_at` or
+else the file, and the files that go with each one, so `delete_slot`
+removes them too (and a pre-slots `<stem>.state` with slot 0, which
+Pomegranate would otherwise copy back). Pomegranate builds before v0.3.0 have no `--data`; the site
 leaves them out of the feed (`oldest` in its LAUNCHER file).
 
 ## Modules
@@ -66,6 +80,7 @@ leaves them out of the feed (`oldest` in its LAUNCHER file).
 | File | What it does |
 |---|---|
 | `main.rs` | module list; `app::run()` |
+| `focus.rs` | the controller's focus: `Spot`s the frame drew, `next` (nearest in a direction, level ones first), `cycle` (Tab) |
 | `app.rs` | `App`: state, the frame loop (poll → draw → apply `Cmd`s), `Ctx` (read-only view of the state shared by views and commands), the render and e2e tests |
 | `key.rs` | embedded public key, key ID, feed URL (`FRUITBASKET_FEED` overrides) |
 | `feed.rs` | feed types, `verify` / `fetch` / `load_cached` / `save_cached`, platform keys |
@@ -73,20 +88,21 @@ leaves them out of the feed (`oldest` in its LAUNCHER file).
 | `jobs.rs` | the download worker thread: a free-space check, then Download 0–70 %, Verify 70–85 %, Install 85–100 % |
 | `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `job_for_build`, `update_for`, `updates`, `rollback_options` |
 | `history.rs` | `history.log` append and read |
-| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `Played`, `rebase` (paths after a move) |
+| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `slots` / `delete_slot`, `Played`, `rebase` (paths after a move) |
 | `lists.rs` | fetches and caches compat and dump lists, checked against the feed |
 | `compat.rs` | `compat.txt` parse; level by serial, then title |
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
 | `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), start, a thread that times the session |
 | `mover.rs` | Move basket: where it goes, then rename or a checked copy on a thread |
-| `shelf.rs` | the Library's state: games, lists, hashing, the running game, `view()` |
-| `settings.rs` | `Settings`, unknown keys kept |
-| `platform.rs` | OS dark mode, free space, open / reveal, `~` paths |
+| `shelf.rs` | the Library's state: games, lists, hashing, the running game (from a slot, with couch arguments), `view()`, `couch_rows()` |
+| `settings.rs` | `Settings` (with `[gamepad]`, the launcher's controller map), unknown keys kept |
+| `platform.rs` | OS dark mode, free space, screen size, open / reveal, `~` paths |
 | `art.rs` | fruit icons (128 px, drawn at 64 and 32) and the basket mark |
-| `window.rs` | the `minifb` window and input gathering |
+| `window.rs` | the `minifb` window and input gathering; couch mode remakes it borderless at the screen's size |
 | `ui/mod.rs` | `Tab`, `Size` (regular ≥ 1180, compact ≥ 820, narrow), `Cmd`, the `Ui` drawing context and shared controls |
 | `ui/frame.rs` | header (tabs, FIND, Update all, couch button), the banner (launcher update, ripe fruit), footer |
-| `ui/modal.rs` | the dialog: Roll back, Uninstall, Move basket |
+| `ui/modal.rs` | the dialog: Roll back, Uninstall, Move basket, Saves, Delete save, Map buttons |
+| `ui/couch.rs` | couch mode: laid out at the mocks' 1280×720 and scaled |
 | `ui/library.rs`, `ui/basket.rs`, `ui/downloads.rs`, `ui/settings.rs` | the four tabs |
 
 ## The frame
@@ -106,10 +122,29 @@ While a dialog (`App::modal`) is open, the page under it is drawn with an
 empty input, so nothing on it reacts. The dialog gets the real input, and
 `modal_keys` replaces the page's shortcuts.
 
+### The controller's focus
+
+Every control that can be pressed goes through `Ui::hot(label, box)`: it
+reports a click, or A while it holds the focus, and registers a `Spot`
+(the label, `#1`, `#2`… when one repeats; its box; and its `Area`: the
+scrolling list, the aside, or the fixed header and footer). The next frame's
+D-pad steps through those spots with `focus::next`. A new control needs no
+navigation code. `App::focus` holds the focused label: `None` on the
+Library and Basket means the grid, where the D-pad moves the selection
+instead and **Y** steps into the aside. When the focus moves, the page or
+the aside scrolls to show it.
+
+Couch mode (`App::couch`) replaces the whole frame with `ui::couch` and its
+own keys (`couch_keys`). While a game runs it takes no input, because the
+emulator is reading the same pad. `run` asks `Video::set_couch` to match
+it after every frame. A controller plugging in (basket-app's
+`PadPoll::connected`) opens it when Settings says so.
+
 The view structs (`BasketView`, `LibraryView`, …) hold everything a tab
 needs, so the tabs can be rendered headless. The `shots` tests in `app.rs`
 render every state at 1280×900, 1024×680 and 640×880 in both themes to
-`target/shots/`, to compare with `docs/mocks/screens/` by eye.
+`target/shots/`, to compare with `docs/mocks/screens/` by eye. Couch mode
+renders at 1280×720 and 1920×1080.
 
 ## Threads
 

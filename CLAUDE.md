@@ -29,6 +29,8 @@ The e2e test downloads real builds from the live site.
 - **A failure never breaks the running build.** Extract to `.tmp`, rename, then rewrite `current` atomically (`basket::write_atomic`).
 - **Immediate-mode UI.** Drawing code reads view structs and emits `Cmd`s; only `App::apply` changes state. New screens get a state in a `shots` test, compared by eye with the mock.
 - **Dialogs** go through `App::modal` and `ui/modal.rs`. While one is open, the page draws with an empty input and `modal_keys` takes the keys.
+- **Every control that can be pressed goes through `Ui::hot`**, never bare `ui.clicked`, so the controller can reach it. The grid items (covers, cards, tiles) are the exception, because the D-pad moves the selection there.
+- **Couch mode never takes input while a game runs**, because the emulator reads the same pad.
 - **Emulator arguments come only from feed templates** (`launch`, `load_slot`, `open`), filled by `launch::args`, which refuses an unfilled placeholder.
   - A fruit that uses `{data}` keeps its saves in `<fruit>/data/`.
   - `carry` files move there once (`Basket::migrate_data`), never overwriting.

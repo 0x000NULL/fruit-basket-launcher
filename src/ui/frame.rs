@@ -5,6 +5,7 @@
 use basket_ui::text::Style;
 use minifb::Key;
 
+use crate::focus::Area;
 use super::{Cmd, Size, Tab, Ui};
 
 /// What the frame shows; borrowed from the app each frame.
@@ -30,6 +31,7 @@ const NARROW_ROW2: f32 = 68.0;
 
 /// Draw the header. Returns the y where the body starts.
 pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
+    ui.area = Area::Fixed;
     let (w, x0) = (ui.w(), ui.pad_x());
     let fg = ui.pal.fg;
     ui.cv.clear(ui.pal.bg);
@@ -50,7 +52,7 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
     }
     ui.cv.stroke_rect(cx, cy, cb, cb, 1.5, fg);
     gamepad_glyph(ui, cx + cb / 2.0, cy + cb / 2.0, if v.controller { ui.pal.bg } else { fg });
-    if ui.clicked(cx, cy, cb, cb) {
+    if ui.hot("Couch mode", cx, cy, cb, cb) {
         ui.emit(Cmd::Couch);
     }
     let mut right = if narrow { w - x0 } else { cx - 28.0 };
@@ -64,7 +66,7 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
         ui.cv.stroke_rect(bx, top, bw, cb, 2.0, fg);
         ui.cv.circle(bx + 20.0, top + cb / 2.0, 4.0, ui.pal.spot);
         ui.cv.text(bx + 33.0, top + 14.0, &label, &st);
-        if ui.clicked(bx, top, bw, cb) {
+        if ui.hot("Update all", bx, top, bw, cb) {
             ui.emit(Cmd::UpdateAll);
         }
         right = bx - 28.0;
@@ -117,6 +119,7 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
     if let Some(b) = v.banner {
         body = banner(ui, body, b);
     }
+    ui.area = Area::Main;
     body
 }
 
@@ -192,7 +195,7 @@ fn banner(ui: &mut Ui, y: f32, b: &Banner) -> f32 {
     let ax = later_x - 26.0 - aw;
     ui.cv.fill_rect(ax, y + 11.0, aw, 36.0, ui.pal.fg);
     ui.cv.text_center(ax + aw / 2.0, y + 20.0, &b.action.0, &act.color(ui.pal.bg));
-    let act_hit = ui.clicked(ax, y + 11.0, aw, 36.0);
+    let act_hit = ui.hot(&b.action.0, ax, y + 11.0, aw, 36.0);
 
     let reading = Style::reading(16.0).color(ui.pal.fg);
     let tx = x0 + 45.0 + lw + 18.0;
@@ -210,6 +213,7 @@ fn banner(ui: &mut Ui, y: f32, b: &Banner) -> f32 {
 
 /// Draw the footer and return the y where it starts (the body ends there).
 pub fn footer(ui: &mut Ui, v: &FrameView) -> f32 {
+    ui.area = Area::Fixed;
     let (x0, w, h) = (ui.pad_x(), ui.w(), ui.h());
     let top = h - 52.0;
     ui.cv.fill_rect(0.0, top, w, 52.0, ui.pal.bg);

@@ -67,6 +67,45 @@ pub fn free_space(path: &Path) -> Option<u64> {
     Some(kb * 1024)
 }
 
+/// The main display's size in the units windows are sized in.
+#[cfg(windows)]
+pub fn screen_size() -> Option<(usize, usize)> {
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetSystemMetrics(index: i32) -> i32;
+    }
+    // SAFETY: plain queries with no pointers. 0 and 1 are SM_CXSCREEN and SM_CYSCREEN.
+    let (w, h) = unsafe { (GetSystemMetrics(0), GetSystemMetrics(1)) };
+    (w > 0 && h > 0).then_some((w as usize, h as usize))
+}
+
+/// The main display's size in the units windows are sized in.
+#[cfg(target_os = "macos")]
+pub fn screen_size() -> Option<(usize, usize)> {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayPixelsWide(display: u32) -> usize;
+        fn CGDisplayPixelsHigh(display: u32) -> usize;
+    }
+    // SAFETY: plain queries on the main display's id; no pointers.
+    let (w, h) = unsafe {
+        let d = CGMainDisplayID();
+        (CGDisplayPixelsWide(d), CGDisplayPixelsHigh(d))
+    };
+    (w > 0 && h > 0).then_some((w, h))
+}
+
+/// The main display's size, from xrandr's current mode.
+#[cfg(not(any(windows, target_os = "macos")))]
+pub fn screen_size() -> Option<(usize, usize)> {
+    let out = output(Command::new("xrandr").arg("--current"))?;
+    // "   1920x1080     60.00*+": the line with the mode in use.
+    let mode = out.lines().find(|l| l.contains('*'))?.split_whitespace().next()?;
+    let (w, h) = mode.split_once('x')?;
+    Some((w.parse().ok()?, h.parse().ok()?))
+}
+
 /// Open a folder, file or URL with whatever the system uses for it.
 pub fn open(target: &str) {
     let mut cmd = if cfg!(windows) {

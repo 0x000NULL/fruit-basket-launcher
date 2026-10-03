@@ -6,6 +6,7 @@ use crate::ui::fmt_size;
 use basket_ui::text::Style;
 use basket_ui::widgets;
 
+use crate::focus::Area;
 use super::{capitalise, Cmd, Size, Ui};
 use crate::art::ICON_L;
 use crate::basket::Current;
@@ -60,6 +61,8 @@ pub struct Detail<'a> {
     pub can_roll_back: bool,
     /// Uninstall works: nothing is installing and no game is running.
     pub can_uninstall: bool,
+    /// The connected controller's name.
+    pub controller: Option<&'a str>,
 }
 
 pub struct BasketView<'a> {
@@ -142,7 +145,9 @@ pub fn draw(ui: &mut Ui, v: &BasketView, top: f32, bottom: f32) {
         ui.cv.fill_rect(ax, top, aside_w, bottom - top, panel);
         ui.cv.vrule(ax, top, bottom, 1.0, ui.pal.line);
         let pad = if ui.size == Size::Regular { 33.0 } else { 25.0 };
+        ui.area = Area::Aside;
         aside(ui, d, ax + pad, top, aside_w - pad - x0, bottom, v.aside_scroll);
+        ui.area = Area::Main;
     } else if v.sheet {
         let sy = top + 140.0;
         let panel = ui.panel();
@@ -155,7 +160,9 @@ pub fn draw(ui: &mut Ui, v: &BasketView, top: f32, bottom: f32) {
         if close || ui.pressed(minifb::Key::Escape) {
             ui.emit(Cmd::CloseSheet);
         }
+        ui.area = Area::Aside;
         aside(ui, d, x0, sy + 44.0, w - 2.0 * x0, bottom, v.aside_scroll);
+        ui.area = Area::Main;
     }
 }
 
@@ -446,7 +453,7 @@ fn primary(ui: &mut Ui, d: &Detail, x: f32, y: f32, w: f32) -> f32 {
             let lx = x + (w - lw - kw) / 2.0;
             ui.cv.text(lx, y + 16.0, &label, &st);
             ui.cv.text(lx + lw + 12.0, y + 19.0, "Z", &ks);
-            if ui.clicked(x, y, w, h) {
+            if ui.hot(&label, x, y, w, h) {
                 ui.emit(cmd);
             }
             y + h
@@ -510,6 +517,7 @@ fn setup(ui: &mut Ui, d: &Detail, x: f32, mut y: f32, w: f32) -> f32 {
             ("Signature", format!("verified · {}", d.key_id), true),
             ("Games", format!("games/ · {} found", d.games), d.games > 0),
             ("BIOS", bios, bios_ok),
+            ("Controller", d.controller.unwrap_or("none connected").to_string(), d.controller.is_some()),
         ],
         None => {
             let program = match d.target {
@@ -570,14 +578,14 @@ fn growing_box(ui: &mut Ui, d: &Detail, x: f32, y: f32, w: f32) {
         ui.cv.fill_rect(x + 21.0, iy, bw, 44.0, pal.fg);
         widgets::button_primary(ui.cv, x + 21.0 - 8.0, iy, bw, label, None, &pal);
         ui.check_mark(x + 21.0 + bw - 26.0, iy + 17.0, pal.bg);
-        if ui.clicked(x + 21.0, iy, bw, 44.0) {
+        if ui.hot(label, x + 21.0, iy, bw, 44.0) {
             ui.emit(Cmd::Watch(f.id.clone()));
         }
     } else {
         let label = "Tell me when it's ripe";
         let bw = widgets::button_width(ui.cv, label, None);
         widgets::button_secondary(ui.cv, x + 21.0, iy, bw, label, &pal);
-        if ui.clicked(x + 21.0, iy, bw, 44.0) {
+        if ui.hot(label, x + 21.0, iy, bw, 44.0) {
             ui.emit(Cmd::Watch(f.id.clone()));
         }
     }

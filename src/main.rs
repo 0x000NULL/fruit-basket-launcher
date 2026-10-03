@@ -7,6 +7,7 @@ mod basket;
 mod compat;
 mod dumps;
 mod feed;
+mod focus;
 mod history;
 mod jobs;
 mod key;

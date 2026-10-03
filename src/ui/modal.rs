@@ -23,6 +23,8 @@ pub struct ModalView<'a> {
     pub tick: Option<(&'a str, bool)>,
     pub cancel: &'a str,
     pub confirm: &'a str,
+    /// A third button at the left, for the picked row (Delete).
+    pub extra: Option<&'a str>,
 }
 
 const PAD: f32 = 28.0;
@@ -130,5 +132,13 @@ pub fn draw(ui: &mut Ui, v: &ModalView) {
     ui.cv.text_center(kx + cancel_w / 2.0, y + 14.0, v.cancel, &bold.color(ui.pal.fg));
     if ui.clicked(kx, y, cancel_w, BUTTON_H) {
         ui.emit(Cmd::ModalCancel);
+    }
+    if let Some(extra) = v.extra {
+        let ew = (ui.cv.measure(extra, &bold) + 40.0).round();
+        ui.cv.stroke_rect(x, y, ew, BUTTON_H, 2.0, ui.pal.fg);
+        ui.cv.text_center(x + ew / 2.0, y + 14.0, extra, &bold.color(ui.pal.fg));
+        if ui.clicked(x, y, ew, BUTTON_H) {
+            ui.emit(Cmd::ModalExtra);
+        }
     }
 }

@@ -13,6 +13,7 @@ use basket_ui::tokens::{hex, Rgb};
 use basket_ui::widgets::{self, mix};
 use tiny_skia::{PathBuilder, Transform};
 
+use crate::focus::Area;
 use super::basket::aside_width;
 use super::{Cmd, Size, Ui};
 use crate::compat::Level;
@@ -142,8 +143,11 @@ pub fn draw(ui: &mut Ui, v: &LibraryView, top: f32, bottom: f32) {
         ui.cv.fill_rect(ax, top, aside_w, bottom - top, panel);
         ui.cv.vrule(ax, top, bottom, 1.0, ui.pal.line);
         let pad = if ui.size == Size::Regular { 33.0 } else { 25.0 };
+        ui.area = Area::Aside;
         aside(ui, d, ax + pad, top, aside_w - pad - x0, bottom, v.aside_scroll);
+        ui.area = Area::Main;
     } else if sheet_open {
+        ui.area = Area::Aside;
         let sy = top + 140.0;
         let panel = ui.panel();
         ui.cv.fill_rect(0.0, sy, w, bottom - sy, panel);
@@ -155,7 +159,9 @@ pub fn draw(ui: &mut Ui, v: &LibraryView, top: f32, bottom: f32) {
         if close || ui.pressed(minifb::Key::Escape) {
             ui.emit(Cmd::CloseSheet);
         }
+        ui.area = Area::Aside;
         aside(ui, d, x0, sy + 44.0, w - 2.0 * x0, bottom, v.aside_scroll);
+        ui.area = Area::Main;
     }
 }
 
@@ -190,7 +196,7 @@ fn toolbar(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
         ui.cv.stroke_rect(cx, y, cw, 34.0, 1.5, ui.pal.fg);
         ui.cv.text(cx + 13.0, y + 9.0, label, &st);
         ui.cv.text(cx + 17.0 + lw, y + 10.0, &n.to_string(), &ns);
-        if ui.clicked(cx, y, cw, 34.0) && !on {
+        if ui.hot(label, cx, y, cw, 34.0) && !on {
             ui.emit(Cmd::LibFilter(id.map(str::to_string)));
         }
         cx += cw + 6.0;
@@ -260,7 +266,7 @@ fn continue_cards(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
         ui.cv.text(tx, y + 52.0, &sub, &mono);
         let (bx, by) = (cx + cw - 55.0, y + 26.0);
         play_button(ui, bx, by, 44.0);
-        if ui.clicked(bx, by, 44.0, 44.0) {
+        if ui.hot("Play", bx, by, 44.0, 44.0) {
             ui.emit(Cmd::Play(r.game.path.clone()));
         } else if ui.clicked(cx, y, cw, h) {
             ui.emit(Cmd::SelectGame(r.game.path.clone()));
@@ -284,7 +290,7 @@ fn play_button(ui: &mut Ui, x: f32, y: f32, s: f32) {
 
 /// A placeholder cover: the title's colour with diagonal stripes, the
 /// system top left and (large covers) the title bottom left.
-fn cover(ui: &mut Ui, r: &Row, x: f32, y: f32, w: f32, h: f32, label: bool) {
+pub(crate) fn cover(ui: &mut Ui, r: &Row, x: f32, y: f32, w: f32, h: f32, label: bool) {
     let c = cover_color(&r.game.title);
     ui.cv.fill_rect(x, y, w, h, c);
     let stripe = mix(c, [0, 0, 0], 0.22);
@@ -310,7 +316,7 @@ fn cover(ui: &mut Ui, r: &Row, x: f32, y: f32, w: f32, h: f32, label: bool) {
     }
 }
 
-fn squares(ui: &mut Ui, x: f32, y: f32, level: Option<Level>) -> f32 {
+pub(crate) fn squares(ui: &mut Ui, x: f32, y: f32, level: Option<Level>) -> f32 {
     let filled = level.map_or(0, Level::squares);
     for i in 0..4 {
         let sx = x + i as f32 * 11.0;
@@ -323,11 +329,11 @@ fn squares(ui: &mut Ui, x: f32, y: f32, level: Option<Level>) -> f32 {
     48.0
 }
 
-fn when(last: Option<SystemTime>) -> String {
+pub(crate) fn when(last: Option<SystemTime>) -> String {
     last.map(basket_ui::fmt::fmt_when).unwrap_or_else(|| "never".to_string())
 }
 
-fn level_label(level: Option<Level>) -> &'static str {
+pub(crate) fn level_label(level: Option<Level>) -> &'static str {
     level.map_or("Not tested", Level::label)
 }
 
@@ -460,7 +466,7 @@ fn aside(ui: &mut Ui, d: &GameDetail, x: f32, top: f32, w: f32, bottom: f32, scr
             let lx = x + (w - lw - 20.0) / 2.0;
             ui.cv.text(lx, y + 16.0, label, &st);
             ui.cv.text(lx + lw + 12.0, y + 20.0, "Z", &ks);
-            if ui.clicked(x, y, w, h) {
+            if ui.hot(label, x, y, w, h) {
                 ui.emit(Cmd::Play(r.game.path.clone()));
             }
         }

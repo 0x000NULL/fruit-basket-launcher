@@ -3,6 +3,7 @@
 //! which the app applies after drawing. Nothing here changes state itself.
 
 pub mod basket;
+pub mod couch;
 pub mod downloads;
 pub mod frame;
 pub mod library;
@@ -19,6 +20,7 @@ use minifb::Key;
 
 use crate::art::Art;
 use crate::feed::Channel;
+use crate::focus::{Area, Spot};
 use crate::settings::ThemePref;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,6 +81,9 @@ impl Size {
 /// Everything a frame changes, applied by the app after drawing.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cmd {
+    /// Move the controller's focus to a control (`Ui::hot` key); `None` is
+    /// back to the grid.
+    Focus(Option<String>),
     Tab(Tab),
     FocusFind(bool),
     Find(String),
@@ -133,6 +138,20 @@ pub enum Cmd {
     // The ripe banner.
     RipeInstall(String),
     RipeDismiss(String),
+    /// The dialog's third button (Delete in the saves dialog).
+    ModalExtra,
+    /// Map buttons: bind the picked row to this pad button.
+    ModalBind(gilrs::Button),
+    // Couch mode.
+    CouchSystem(usize),
+    CouchPick(usize),
+    /// A: Continue, or in the saves list, load the picked save.
+    CouchContinue,
+    /// X: open the saves list, or in it, delete the picked save.
+    CouchSaves,
+    CouchSavePick(usize),
+    CouchDetails,
+    CouchBack,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,12 +201,33 @@ pub struct Ui<'a> {
     /// A controller is the last thing used: show pad hints.
     pub pad: bool,
     pub cmds: Vec<Cmd>,
+    /// The focused control's key, if the focus is on the controls.
+    pub focus: Option<&'a str>,
+    /// A (or Z) went down this frame with the focus on a control.
+    pub activate: bool,
+    /// What the drawing code is in now; set by the views around their parts.
+    pub area: Area,
+    /// Every control drawn this frame, for the D-pad.
+    pub spots: Vec<Spot>,
 }
 
 impl<'a> Ui<'a> {
     pub fn new(cv: &'a mut Canvas, input: &'a UiInput, art: &'a Art, night: bool, pad: bool) -> Ui<'a> {
         let size = Size::of(cv.width());
-        Ui { cv, input, art, pal: if night { NIGHT } else { PAPER }, night, size, pad, cmds: Vec::new() }
+        Ui {
+            cv,
+            input,
+            art,
+            pal: if night { NIGHT } else { PAPER },
+            night,
+            size,
+            pad,
+            cmds: Vec::new(),
+            focus: None,
+            activate: false,
+            area: Area::Main,
+            spots: Vec::new(),
+        }
     }
 
     pub fn w(&self) -> f32 {
@@ -215,6 +255,21 @@ impl<'a> Ui<'a> {
             }
         }
         self.input.click_in(x, y, w, h)
+    }
+
+    /// A control that can be pressed: clicked, or focused when A goes
+    /// down. It registers itself for the D-pad under `label` (a repeated
+    /// label gets `#1`, `#2`…) and draws the focus ring when focused.
+    pub fn hot(&mut self, label: &str, x: f32, y: f32, w: f32, h: f32) -> bool {
+        let prefix = format!("{label}#");
+        let n = self.spots.iter().filter(|s| s.key == label || s.key.starts_with(&prefix)).count();
+        let key = if n == 0 { label.to_string() } else { format!("{label}#{n}") };
+        let on = self.focus == Some(key.as_str());
+        if on {
+            self.cv.stroke_rect(x - 5.0, y - 5.0, w + 10.0, h + 10.0, 2.0, self.pal.fg);
+        }
+        self.spots.push(Spot { key, x, y, w, h, area: self.area });
+        self.clicked(x, y, w, h) || (on && self.activate)
     }
 
     pub fn pressed(&self, k: Key) -> bool {
@@ -286,7 +341,7 @@ impl<'a> Ui<'a> {
         let w = self.small_button_width(label);
         self.cv.stroke_rect(x, y, w, 34.0, 1.5, self.pal.fg);
         self.cv.text(x + 13.0, y + 9.0, label, &st);
-        (w, self.clicked(x, y, w, 34.0))
+        (w, self.hot(label, x, y, w, 34.0))
     }
 
     /// Filled button, 34 high: the one action on a card (Try again).
@@ -295,7 +350,7 @@ impl<'a> Ui<'a> {
         let w = (self.cv.measure(label, &st) + 36.0).round();
         self.cv.fill_rect(x, y, w, 40.0, self.pal.fg);
         self.cv.text(x + 18.0, y + 12.0, label, &st);
-        (w, self.clicked(x, y, w, 40.0))
+        (w, self.hot(label, x, y, w, 40.0))
     }
 
     /// A small outline button drawn faded that never reports a click: an
@@ -362,7 +417,7 @@ impl<'a> Ui<'a> {
             }
             self.cv.stroke_rect(cx, y, w, 34.0, 1.5, self.pal.fg);
             self.cv.text(cx + 13.0, y + 9.0, label, &st);
-            if self.clicked(cx, y, w, 34.0) && !on {
+            if self.hot(label, cx, y, w, 34.0) && !on {
                 hit = Some(i);
             }
             cx += w - 1.5;
@@ -378,7 +433,7 @@ impl<'a> Ui<'a> {
             pal.fg = self.faded();
         }
         let w = widgets::tick_option(self.cv, x, y, label, on, &pal, false);
-        (22.0, enabled && self.clicked(x - 4.0, y - 4.0, w + 8.0, 24.0))
+        (22.0, enabled && self.hot(label, x - 4.0, y - 4.0, w + 8.0, 24.0))
     }
 
     /// Underlined text link; returns (width, clicked).
@@ -387,7 +442,7 @@ impl<'a> Ui<'a> {
         let w = self.cv.text(x, y, label, &st);
         let (asc, _, _) = self.cv.fonts.line_metrics(Face::Interface, 13.0);
         self.cv.underline(x, y + asc + 3.0, w, color);
-        (w, self.clicked(x, y - 2.0, w, 20.0))
+        (w, self.hot(label, x, y - 2.0, w, 20.0))
     }
 
     pub fn key_width(&mut self, label: &str) -> f32 {
@@ -406,7 +461,14 @@ impl<'a> Ui<'a> {
             let tw = self.cv.measure(label, &st);
             let w = self.key_width(label);
             self.cv.stroke_round_rect(x, y - 1.0, w, 24.0, [12.0; 4], 1.5, self.pal.fg);
-            self.cv.text(x + (w - tw) / 2.0, y + 4.0, label, &st);
+            if label == "☰" {
+                // The fonts have no ☰: three bars.
+                for i in 0..3 {
+                    self.cv.fill_rect(x + w / 2.0 - 5.0, y + 5.0 + i as f32 * 4.0, 10.0, 1.5, self.pal.fg);
+                }
+            } else {
+                self.cv.text(x + (w - tw) / 2.0, y + 4.0, label, &st);
+            }
             w
         } else {
             widgets::keycap(self.cv, x, y, label, &self.pal, false)

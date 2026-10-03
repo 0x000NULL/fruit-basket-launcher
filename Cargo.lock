@@ -95,8 +95,8 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "basket-app"
-version = "0.1.0"
-source = "git+https://github.com/0x000NULL/fruit-basket?tag=v0.1.0#22e6994dbd14a16c073cbd3158e4d08fac067357"
+version = "0.2.0"
+source = "git+https://github.com/0x000NULL/fruit-basket?tag=v0.2.0#44162120664b6520d0667f10b99fea81b1e2fd30"
 dependencies = [
  "anyhow",
  "basket-ui",
@@ -112,16 +112,16 @@ dependencies = [
 
 [[package]]
 name = "basket-build"
-version = "0.1.0"
-source = "git+https://github.com/0x000NULL/fruit-basket?tag=v0.1.0#22e6994dbd14a16c073cbd3158e4d08fac067357"
+version = "0.2.0"
+source = "git+https://github.com/0x000NULL/fruit-basket?tag=v0.2.0#44162120664b6520d0667f10b99fea81b1e2fd30"
 dependencies = [
  "winresource",
 ]
 
 [[package]]
 name = "basket-ui"
-version = "0.1.0"
-source = "git+https://github.com/0x000NULL/fruit-basket?tag=v0.1.0#22e6994dbd14a16c073cbd3158e4d08fac067357"
+version = "0.2.0"
+source = "git+https://github.com/0x000NULL/fruit-basket?tag=v0.2.0#44162120664b6520d0667f10b99fea81b1e2fd30"
 dependencies = [
  "anyhow",
  "chrono",
@@ -477,7 +477,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "fruitbasket"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "basket-app",
  "basket-build",
@@ -1563,7 +1563,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1829,7 +1829,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -2294,7 +2294,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
