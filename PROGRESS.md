@@ -55,46 +55,48 @@ bumped in the same commit, and the release notes come from a
 - Not yet done by hand for M5: anything with a real controller. Untested by hand: the pad walking each tab, hot-plugging with "open in couch mode" on, couch mode's borderless window entering and leaving on each OS, and Map buttons with a real pad. CI builds the macOS (CoreGraphics) and Linux (xrandr) screen-size code but nothing runs it.
 - Not yet done by hand: starting a real game from the Library (no ROM was available; `launch.rs` is tested with a stand-in program), clicking through the dialogs in a real window, and Move basket across two drives. The copy path is unit-tested, but every test move so far stayed on one volume and was a rename.
 
-## Waiting on other repos
+## The site and the other repos
 
-- **Strawberry `--slot N`**: done.
-  - Released in v1.4.0 (2026-10-03) and mirrored to the site.
-  - `strawberry/LAUNCHER` now has `load_slot {rom} --slot {slot}`, in site commit `0764b32`.
-  - Strawberry's nightly is still the v1.3.1 build (`e8bc5e3`), which lacks the flag, so couch Load (M5) must offer Load only on builds that have it.
-- **Pomegranate `--data` and `--slot`**: done.
-  - Both flags shipped in v0.3.0 (2026-10-03, tag commit `f1a2c09`). It is on the site as stable v0.3.0, with nightly `f1a2c09` (the same zip).
-  - The feed has used `--data` since `2026-10-03T17:36:29Z` (details below).
-  - `ps2emu play <image> --data <DIR> [--slot N]`. Without a game, `ps2emu --data <DIR>` opens its library.
-  - **Slots are 0–9** (`<stem>.s0.state` to `.s9.state`), not 1–8 like Strawberry's. The couch saves view (M5) needs a per-fruit slot range; take it from the slot files, or add a LAUNCHER key.
-  - `--data` holds ps2emu.toml, cards/, states/, cache/ and screenshots. Migrate only ps2emu.toml, cards/ and states/; cache/ rebuilds itself. ps2emu migrates nothing. It exits 7 if DIR can't be created.
-  - **The launcher side is done in v0.4.0:** `{data}` = `<root>/<fruit>/data/`, the `carry` files move there once, saves are read from it, and Open uses an `open` template.
-  - **The site side is live** (site `ef573f7`, feed `2026-10-03T17:36:29Z`, checked here with minisign):
-    - `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, and `carry` unchanged.
-    - Releases are only v0.3.0 (`oldest v0.3.0`), with stable v0.3.0 and nightly `f1a2c09`. Strawberry is unchanged apart from `open: []`.
-  - Launchers before v0.4.0 can't start Pomegranate from this feed. With no self-update until M6, update them by hand from GitHub.
-  - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
-- **Couch flags** (asked of each emulator on 2026-10-03, with the same convention everywhere): `--fullscreen` for that run only, `--exit-on-quit` (the pause menu's Quit exits with 0), and a pad route to pause (Guide, or SELECT+START held 1 s).
-  - **Pomegranate:** done in ps2emu v0.4.0 (tag commit `58d24fe`). It is live: the feed (generated 2026-10-03T18:14:23Z, site `26ceac2`) has stable v0.4.0, nightly `58d24fe`, `couch ["--fullscreen","--exit-on-quit"]`, and only v0.4.0 in releases (`oldest v0.4.0`). Launcher v0.5.1 gives `couch` only to builds the feed lists, so an installed or kept v0.3.0 doesn't get it.
-  - **Strawberry:** done in v1.5.0 (`4ecce2e`, released 2026-10-03, with windows-x64, linux-x64, macos-x64 and macos-arm64). It is live: stable v1.5.0, nightly `4ecce2e` (the same zip), releases only v1.5.0 (`oldest v1.5.0`), and `couch ["--fullscreen","--exit-on-quit"]`. v1.4.0 and earlier stay on the site but out of the feed.
-  - **Crabapple:** all four (`--slot N` 1–8, `--fullscreen`, `--exit-on-quit`, Guide or SELECT+START held 1 s) are on its main at `12c1737`, after v0.9.0 and not yet in a release. It isn't in the feed yet. When it goes in (Ethan's call): `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, and `oldest` set to the first tag with the flags.
-  - Without the flags a fruit still works from couch mode: in a window, back when the emulator exits.
-- **Site, deployed at `26ceac2`** (2026-10-03, by Ethan through the site session):
-  - `812813b`: Strawberry's nightly is now the v1.4.0 build (`5b00fe8`), which has `--slot`.
-  - `5af8902`: the `couch` key, `site/fruit-basket/launcher/` for M6, and fetch-release checking a release's own `.sha256` files.
-- **Site, deployed at `d866b48`** (2026-10-03, by Ethan through the site session). The feed was generated 2026-10-03T20:45:27Z and checked here with minisign.
-  - `launcher` is v1.0.0, with all four platforms. The windows-x64 zip downloaded from the live URL hashes to the feed's SHA-256 (`5d0b3b99…`), and that matches GitHub's `.sha256`.
-  - Strawberry v1.5.0 with `couch` (above).
-  - v0.5.x was never mirrored.
-- **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
-- **Site**: deployed at `ef573f7`. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
-  - The feed's LAUNCHER keys: `launch`, `load_slot`, `open` (all may use `{rom}`, `{slot}`, `{data}`), `carry`, and `oldest` (feedgen only; not in the feed).
-  - The feed's top-level `launcher` entry is null: the site doesn't host launcher builds yet (M6).
+As of 2026-10-03, nothing the launcher needs is waiting on another repo.
 
-## After v1.0.0
+- **The site** is deployed at `d866b48`.
+  - The live feed was generated 2026-10-03T20:45:27Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
+  - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
+  - Feed keys per fruit, from its `LAUNCHER` file:
+    - `launch`, `load_slot`, `open` and `couch` may use `{rom}`, `{slot}` and `{data}`.
+    - `couch` goes after `launch` or `load_slot` in couch mode, never after `open`.
+    - Also `carry`, and `oldest`, which feedgen uses and the feed doesn't carry.
+  - **The launcher entry** is v1.0.0 for windows-x64, linux-x64, macos-arm64 and macos-x64.
+    - The Windows zip from the live URL matches the feed's SHA-256 (`5d0b3b99…`) and GitHub's `.sha256`.
+    - v0.5.x was never mirrored.
+- **Strawberry** is stable v1.5.0, with nightly `4ecce2e` (the same zip).
+  - The feed lists only v1.5.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
+  - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`.
+  - Its slots are 1–8, beside the ROM. `--fullscreen` covers the primary display. Its pad route to pause is Guide, or Select+Start held 1 s.
+  - Strawberry stays on fruit-basket v0.1.0, which is fine because v0.2.0 only adds things.
+- **Pomegranate** (ps2emu) is stable v0.4.0, with nightly `58d24fe` (the same zip).
+  - The feed lists only v0.4.0 (`oldest v0.4.0`).
+  - `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, `couch --fullscreen --exit-on-quit`.
+  - `carry` is `ps2emu.toml cards states`; they move into `data/` once (cache/ rebuilds itself).
+  - Its slots are 0–9 in `data/states/`, each with a `.png` and a `.toml` (`saved_at`). Deleting slot 0 also deletes a pre-slots `<stem>.state`. ps2emu asked that the launcher never write `ps2emu.toml`.
+  - Launcher v0.5.1+ passes `couch` only to builds the feed lists, so an installed or kept v0.3.0 runs from couch mode in a window.
+- **Crabapple** isn't in the feed. Its couch flags are on its main at `12c1737`, after v0.9.0 and not yet released: `--slot N` (1–8), `--fullscreen`, `--exit-on-quit`, and Guide or SELECT+START held 1 s.
+  - Whether and when it goes in is Ethan's call: tag, then the site mirrors it.
+  - Its LAUNCHER would then be `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, with `oldest` set to that tag.
+  - v0.9.0 ships windows-x64 and linux-x64 only.
+- **fruit-basket** (the shared crates) is at v0.2.0 (`4416212`). It adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+- **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
-- **Mirror each release to the site** (the site session, with Ethan's OK): `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`, a notes line from this CHANGELOG, then deploy. v0.5.1 was asked for first; from v1.0.0 on, mirroring a release is what updates everyone.
-- **The first real self-update** happens when v1.0.1 is mirrored and a v1.0.0 picks it up. The live path (site URL, 1-year nginx cache on release files, macOS and Linux) is only proven then.
-- **Strawberry and Crabapple couch flags:** once a release has them, the site sets their `couch` key and raises `oldest` with it. No launcher change is needed.
+## Releasing from here
+
+- **Every launcher release the site mirrors updates every v1.0.0+ install.** Mirror one only when it's meant to ship:
+  1. Tag it.
+  2. With Ethan's OK, the site session runs `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`.
+  3. It writes a notes line from this CHANGELOG.
+  4. It deploys.
+- **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
+- **The first real self-update** happens when v1.0.1 is mirrored and a v1.0.0 picks it up. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps
 
@@ -104,7 +106,7 @@ bumped in the same commit, and the release notes come from a
 - The Map buttons dialog is taller than a 680-high window, and its bottom gets cut off there.
 - Saves on a fruit without `load_slot` can be shown and deleted but not loaded. The dialog's button becomes Show file.
 - The ripe banner shows only while the launcher is open; there is no OS notification.
-- Roll back offers only what the feed lists: one nightly, plus the stable releases. Older nightlies can't be re-downloaded.
+- Roll back offers only what the feed lists: one nightly, plus the stable releases at or after `oldest`. Older builds can't be re-downloaded (Strawberry v1.4.0 and Pomegranate v0.3.0 today); ones kept on disk still work.
 - Game covers are the mocks' striped placeholders. Real art (title captures, slot pictures) needs per-fruit probes.
 - The library is rescanned at start and when the tab opens (if "Rescan when the launcher opens" is on). Nothing watches the folders.
 - Library sort and view choices are not saved between runs.

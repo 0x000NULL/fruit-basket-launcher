@@ -88,7 +88,10 @@ to them depends on the fruit's templates (`launch`, `load_slot`, `open`):
 
 `launch::args` fills `{rom}`, `{slot}` and `{data}`, and refuses a
 placeholder it has nothing for, so a literal `{data}` never reaches an
-emulator.
+emulator. The feed lists only a fruit's builds at or after `oldest` in its
+LAUNCHER file. Today those are Pomegranate v0.4.0 and Strawberry v1.5.0,
+the first builds with `--data` (Pomegranate) and the couch flags. Older
+builds kept on disk can still be rolled back to.
 
 A game started from couch mode gets the fruit's `couch` arguments after
 its `launch` or `load_slot` ones (never after `open`), filled the same way:
@@ -103,8 +106,7 @@ Save states are `<stem>.s<N>.state`, beside the game or in `save_dirs`.
 Pomegranate 0–9), the time from Pomegranate's `.sN.toml` `saved_at` or
 else the file, and the files that go with each one, so `delete_slot`
 removes them too (and a pre-slots `<stem>.state` with slot 0, which
-Pomegranate would otherwise copy back). Pomegranate builds before v0.3.0 have no `--data`; the site
-leaves them out of the feed (`oldest` in its LAUNCHER file).
+Pomegranate would otherwise copy back).
 
 ## Modules
 

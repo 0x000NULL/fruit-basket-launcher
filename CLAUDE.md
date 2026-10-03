@@ -1,7 +1,8 @@
 # CLAUDE.md: Fruit Basket launcher
 
 One window for the Fruit Basket emulators: the game library, installing and
-updating the fruits, a downloads queue, settings, and (later) couch mode.
+updating the fruits, a downloads queue, settings, couch mode for a controller,
+and updating itself. All milestones (M0–M6) are done; v1.0.0 is live.
 It is Rust, built on the `fruit-basket` crates (`basket-ui`, `basket-app`,
 `basket-build`, public repo `0x000NULL/fruit-basket`, pinned by git tag).
 
@@ -52,3 +53,5 @@ The e2e test downloads real builds from the live site.
 - **GitHub-hosted runners only.** The repo is public, so it must never use the self-hosted BULV runners.
 - **The site** (`../projects.ethanaldrich.net`, private) is committed separately and deployed by Ethan; don't push or deploy it unasked.
 - **Other repos** (Strawberry, Crabapple, ps2emu) are changed by their own sessions; ask them rather than editing.
+- **fruit-basket** (the shared crates) has no session of its own. Keep changes there additive, tag them, and pin the launcher to the tag.
+- **A launcher release the site mirrors is an update for every v1.0.0+ install.** Tag freely, but the site mirrors one only with Ethan's OK.
