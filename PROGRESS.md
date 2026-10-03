@@ -43,14 +43,18 @@ bumped in the same commit, and the release notes come from a
   - Released in v1.4.0 (2026-10-03) and mirrored to the site.
   - `strawberry/LAUNCHER` now has `load_slot {rom} --slot {slot}`, in site commit `0764b32`.
   - Strawberry's nightly is still the v1.3.1 build (`e8bc5e3`), which lacks the flag, so couch Load (M5) must offer Load only on builds that have it.
-- **Pomegranate**:
-  - v0.2.0 is mirrored and live; the nightly is the same v0.2.0 Windows zip (build `0105053`).
-  - Asked for in ps2emu v0.3.0 (session `ps2emu-39`, 2026-10-03):
-    - `--slot N`: couch Load needs it.
-    - `--data DIR`: lets its saves live outside the build folder.
-  - Until then the launcher moves the files on its `carry` list between builds.
-  - When v0.3.0 is out, the site session adds `load_slot play {rom} --slot {slot}` to its LAUNCHER file.
-  - Then this repo adds `{data}` support and a one-time migration, and changes `launch` to `play {rom} --data {data}` and drops `carry`, together (M4).
+- **Pomegranate**: v0.3.0 (2026-10-03, tag commit `f1a2c09`) has both flags. The site session is mirroring it and adding `load_slot play {rom} --slot {slot}`.
+  - `ps2emu play <image> --data <DIR> [--slot N]`. Without a game, `ps2emu --data <DIR>` opens its library.
+  - **Slots are 0–9** (`<stem>.s0.state` to `.s9.state`), not 1–8 like Strawberry's. The couch saves view (M5) needs a per-fruit slot range; take it from the slot files, or add a LAUNCHER key.
+  - `--data` holds ps2emu.toml, cards/, states/, cache/ and screenshots. Migrate only ps2emu.toml, cards/ and states/; cache/ rebuilds itself. ps2emu migrates nothing. It exits 7 if DIR can't be created.
+  - **M4 work in this repo, as one change:**
+    1. Fill `{data}` as `<root>/<fruit>/data/`.
+    2. Move the current build's carry files there once.
+    3. Change the site's `launch` to `play {rom} --data {data}` and `load_slot` to `play {rom} --data {data} --slot {slot}`.
+    4. Drop `carry`.
+    5. Point `library::saves` at the data folder.
+  - Builds before v0.3.0 don't take `--data`, so a rollback to one has to fall back to the carry behaviour, or stop offering pre-v0.3.0 builds.
+  - v0.2.0 and v0.1.0 releases are kept on the site.
 - **Crabapple**: will need `--slot N` too once it ships.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 - **Site**: deployed. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
