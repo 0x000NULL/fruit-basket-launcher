@@ -208,7 +208,7 @@ fn part_path(basket: &Basket, name: &str) -> PathBuf {
 
 /// Stream `url` to `to`, hashing as it goes. Stops past `size` bytes plus a
 /// little slack, so a wrong-length file fails fast instead of filling a disk.
-fn download(url: &str, to: &Path, size: u64, progress: &mut dyn FnMut(u64)) -> io::Result<String> {
+pub(crate) fn download(url: &str, to: &Path, size: u64, progress: &mut dyn FnMut(u64)) -> io::Result<String> {
     if let Some(parent) = to.parent() {
         fs::create_dir_all(parent)?;
     }

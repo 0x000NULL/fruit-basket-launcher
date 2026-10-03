@@ -35,6 +35,7 @@ use crate::ui::frame::{self, Banner, FrameView};
 use crate::ui::modal::{self, ModalView};
 use crate::ui::settings::{FruitStorage, SettingsView};
 use crate::ui::{self, capitalise, Cmd, Flag, Size, Tab, Ui};
+use crate::update::{self, Upd};
 use crate::window::Video;
 
 pub const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
@@ -114,6 +115,9 @@ pub struct App {
     pad_used: bool,
     pub quit: bool,
     launcher_update: Option<String>,
+    /// A newer launcher this folder can't take: (build, download URL).
+    update_manual: Option<(String, String)>,
+    update_rx: Option<Receiver<Upd>>,
     storage: Option<(String, Vec<FruitStorage>)>,
     keymap: KeyMap,
     padmap: PadMap,
@@ -208,6 +212,7 @@ impl App {
         let basket = settings.basket();
         let cached = feed::load_cached(&basket.launcher_dir(), &key::public_key());
         let mut app = App::with(settings, basket, cached);
+        app.check_launcher_update();
         if app.settings.check_on_open || app.feed.is_none() {
             app.check_feed();
         }
@@ -235,6 +240,8 @@ impl App {
             pad_used: false,
             quit: false,
             launcher_update: None,
+            update_manual: None,
+            update_rx: None,
             storage: None,
             keymap: keymap(),
             padmap: settings.gamepad.as_ref().map_or_else(padmap, |b| b.to_padmap(padmap())),
@@ -313,6 +320,28 @@ impl App {
         }
     }
 
+    /// A newer launcher in the feed: stage it on a thread, or if this
+    /// folder can't be written, offer the download. Never in tests, where
+    /// the exe is the test binary.
+    fn check_launcher_update(&mut self) {
+        if cfg!(test) || self.update_rx.is_some() || self.launcher_update.is_some() || self.update_manual.is_some() {
+            return;
+        }
+        let Some(b) = self.feed.as_ref().and_then(|f| f.launcher.as_ref()) else { return };
+        if !update::newer(&b.build, VERSION) {
+            return;
+        }
+        let Some(asset) = b.assets.get(feed::this_platform()).cloned() else { return };
+        let dir = update::dir(&self.basket.launcher_dir());
+        if update::staged(&dir).is_some_and(|(s, _)| s == b.build) {
+            self.launcher_update = Some(b.build.clone());
+        } else if std::env::current_exe().is_ok_and(|e| update::can_replace(&e)) {
+            self.update_rx = Some(update::start(b.build.clone(), asset, dir));
+        } else {
+            self.update_manual = Some((b.build.clone(), asset.url));
+        }
+    }
+
     /// Fetch the feed on a background thread; `poll` picks the result up.
     pub fn check_feed(&mut self) {
         if self.feed_rx.is_some() {
@@ -344,6 +373,7 @@ impl App {
                         if self.settings.install_without_asking {
                             self.apply(Cmd::UpdateAll);
                         }
+                        self.check_launcher_update();
                     }
                     Err(e) => self.feed_error = Some(e.to_string()),
                 }
@@ -368,6 +398,15 @@ impl App {
             self.refresh_installed();
         }
         self.poll_move();
+        if let Some(rx) = &self.update_rx {
+            if let Ok(r) = rx.try_recv() {
+                self.update_rx = None;
+                match r {
+                    Upd::Staged(build) => self.launcher_update = Some(build),
+                    Upd::Failed(e) => self.notice = Some(format!("the launcher update didn't download: {e}")),
+                }
+            }
+        }
         if self.shelf.poll(&self.basket.launcher_dir(), self.feed.as_ref()) && self.shelf.running().is_none() {
             self.play_error = None;
         }
@@ -460,7 +499,7 @@ impl App {
             scroll: self.scroll,
         });
         let lv = (self.tab == Tab::Library).then(|| self.shelf.view(&self.basket, self.feed.as_ref(), &self.find, self.sheet, self.scroll, self.aside_scroll));
-        let banner = banner(self.launcher_update.as_deref(), &ctx);
+        let banner = banner(self.launcher_update.as_deref(), self.update_manual.as_ref(), &ctx);
         let mv = self.modal.as_ref().and_then(|m| modal_view(m, self.feed.as_ref(), &self.basket, &self.installed));
         // Under a dialog the page draws, but nothing on it can be clicked.
         let cview = self.couch.as_ref().map(|c| couch_view(c, &self.shelf, self.feed.as_ref(), &self.basket, &self.installed, &self.controllers));
@@ -935,7 +974,10 @@ impl App {
             }
             Cmd::CheckNow => self.check_feed(),
             Cmd::OpenUrl(url) => platform::open(&url),
-            Cmd::DismissLauncherUpdate => self.launcher_update = None,
+            Cmd::DismissLauncherUpdate => {
+                self.launcher_update = None;
+                self.update_manual = None;
+            }
             Cmd::Select(id) => {
                 if self.selected.as_deref() != Some(id.as_str()) {
                     self.aside_scroll = 0.0;
@@ -1127,8 +1169,14 @@ impl App {
                 }
             }
             Cmd::MapButtons => self.modal = Some(Modal::Map { map: self.padmap.clone(), pick: 0, listening: false }),
-            // Wired up in M6.
-            Cmd::RestartForUpdate => {}
+            // The new process swaps the staged build in, then starts it.
+            Cmd::RestartForUpdate => {
+                self.settings.save();
+                match std::env::current_exe().and_then(|exe| Command::new(exe).spawn()) {
+                    Ok(_) => self.quit = true,
+                    Err(e) => self.notice = Some(format!("couldn't restart: {e}")),
+                }
+            }
         }
     }
 
@@ -1560,7 +1608,15 @@ impl<'a> Ctx<'a> {
 
 /// The banner: a launcher update staged, else the first watched fruit
 /// that has ripened (released, with a build for this PC, not installed).
-fn banner(launcher_update: Option<&str>, ctx: &Ctx) -> Option<Banner> {
+fn banner(launcher_update: Option<&str>, manual: Option<&(String, String)>, ctx: &Ctx) -> Option<Banner> {
+    if let Some((v, url)) = manual {
+        return Some(Banner {
+            lead: format!("Launcher {v}"),
+            text: "is out. This folder can't be written, so get it from the site.".into(),
+            action: ("Download".into(), Cmd::OpenUrl(url.clone())),
+            later: Cmd::DismissLauncherUpdate,
+        });
+    }
     if let Some(v) = launcher_update {
         return Some(Banner {
             lead: format!("Launcher {v}"),
@@ -2437,8 +2493,11 @@ mod tests {
     }
 }
 
-pub fn run() -> Result<(), String> {
+pub fn run(updated: Option<String>) -> Result<(), String> {
     let mut app = App::new();
+    if let Some(from) = updated {
+        app.notice = Some(format!("updated from {from} to {VERSION}"));
+    }
     let (w, h) = app.window_size();
     let mut video = Video::new("Fruit Basket", w, h, &app.keymap)?;
     let mut pads = Gamepads::new(Ports::Shared);

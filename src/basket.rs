@@ -307,7 +307,7 @@ fn carry_over(from: &Path, to: &Path, names: &[String]) -> io::Result<()> {
     Ok(())
 }
 
-fn find_exe(dir: &Path, bin: &str) -> Option<PathBuf> {
+pub(crate) fn find_exe(dir: &Path, bin: &str) -> Option<PathBuf> {
     let want = if cfg!(windows) { format!("{bin}.exe") } else { bin.to_string() };
     let direct = dir.join(&want);
     if direct.is_file() {

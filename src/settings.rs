@@ -92,6 +92,13 @@ impl Settings {
         if cfg!(test) {
             return None;
         }
+        // Debug builds: a settings file elsewhere, so a manual test (a local
+        // site, a self-update) never touches the real one.
+        if cfg!(debug_assertions) {
+            if let Some(p) = std::env::var_os("FRUITBASKET_CONFIG") {
+                return Some(PathBuf::from(p));
+            }
+        }
         prefs::config_path(APP_DIR)
     }
 

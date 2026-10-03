@@ -3,6 +3,8 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # By hand: build and package every target without releasing anything.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -30,6 +32,13 @@ jobs:
             os: macos-latest
             target: aarch64-apple-darwin
             archive: tar
+          # Intel Macs: cross-compiled on the Apple Silicon runner, so its
+          # tests (which would need Rosetta) run on macos-arm64 only.
+          - name: macos-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar
+            cross: true
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -43,13 +52,14 @@ jobs:
         with:
           key: ${{ matrix.target }}
       - run: cargo test --target ${{ matrix.target }}
+        if: ${{ !matrix.cross }}
       - name: Build the launcher
         run: cargo build --profile dist --target ${{ matrix.target }}
       - name: Stage the package
         shell: bash
         run: |
           set -euo pipefail
-          pkg="fruitbasket-${GITHUB_REF_NAME}-${{ matrix.name }}"
+          pkg="fruitbasket-${GITHUB_REF_NAME//\//-}-${{ matrix.name }}"
           mkdir -p "dist/$pkg"
           if [ "${{ runner.os }}" = "Windows" ]; then
             cp "target/${{ matrix.target }}/dist/fruitbasket.exe" "dist/$pkg/"
@@ -87,6 +97,7 @@ jobs:
   release:
     name: GitHub release
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
