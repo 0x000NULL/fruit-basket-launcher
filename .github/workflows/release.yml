@@ -92,7 +92,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          path: assets
+          path: dist
           merge-multiple: true
       - name: Release notes for this tag (its CHANGELOG section)
         shell: bash
@@ -108,5 +108,5 @@ jobs:
         with:
           name: Fruit Basket launcher ${{ github.ref_name }}
           body_path: notes.md
-          files: assets/*
+          files: dist/*
           fail_on_unmatched_files: true
