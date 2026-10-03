@@ -2,6 +2,8 @@
 //! the app's state and turns this frame's clicks and keys into `Cmd`s,
 //! which the app applies after drawing. Nothing here changes state itself.
 
+pub mod basket;
+pub mod downloads;
 pub mod frame;
 pub mod settings;
 
@@ -97,6 +99,19 @@ pub enum Cmd {
     OpenUrl(String),
     RestartForUpdate,
     DismissLauncherUpdate,
+    // Basket and Downloads; each names a fruit by id.
+    Select(String),
+    Install(String),
+    Update(String),
+    Retry(String),
+    Open(String),
+    OpenGames(String),
+    SetChannel(String, Channel),
+    Watch(String),
+    CloseSheet,
+    /// Scrolling the aside (or the narrow sheet), apart from the list.
+    AsideScroll(f32),
+    AsideScrollMax(f32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,6 +120,23 @@ pub enum Flag {
     CheckOnOpen,
     InstallWithoutAsking,
     CouchOnController,
+}
+
+/// `verifying` → `Verifying`.
+pub fn capitalise(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(first) => first.to_uppercase().chain(c).collect(),
+        None => String::new(),
+    }
+}
+
+fn step_label(s: crate::jobs::Step) -> &'static str {
+    match s {
+        crate::jobs::Step::Download => "Download",
+        crate::jobs::Step::Verify => "Verify",
+        crate::jobs::Step::Install => "Install",
+    }
 }
 
 /// One frame's drawing context.
@@ -223,6 +255,65 @@ impl<'a> Ui<'a> {
         self.cv.stroke_rect(x, y, w, 34.0, 1.5, self.pal.fg);
         self.cv.text(x + 13.0, y + 9.0, label, &st);
         (w, self.clicked(x, y, w, 34.0))
+    }
+
+    /// Filled button, 34 high: the one action on a card (Try again).
+    pub fn small_button_filled(&mut self, x: f32, y: f32, label: &str) -> (f32, bool) {
+        let st = Style::interface_bold(13.0).color(self.pal.bg);
+        let w = (self.cv.measure(label, &st) + 36.0).round();
+        self.cv.fill_rect(x, y, w, 40.0, self.pal.fg);
+        self.cv.text(x + 18.0, y + 12.0, label, &st);
+        (w, self.clicked(x, y, w, 40.0))
+    }
+
+    /// A small outline button drawn faded that never reports a click: an
+    /// action shown in its place before it works.
+    pub fn small_button_off(&mut self, x: f32, y: f32, label: &str) -> f32 {
+        let c = self.faded();
+        let st = Style::interface_bold(13.0).color(c);
+        let w = self.small_button_width(label);
+        self.cv.stroke_rect(x, y, w, 34.0, 1.5, c);
+        self.cv.text(x + 13.0, y + 9.0, label, &st);
+        w
+    }
+
+    /// The setup-list check mark, 12 wide, its top-left at (x, y).
+    pub fn check_mark(&mut self, x: f32, y: f32, c: Rgb) {
+        self.cv.line(x, y + 6.0, x + 4.0, y + 10.0, 1.6, c);
+        self.cv.line(x + 4.0, y + 10.0, x + 12.0, y + 2.0, 1.6, c);
+    }
+
+    /// Download / Verify / Install as three bars with a label under each,
+    /// the split `jobs::overall` uses. Returns the height used.
+    pub fn step_bars(&mut self, x: f32, y: f32, w: f32, pct: u8) -> f32 {
+        use crate::jobs::{step_of, Step};
+        let (step, within) = step_of(pct);
+        let gap = 6.0;
+        let bw = (w - 2.0 * gap) / 3.0;
+        let order = [Step::Download, Step::Verify, Step::Install];
+        let at = order.iter().position(|&s| s == step).unwrap_or(0);
+        let track = mix(self.pal.line, self.pal.bg, 0.2);
+        for (i, s) in order.iter().enumerate() {
+            let bx = x + i as f32 * (bw + gap);
+            self.cv.fill_rect(bx, y, bw, 4.0, track);
+            let (fill, label, color) = if i < at {
+                (1.0, step_label(*s).to_string(), self.pal.fg)
+            } else if i == at {
+                (within as f32 / 100.0, format!("{} · {within}%", step_label(*s)), self.pal.fg)
+            } else {
+                (0.0, step_label(*s).to_string(), self.muted())
+            };
+            let bar = if i < at { self.pal.fg } else { mix(self.pal.fg, self.pal.bg, 0.25) };
+            if fill > 0.0 {
+                self.cv.fill_rect(bx, y, bw * fill, 4.0, bar);
+            }
+            let tw = self.cv.text(bx, y + 12.0, &label, &Style::data(11.0).color(color));
+            if i < at {
+                // The data face has no check glyph; draw one.
+                self.check_mark(bx + tw + 6.0, y + 12.0, color);
+            }
+        }
+        30.0
     }
 
     /// Segmented control (Recent | A–Z, Stable | Nightly). Returns the

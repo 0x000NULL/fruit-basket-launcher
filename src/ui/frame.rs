@@ -76,10 +76,14 @@ pub fn header(ui: &mut Ui, v: &FrameView) -> f32 {
     for tab in Tab::ALL {
         let on = tab == v.tab;
         let st = tab_st(on, ui);
-        let tw = ui.cv.measure(tab.label(), &st);
+        let mut tw = ui.cv.measure(tab.label(), &st);
         ui.cv.text(tx, top + 13.0, tab.label(), &st);
         if tab == Tab::Downloads && v.downloads > 0 {
-            ui.cv.circle(tx + tw + 7.0, top + 13.0, 3.5, ui.pal.spot);
+            let (bx, by) = (tx + tw + 17.0, top + 21.0);
+            ui.cv.circle(bx, by, 9.0, ui.pal.spot);
+            let n = Style::data_medium(11.0).color(ui.pal.bg);
+            ui.cv.text_center(bx, by - 7.0, &v.downloads.min(9).to_string(), &n);
+            tw += 22.0;
         }
         if on {
             ui.cv.fill_rect(tx - 10.0, top + 39.0, tw + 20.0, 3.0, fg);

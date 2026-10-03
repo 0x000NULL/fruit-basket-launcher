@@ -1,6 +1,8 @@
 //! The launcher's state and its frame: gather input, draw, apply commands.
 
+use std::collections::HashMap;
 use std::path::Path;
+use std::process::Command;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -13,15 +15,19 @@ use gilrs::Button;
 use minifb::Key;
 
 use crate::art::Art;
-use crate::basket::Basket;
-use crate::feed::{self, Feed, FeedError, Fetched};
-use crate::jobs::Worker;
+use crate::basket::{Basket, Current};
+use crate::feed::{self, Channel, Feed, FeedError, Fetched, Fruit, Status};
+use crate::history::{self, Entry};
+use crate::jobs::{Job, Worker};
 use crate::key;
 use crate::platform;
+use crate::queue::{self, Finished, Queue};
 use crate::settings::{Settings, ThemePref};
+use crate::ui::basket::{BasketView, Card, CardState, Detail, Primary};
+use crate::ui::downloads::DownloadsView;
 use crate::ui::frame::{self, FrameView};
 use crate::ui::settings::{FruitStorage, SettingsView};
-use crate::ui::{self, Cmd, Flag, Tab, Ui};
+use crate::ui::{self, capitalise, Cmd, Flag, Size, Tab, Ui};
 use crate::window::Video;
 
 pub const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
@@ -93,6 +99,27 @@ pub struct App {
     storage: Option<(String, Vec<FruitStorage>)>,
     keymap: KeyMap,
     padmap: PadMap,
+    queue: Queue,
+    history: Vec<Entry>,
+    /// What each fruit runs now, read from disk.
+    installed: HashMap<String, Current>,
+    /// Sizes and game counts, computed when the Basket tab needs them.
+    disk: Option<HashMap<String, Disk>>,
+    /// The Basket tab's selected fruit; `None` picks a sensible one.
+    selected: Option<String>,
+    /// Narrow: the selected fruit is open as a sheet.
+    sheet: bool,
+    aside_scroll: f32,
+    aside_scroll_max: f32,
+    /// Channel picked in the aside for a fruit not installed yet.
+    chosen: HashMap<String, Channel>,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Disk {
+    pub program: u64,
+    pub games_size: u64,
+    pub games: usize,
 }
 
 impl App {
@@ -109,7 +136,8 @@ impl App {
 
     /// An app with no window and no network: `new` without the side effects.
     pub fn with(settings: Settings, basket: Basket, cached: Option<Feed>) -> App {
-        App {
+        let history = history::read(&basket.launcher_dir());
+        let mut app = App {
             worker: Worker::start(basket.clone()),
             feed: cached,
             feed_rx: None,
@@ -129,8 +157,50 @@ impl App {
             storage: None,
             keymap: keymap(),
             padmap: padmap(),
+            queue: Queue::default(),
+            history,
+            installed: HashMap::new(),
+            disk: None,
+            selected: None,
+            sheet: false,
+            aside_scroll: 0.0,
+            aside_scroll_max: 0.0,
+            chosen: HashMap::new(),
             settings,
             basket,
+        };
+        app.refresh_installed();
+        app
+    }
+
+    /// Re-read every fruit's `current` file.
+    fn refresh_installed(&mut self) {
+        self.installed.clear();
+        for f in self.feed.iter().flat_map(|f| f.fruits.iter()) {
+            if let Some(c) = self.basket.current(&f.id) {
+                self.installed.insert(f.id.clone(), c);
+            }
+        }
+        self.disk = None;
+        self.storage = None;
+    }
+
+    fn ctx(&self) -> Ctx<'_> {
+        Ctx {
+            feed: self.feed.as_ref(),
+            queue: &self.queue,
+            installed: &self.installed,
+            settings: &self.settings,
+            chosen: &self.chosen,
+            find: &self.find,
+            selected: self.selected.as_deref(),
+        }
+    }
+
+    /// Queue a job; start it if the worker is idle.
+    fn enqueue(&mut self, job: Job) {
+        if let Some(job) = self.queue.enqueue(job) {
+            self.worker.send(job);
         }
     }
 
@@ -165,13 +235,32 @@ impl App {
                         }
                         self.feed = Some(fetched.feed);
                         self.feed_error = None;
+                        self.refresh_installed();
+                        if self.settings.install_without_asking {
+                            self.apply(Cmd::UpdateAll);
+                        }
                     }
                     Err(e) => self.feed_error = Some(e.to_string()),
                 }
             }
         }
         for event in self.worker.poll() {
-            let _ = event; // the Downloads tab (M2) consumes these
+            let (finished, next) = self.queue.on_event(&event);
+            if let Some(job) = next {
+                self.worker.send(job);
+            }
+            let Some(finished) = finished else { continue };
+            let (job, failed, message) = match finished {
+                Finished::Installed(job) => (job, None, String::new()),
+                Finished::Failed(f) => (f.job, Some(f.kind), f.message),
+            };
+            let entry = Entry { when: std::time::SystemTime::now(), fruit: job.fruit, build: job.build, channel: job.channel, failed, message };
+            if let Err(e) = history::append(&self.basket.launcher_dir(), &entry) {
+                eprintln!("fruitbasket: writing history: {e}");
+            }
+            self.history.insert(0, entry);
+            self.history.truncate(history::SHOWN);
+            self.refresh_installed();
         }
         if self.settings.theme == ThemePref::System && self.os_dark_at.elapsed() > Duration::from_secs(5) {
             self.os_dark = platform::os_dark();
@@ -216,18 +305,48 @@ impl App {
         if self.tab == Tab::Settings && self.storage.is_none() {
             self.storage = Some(storage(&self.basket, self.feed.as_ref()));
         }
+        if self.tab == Tab::Basket && self.disk.is_none() {
+            self.disk = Some(disk(&self.basket, self.feed.as_ref()));
+        }
         let sv = match (&self.storage, self.tab) {
             (Some(st), Tab::Settings) => Some(settings_view(&self.settings, &self.basket, self.feed.as_ref(), st, self.scroll, self.os_dark)),
             _ => None,
         };
+        let ctx = Ctx {
+            feed: self.feed.as_ref(),
+            queue: &self.queue,
+            installed: &self.installed,
+            settings: &self.settings,
+            chosen: &self.chosen,
+            find: &self.find,
+            selected: self.selected.as_deref(),
+        };
+        let root = format!("{}{}", platform::tilde(&self.basket.root), std::path::MAIN_SEPARATOR);
+        let no_disk = HashMap::new();
+        let bv = (self.tab == Tab::Basket).then(|| {
+            let note = self.feed_error.as_deref().filter(|_| ctx.feed.is_none());
+            ctx.basket_view(self.disk.as_ref().unwrap_or(&no_disk), root, self.scroll, self.aside_scroll, self.sheet, note)
+        });
+        let name = |id: &str| ctx.name(id);
+        let has_build = |id: &str| ctx.installed.contains_key(id);
+        let dv = (self.tab == Tab::Downloads).then(|| DownloadsView {
+            active: self.queue.active(),
+            failures: self.queue.failures().collect(),
+            waiting: self.queue.waiting().collect(),
+            earlier: &self.history,
+            name: &name,
+            has_build: &has_build,
+            key_id: key::KEY_ID,
+            scroll: self.scroll,
+        });
         let mut cmds = {
             let mut ui = Ui::new(&mut self.canvas, input, &self.art, night, self.pad_used);
             let fv = FrameView {
                 tab: self.tab,
                 find: &self.find,
                 find_focused: self.find_focused,
-                updates: 0,
-                downloads: 0,
+                updates: ctx.update_count(),
+                downloads: self.queue.count(),
                 launcher_update: self.launcher_update.as_deref(),
                 hints: &hints,
                 status: &status,
@@ -235,14 +354,19 @@ impl App {
             };
             let top = frame::header(&mut ui, &fv);
             let bottom = ui.h() - 52.0;
-            match &sv {
-                Some(sv) => ui::settings::draw(&mut ui, sv, top, bottom),
-                None => placeholder(&mut ui, self.tab, self.feed.as_ref(), self.feed_error.as_deref(), top),
+            if let Some(sv) = &sv {
+                ui::settings::draw(&mut ui, sv, top, bottom);
+            } else if let Some(bv) = &bv {
+                ui::basket::draw(&mut ui, bv, top, bottom);
+            } else if let Some(dv) = &dv {
+                ui::downloads::draw(&mut ui, dv, top, bottom);
+            } else {
+                placeholder(&mut ui, self.tab, self.feed.as_ref(), self.feed_error.as_deref(), top);
             }
             frame::footer(&mut ui, &fv);
             ui.cmds
         };
-        drop(sv);
+        drop((sv, bv, dv));
         cmds.extend(self.keys(input));
         for cmd in cmds {
             self.apply(cmd);
@@ -255,10 +379,33 @@ impl App {
         if self.find_focused {
             return out;
         }
+        if self.tab == Tab::Basket {
+            let ctx = self.ctx();
+            let order = ctx.order();
+            let at = ctx.selected_id().and_then(|id| order.iter().position(|f| f.id == id));
+            let step = if input.action(Action::Left) || input.action(Action::Up) {
+                -1
+            } else if input.action(Action::Right) || input.action(Action::Down) {
+                1
+            } else {
+                0
+            };
+            if step != 0 && !order.is_empty() {
+                let i = at.map_or(0, |i| (i as i32 + step).clamp(0, order.len() as i32 - 1) as usize);
+                out.push(Cmd::Select(order[i].id.clone()));
+            }
+            if input.action(Action::Confirm) {
+                if let Some(cmd) = ctx.selected_fruit().and_then(|f| ctx.primary_cmd(f)) {
+                    out.push(cmd);
+                }
+            }
+        }
         if input.pressed(Key::Slash) {
             out.push(Cmd::FocusFind(true));
         }
-        if input.pressed(Key::Escape) {
+        // Esc closes the narrow sheet first (the sheet emits that itself).
+        let sheet_open = self.sheet && self.tab == Tab::Basket && Size::of(self.canvas.width()) == Size::Narrow;
+        if input.pressed(Key::Escape) && !sheet_open {
             out.push(Cmd::Quit);
         }
         if input.action(Action::PrevPage) {
@@ -277,8 +424,13 @@ impl App {
                 if tab != self.tab {
                     self.tab = tab;
                     self.scroll = 0.0;
+                    self.aside_scroll = 0.0;
+                    self.sheet = false;
                     if tab == Tab::Settings {
                         self.storage = None;
+                    }
+                    if tab == Tab::Basket {
+                        self.disk = None;
                     }
                 }
             }
@@ -290,6 +442,11 @@ impl App {
             Cmd::ScrollMax(max) => {
                 self.scroll_max = max;
                 self.scroll = self.scroll.min(max);
+            }
+            Cmd::AsideScroll(dy) => self.aside_scroll = (self.aside_scroll + dy).clamp(0.0, self.aside_scroll_max),
+            Cmd::AsideScrollMax(max) => {
+                self.aside_scroll_max = max;
+                self.aside_scroll = self.aside_scroll.min(max);
             }
             Cmd::Theme(t) => {
                 s.theme = t;
@@ -328,12 +485,110 @@ impl App {
             Cmd::CheckNow => self.check_feed(),
             Cmd::OpenUrl(url) => platform::open(&url),
             Cmd::DismissLauncherUpdate => self.launcher_update = None,
+            Cmd::Select(id) => {
+                if self.selected.as_deref() != Some(id.as_str()) {
+                    self.aside_scroll = 0.0;
+                }
+                self.selected = Some(id);
+                self.sheet = true;
+            }
+            Cmd::CloseSheet => self.sheet = false,
+            Cmd::Install(id) => {
+                let ctx = self.ctx();
+                let job = ctx.fruit(&id).and_then(|f| queue::job_for(f, ctx.new_channel(f), self.settings.keep as usize));
+                if let Some(job) = job {
+                    self.enqueue(job);
+                }
+            }
+            Cmd::Update(id) => {
+                let ctx = self.ctx();
+                let job = ctx
+                    .fruit(&id)
+                    .zip(self.installed.get(&id))
+                    .and_then(|(f, c)| queue::job_for(f, c.channel, self.settings.keep as usize));
+                if let Some(job) = job {
+                    self.enqueue(job);
+                }
+            }
+            Cmd::Retry(id) => {
+                if let Some(f) = self.queue.failure(&id) {
+                    let job = f.job.clone();
+                    self.enqueue(job);
+                }
+            }
+            Cmd::UpdateAll => {
+                let jobs = match &self.feed {
+                    Some(feed) => queue::updates(feed, |id| self.installed.get(id), self.settings.keep as usize),
+                    None => Vec::new(),
+                };
+                for job in jobs {
+                    self.enqueue(job);
+                }
+            }
+            Cmd::SetChannel(id, ch) => self.set_channel(&id, ch),
+            Cmd::Watch(id) => {
+                if let Some(i) = s.watch.iter().position(|w| *w == id) {
+                    s.watch.remove(i);
+                } else {
+                    s.watch.push(id);
+                }
+                s.save();
+            }
+            Cmd::OpenGames(id) => {
+                let dir = self.basket.games_dir(&id);
+                let _ = std::fs::create_dir_all(&dir);
+                platform::open(&dir.to_string_lossy());
+            }
+            Cmd::Open(id) => self.open(&id),
             // Wired up in later milestones.
-            Cmd::UpdateAll | Cmd::Couch | Cmd::AddFolder | Cmd::MoveBasket | Cmd::MapButtons | Cmd::RestartForUpdate => {}
+            Cmd::Couch | Cmd::AddFolder | Cmd::MoveBasket | Cmd::MapButtons | Cmd::RestartForUpdate => {}
+        }
+    }
+
+    /// Switch an installed fruit's channel: to a build already on disk if
+    /// there is one, else download it. A fruit not installed just remembers
+    /// the pick for its Install button.
+    fn set_channel(&mut self, id: &str, ch: Channel) {
+        let Some(fruit) = self.feed.as_ref().and_then(|f| f.fruit(id)).cloned() else { return };
+        let Some(current) = self.installed.get(id).cloned() else {
+            self.chosen.insert(id.to_string(), ch);
+            return;
+        };
+        if current.channel == ch {
+            return;
+        }
+        let Some(build) = fruit.channel(ch) else { return };
+        if self.basket.build_dir(id, &build.build).join(".installed").exists() {
+            let to = Current { build: build.build.clone(), channel: ch };
+            if let Err(e) = self.basket.switch(id, to, &fruit.carry) {
+                eprintln!("fruitbasket: switching {id} to {}: {e}", ch.name());
+            }
+            self.refresh_installed();
+        } else if let Some(job) = queue::job_for(&fruit, ch, self.settings.keep as usize) {
+            self.enqueue(job);
+        }
+    }
+
+    /// Start the fruit's emulator with no game: it opens its own library.
+    fn open(&self, id: &str) {
+        let Some(bin) = self.feed.as_ref().and_then(|f| f.fruit(id)).and_then(|f| f.bin.clone()) else { return };
+        let Some(exe) = self.basket.exe(id, &bin) else {
+            eprintln!("fruitbasket: no {bin} in {id}'s current build");
+            return;
+        };
+        let mut cmd = Command::new(&exe);
+        if let Some(dir) = exe.parent() {
+            cmd.current_dir(dir);
+        }
+        if let Err(e) = cmd.spawn() {
+            eprintln!("fruitbasket: starting {}: {e}", exe.display());
         }
     }
 
     fn status(&self) -> String {
+        if let Some(a) = self.queue.active() {
+            return format!("{} {} · {}%", a.step.name(), self.ctx().name(&a.job.fruit), a.pct);
+        }
         let sep = std::path::MAIN_SEPARATOR;
         format!("{}{sep} · launcher {VERSION}", platform::tilde(&self.basket.root))
     }
@@ -345,7 +600,16 @@ impl App {
         }
         match self.tab {
             Tab::Library => vec![("Z", "Play"), ("/", "Find")],
-            Tab::Basket => vec![("Z", "Open"), ("/", "Find")],
+            Tab::Basket => {
+                let ctx = self.ctx();
+                let verb = match ctx.selected_fruit().map(|f| ctx.primary(f)) {
+                    Some(Primary::Install) => "Install",
+                    Some(Primary::Update) => "Update",
+                    Some(Primary::TryAgain) => "Try again",
+                    _ => "Open",
+                };
+                vec![("Z", verb), ("/", "Find")]
+            }
             Tab::Downloads | Tab::Settings => vec![("/", "Find")],
         }
     }
@@ -353,6 +617,187 @@ impl App {
     pub fn shutdown(&mut self, size: (usize, usize)) {
         self.settings.window = Some((size.0 as u32, size.1 as u32));
         self.settings.save();
+    }
+}
+
+/// Read-only state the views and commands share, borrowed field by field
+/// so it can live beside the canvas borrow while a frame draws.
+struct Ctx<'a> {
+    feed: Option<&'a Feed>,
+    queue: &'a Queue,
+    installed: &'a HashMap<String, Current>,
+    settings: &'a Settings,
+    chosen: &'a HashMap<String, Channel>,
+    find: &'a str,
+    selected: Option<&'a str>,
+}
+
+impl<'a> Ctx<'a> {
+    fn fruit(&self, id: &str) -> Option<&'a Fruit> {
+        self.feed?.fruit(id)
+    }
+
+    fn name(&self, id: &str) -> String {
+        self.fruit(id).map(|f| f.name.clone()).unwrap_or_else(|| capitalise(id))
+    }
+
+    /// The channel a first install of `f` uses: the aside's pick, else the
+    /// setting, else whichever channel has a build.
+    fn new_channel(&self, f: &Fruit) -> Channel {
+        let want = self.chosen.get(&f.id).copied().unwrap_or(self.settings.new_channel);
+        if f.channel(want).is_some() {
+            return want;
+        }
+        [Channel::Stable, Channel::Nightly].into_iter().find(|&c| f.channel(c).is_some()).unwrap_or(want)
+    }
+
+    fn primary(&self, f: &Fruit) -> Primary {
+        if let Some(a) = self.queue.busy(&f.id) {
+            return Primary::Busy(a.step, a.pct);
+        }
+        if self.queue.is_waiting(&f.id) {
+            return Primary::Queued;
+        }
+        if self.queue.failure(&f.id).is_some() {
+            return Primary::TryAgain;
+        }
+        if f.status == Status::Growing {
+            return Primary::Unavailable;
+        }
+        match self.installed.get(&f.id) {
+            Some(c) if queue::update_for(f, c).is_some() => Primary::Update,
+            Some(_) => Primary::Open,
+            None if queue::job_for(f, self.new_channel(f), 0).is_some() => Primary::Install,
+            None => Primary::Unavailable,
+        }
+    }
+
+    fn primary_cmd(&self, f: &Fruit) -> Option<Cmd> {
+        let id = f.id.clone();
+        match self.primary(f) {
+            Primary::Open => Some(Cmd::Open(id)),
+            Primary::Update => Some(Cmd::Update(id)),
+            Primary::Install => Some(Cmd::Install(id)),
+            Primary::TryAgain => Some(Cmd::Retry(id)),
+            Primary::Busy(..) | Primary::Queued | Primary::Unavailable => None,
+        }
+    }
+
+    fn card_state(&self, f: &Fruit) -> CardState {
+        match self.primary(f) {
+            Primary::Busy(step, pct) => CardState::Busy(step, pct),
+            Primary::Queued => CardState::Queued,
+            Primary::TryAgain => CardState::Failed(self.queue.failure(&f.id).map_or(crate::jobs::FailKind::Network, |x| x.kind)),
+            Primary::Update => CardState::UpdateReady,
+            Primary::Open => CardState::UpToDate(self.installed.get(&f.id).map_or(Channel::Stable, |c| c.channel)),
+            Primary::Install => CardState::NotInstalled,
+            Primary::Unavailable => CardState::NotForThisPc,
+        }
+    }
+
+    /// FIND on the Basket tab: fruit name, console, or extension.
+    fn matches(&self, f: &Fruit) -> bool {
+        let q = self.find.trim().to_lowercase();
+        q.is_empty()
+            || f.name.to_lowercase().contains(&q)
+            || f.system.to_lowercase().contains(&q)
+            || f.ext.iter().any(|e| e.to_lowercase().contains(q.trim_start_matches('.')))
+    }
+
+    /// (in the basket, ready to install, still growing), each in feed order.
+    fn sections(&self) -> (Vec<&'a Fruit>, Vec<&'a Fruit>, Vec<&'a Fruit>) {
+        let (mut inst, mut ready, mut growing) = (Vec::new(), Vec::new(), Vec::new());
+        for f in self.feed.iter().flat_map(|f| f.fruits.iter()).filter(|f| self.matches(f)) {
+            if self.installed.contains_key(&f.id) {
+                inst.push(f);
+            } else if f.status == Status::Growing {
+                growing.push(f);
+            } else {
+                ready.push(f);
+            }
+        }
+        (inst, ready, growing)
+    }
+
+    /// Every listed fruit, top to bottom: the arrow-key order.
+    fn order(&self) -> Vec<&'a Fruit> {
+        let (a, b, c) = self.sections();
+        a.into_iter().chain(b).chain(c).collect()
+    }
+
+    /// The selection if it is listed, else the first installed fruit, else
+    /// Strawberry (the first-run pick), else the first fruit.
+    fn selected_id(&self) -> Option<&'a str> {
+        let (inst, ready, growing) = self.sections();
+        let all = || inst.iter().chain(&ready).chain(&growing);
+        if let Some(f) = self.selected.and_then(|id| all().find(|f| f.id == id)) {
+            return Some(&f.id);
+        }
+        inst.first()
+            .or_else(|| ready.iter().find(|f| f.id == "strawberry"))
+            .or_else(|| all().next())
+            .map(|f| f.id.as_str())
+    }
+
+    fn selected_fruit(&self) -> Option<&'a Fruit> {
+        self.selected_id().and_then(|id| self.fruit(id))
+    }
+
+    /// Fruits Update all would update: an update ready and nothing running.
+    fn update_count(&self) -> usize {
+        self.installed.keys().filter_map(|id| self.fruit(id)).filter(|f| self.primary(f) == Primary::Update).count()
+    }
+
+    fn basket_view(
+        &self,
+        disk: &HashMap<String, Disk>,
+        root: String,
+        scroll: f32,
+        aside_scroll: f32,
+        sheet: bool,
+        feed_note: Option<&'a str>,
+    ) -> BasketView<'a> {
+        let (inst, ready, growing) = self.sections();
+        let card = |f: &&'a Fruit| Card { fruit: f, state: self.card_state(f) };
+        let selected = self.selected_id();
+        let detail = self.selected_fruit().map(|f| {
+            let current = self.installed.get(&f.id);
+            let channel = current.map_or_else(|| self.new_channel(f), |c| c.channel);
+            let target = match self.queue.failure(&f.id) {
+                Some(fail) => f.build(&fail.job.build).map(|(_, b)| b),
+                None => f.channel(channel),
+            };
+            let d = disk.get(&f.id).copied().unwrap_or_default();
+            Detail {
+                fruit: f,
+                current,
+                channel,
+                primary: self.primary(f),
+                target,
+                games: d.games,
+                program: d.program,
+                games_size: d.games_size,
+                watching: self.settings.watch.iter().any(|w| *w == f.id),
+                key_id: key::KEY_ID,
+            }
+        });
+        let feed_note = match (self.feed, feed_note) {
+            (Some(_), _) => None,
+            (None, Some(e)) => Some(e),
+            (None, None) => Some("Fetching the list of fruits from the site…"),
+        };
+        BasketView {
+            installed: inst.iter().map(card).collect(),
+            ready: ready.iter().map(card).collect(),
+            growing: growing.iter().map(|f| (*f, self.settings.watch.iter().any(|w| *w == f.id))).collect(),
+            selected,
+            detail,
+            sheet,
+            root,
+            scroll,
+            aside_scroll,
+            feed_note,
+        }
     }
 }
 
@@ -411,6 +856,37 @@ fn storage(basket: &Basket, feed: Option<&Feed>) -> (String, Vec<FruitStorage>) 
         })
         .collect();
     (format!("{} used", basket_ui::fmt::fmt_size(used)), rows)
+}
+
+/// Program and games sizes and game counts, for the Basket aside.
+fn disk(basket: &Basket, feed: Option<&Feed>) -> HashMap<String, Disk> {
+    feed.iter()
+        .flat_map(|f| f.fruits.iter())
+        .filter_map(|f| {
+            let current = basket.current(&f.id)?;
+            let games_dir = basket.games_dir(&f.id);
+            Some((
+                f.id.clone(),
+                Disk {
+                    program: dir_size(&basket.build_dir(&f.id, &current.build)),
+                    games_size: dir_size(&games_dir),
+                    games: count_games(&games_dir, f, 3),
+                },
+            ))
+        })
+        .collect()
+}
+
+/// Files under `dir` (to `depth` folders down) that the fruit reads.
+fn count_games(dir: &Path, fruit: &Fruit, depth: u32) -> usize {
+    let Ok(rd) = std::fs::read_dir(dir) else { return 0 };
+    rd.flatten()
+        .map(|e| match e.file_type() {
+            Ok(t) if t.is_dir() && depth > 0 => count_games(&e.path(), fruit, depth - 1),
+            Ok(t) if t.is_file() && fruit.reads(&e.path()) => 1,
+            _ => 0,
+        })
+        .sum()
 }
 
 fn dir_size(path: &Path) -> u64 {
@@ -481,6 +957,137 @@ mod tests {
                     app.draw(&UiInput::default(), w, h);
                     let name = format!("{}-{size}-{tname}.png", tab.label().to_lowercase());
                     app.canvas.save_png(&dir.join(name)).unwrap();
+                }
+            }
+        }
+    }
+
+    /// End to end through the real worker: fetch and verify the feed from
+    /// `FRUITBASKET_FEED`, install Strawberry with the Install command,
+    /// switch it to nightly, then feed a job a wrong hash. Run with
+    /// `FRUITBASKET_E2E=1 FRUITBASKET_FEED=http://localhost:8765/fruit-basket/feed.json
+    /// cargo test e2e -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn e2e_install_switch_and_refuse() {
+        use crate::jobs::FailKind;
+        if std::env::var_os("FRUITBASKET_E2E").is_none() {
+            return;
+        }
+        let fetched = feed::fetch(&key::feed_url(), &key::public_key(), None).expect("feed verifies");
+        let tmp = tempfile::tempdir().unwrap();
+        let mut app = App::with(Settings::default(), Basket::new(tmp.path()), Some(fetched.feed));
+        let wait = |app: &mut App| {
+            let start = Instant::now();
+            while app.queue.active().is_some() {
+                assert!(start.elapsed() < Duration::from_secs(180), "timed out");
+                app.poll();
+                thread::sleep(Duration::from_millis(50));
+            }
+        };
+
+        app.apply(Cmd::Install("strawberry".into()));
+        assert!(app.queue.busy("strawberry").is_some());
+        wait(&mut app);
+        let cur = app.installed.get("strawberry").cloned().expect("installed");
+        assert_eq!(cur.channel, Channel::Stable);
+        let exe = app.basket.exe("strawberry", "strawberry").expect("exe in the build");
+        println!("installed {} at {}", cur.build, exe.display());
+        assert_eq!(app.history[0].failed, None);
+
+        app.apply(Cmd::SetChannel("strawberry".into(), Channel::Nightly));
+        wait(&mut app);
+        assert_eq!(app.installed["strawberry"].channel, Channel::Nightly);
+        assert_eq!(app.basket.builds("strawberry").len(), 2, "the stable build is kept for rolling back");
+
+        let mut bad = job(&app, "pomegranate");
+        bad.asset.sha256 = "0".repeat(64);
+        app.enqueue(bad);
+        wait(&mut app);
+        assert_eq!(app.queue.failure("pomegranate").map(|f| f.kind), Some(FailKind::Signature));
+        assert!(!app.installed.contains_key("pomegranate"));
+        assert!(!app.basket.builds_dir("pomegranate").exists(), "nothing written");
+        assert_eq!(history::read(&app.basket.launcher_dir()).len(), 3);
+    }
+
+    /// A basket with Strawberry installed one build behind the feed.
+    fn stocked(root: &Path) -> Basket {
+        let b = Basket::new(root);
+        std::fs::create_dir_all(b.build_dir("strawberry", "v1.3.0")).unwrap();
+        std::fs::write(b.build_dir("strawberry", "v1.3.0").join(".installed"), "").unwrap();
+        std::fs::write(b.fruit_dir("strawberry").join("current"), "v1.3.0\tstable\n").unwrap();
+        std::fs::create_dir_all(b.games_dir("strawberry")).unwrap();
+        std::fs::write(b.games_dir("strawberry").join("homebrew.gba"), "x").unwrap();
+        b
+    }
+
+    fn job(app: &App, id: &str) -> Job {
+        let f = app.feed.as_ref().unwrap().fruit(id).unwrap();
+        queue::job_for(f, app.ctx().new_channel(f), 2).expect("a build for this PC")
+    }
+
+    /// The Basket and Downloads states from the mocks, every size and theme.
+    #[test]
+    fn basket_and_downloads_shots() {
+        use crate::jobs::{Event, FailKind, Step};
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        if feed::this_platform() != "windows-x64" {
+            return; // the test feed only has Windows builds
+        }
+        type Setup = fn(&mut App);
+        let states: [(&str, Tab, bool, Setup); 7] = [
+            ("basket-first-run", Tab::Basket, false, |_| {}),
+            ("basket-update", Tab::Basket, true, |_| {}),
+            ("basket-busy", Tab::Basket, true, |app| {
+                let j = job(app, "pomegranate");
+                app.queue.enqueue(j);
+                app.queue.on_event(&Event::Progress { fruit: "pomegranate".into(), step: Step::Verify, pct: 76 });
+                app.selected = Some("pomegranate".into());
+            }),
+            ("basket-failed", Tab::Basket, true, |app| {
+                let j = job(app, "strawberry");
+                app.queue.enqueue(j);
+                app.queue.on_event(&Event::Failed { fruit: "strawberry".into(), kind: FailKind::Network, message: "couldn't reach projects.ethanaldrich.net".into() });
+            }),
+            ("basket-growing", Tab::Basket, true, |app| app.selected = Some("pear".into())),
+            ("downloads-busy", Tab::Downloads, true, |app| {
+                let j = job(app, "pomegranate");
+                app.queue.enqueue(j);
+                app.queue.on_event(&Event::Progress { fruit: "pomegranate".into(), step: Step::Download, pct: 46 });
+                let j = job(app, "strawberry");
+                app.queue.enqueue(j);
+            }),
+            ("downloads-signature", Tab::Downloads, true, |app| {
+                let j = job(app, "pomegranate");
+                app.queue.enqueue(j);
+                app.queue.on_event(&Event::Failed { fruit: "pomegranate".into(), kind: FailKind::Signature, message: "hash".into() });
+            }),
+        ];
+        for (theme, tname) in [(ThemePref::Paper, "paper"), (ThemePref::Night, "night")] {
+            for (w, h, size) in [(1280, 900, "regular"), (1024, 680, "compact"), (640, 880, "narrow")] {
+                for (name, tab, stock, setup) in states {
+                    let tmp = tempfile::tempdir().unwrap();
+                    let basket = if stock { stocked(tmp.path()) } else { Basket::new(tmp.path()) };
+                    for (i, (fruit, failed)) in [("strawberry", None), ("pomegranate", Some(FailKind::Network))].into_iter().enumerate() {
+                        let e = Entry {
+                            when: std::time::SystemTime::now() - Duration::from_secs(86_400 * (i as u64 + 2)),
+                            fruit: fruit.into(),
+                            build: "v1.3.1".into(),
+                            channel: Channel::Stable,
+                            failed,
+                            message: String::new(),
+                        };
+                        history::append(&basket.launcher_dir(), &e).unwrap();
+                    }
+                    let settings = Settings { theme, ..Settings::default() };
+                    let mut app = App::with(settings, basket, Some(feed.clone()));
+                    app.tab = tab;
+                    app.sheet = size == "narrow" && name.starts_with("basket") && stock;
+                    setup(&mut app);
+                    app.draw(&UiInput::default(), w, h);
+                    app.canvas.save_png(&dir.join(format!("{name}-{size}-{tname}.png"))).unwrap();
                 }
             }
         }
