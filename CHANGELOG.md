@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.1
+
+- The feed's `couch` arguments go only to a build the feed still lists. A Pomegranate v0.3.0 that is installed or kept for rolling back runs from couch mode in a window, because it doesn't know `--fullscreen` or `--exit-on-quit`.
+
 ## v0.5.0
 
 Controller: the whole launcher from a pad, couch mode, saves, and Map buttons.

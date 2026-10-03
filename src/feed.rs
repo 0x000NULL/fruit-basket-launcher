@@ -154,6 +154,14 @@ impl Fruit {
         self.builds().find(|(_, b)| b.build == id)
     }
 
+    /// The `couch` arguments, if `build` takes them: only builds the feed
+    /// still lists. The site sets `couch` together with `oldest`, so a kept
+    /// or installed older build (Pomegranate v0.3.0) never gets flags it
+    /// doesn't know.
+    pub fn couch_args(&self, build: &str) -> &[String] {
+        if self.build(build).is_some() { &self.couch } else { &[] }
+    }
+
     /// True if any launch template takes `{data}`: the fruit keeps its
     /// saves and settings in `<root>/<fruit>/data/`, not beside its exe.
     pub fn uses_data(&self) -> bool {
@@ -304,7 +312,17 @@ pub(crate) mod tests {
     pub const FEED: &[u8] = include_bytes!("../tests/data/feed.json");
     pub const SIG: &str = include_str!("../tests/data/feed.json.minisig");
 
-    #[test]
+#[test]
+    fn couch_args_only_for_builds_the_feed_lists() {
+        let mut feed = verify(FEED, SIG, crate::key::PUBLIC_KEY, None).unwrap();
+        let f = feed.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap();
+        f.couch = vec!["--fullscreen".into()];
+        let listed = f.builds().next().unwrap().1.build.clone();
+        assert_eq!(f.couch_args(&listed), ["--fullscreen".to_string()]);
+        assert!(f.couch_args("v0.0.1").is_empty(), "an older build kept on disk");
+    }
+
+        #[test]
     fn real_feed_verifies() {
         let feed = verify(FEED, SIG, crate::key::PUBLIC_KEY, None).unwrap();
         let pom = feed.fruit("pomegranate").unwrap();

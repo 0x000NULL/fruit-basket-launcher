@@ -63,9 +63,10 @@ emulator.
 A game started from couch mode gets the fruit's `couch` arguments after
 its `launch` or `load_slot` ones (never after `open`), filled the same way:
 e.g. `--fullscreen --exit-on-quit`, so the emulator fills the TV and its
-pause menu's Quit comes back to the launcher. The site sets `couch` only
-for a fruit whose released builds all take those flags (it raises `oldest`
-with it).
+pause menu's Quit comes back to the launcher. The site raises `oldest`
+when it sets `couch`, and `Fruit::couch_args` gives the arguments only to a
+build the feed lists, so an older build that is installed or kept for
+rolling back never gets flags it doesn't know.
 
 Save states are `<stem>.s<N>.state`, beside the game or in `save_dirs`.
 `library::slots` reads the numbers from the files (Strawberry 1–8,

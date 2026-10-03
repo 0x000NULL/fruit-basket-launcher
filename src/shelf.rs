@@ -176,7 +176,8 @@ impl Shelf {
         };
         let mut args = launch::args(template, Some(path), slot, data.as_deref())?;
         if couch {
-            args.extend(launch::args(&fruit.couch, Some(path), slot, data.as_deref())?);
+            let build = basket.current(&fruit.id).map(|c| c.build).unwrap_or_default();
+            args.extend(launch::args(fruit.couch_args(&build), Some(path), slot, data.as_deref())?);
         }
         let rx = launch::start(&exe, &args, path).map_err(|e| e.to_string())?;
         self.running = Some((fruit.name.clone(), rx));
