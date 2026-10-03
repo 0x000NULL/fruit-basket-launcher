@@ -12,7 +12,7 @@ map: `docs/ARCHITECTURE.md`.
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
-| M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; site side waiting (below) | v0.4.0 |
+| M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | next | v0.5.0 |
 | M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/` | | v1.0.0 |
 
@@ -52,11 +52,11 @@ bumped in the same commit, and the release notes come from a
   - **Slots are 0–9** (`<stem>.s0.state` to `.s9.state`), not 1–8 like Strawberry's. The couch saves view (M5) needs a per-fruit slot range; take it from the slot files, or add a LAUNCHER key.
   - `--data` holds ps2emu.toml, cards/, states/, cache/ and screenshots. Migrate only ps2emu.toml, cards/ and states/; cache/ rebuilds itself. ps2emu migrates nothing. It exits 7 if DIR can't be created.
   - **The launcher side is done in v0.4.0:** `{data}` = `<root>/<fruit>/data/`, the `carry` files move there once, saves are read from it, and Open uses an `open` template.
-  - **Waiting on the site** (asked of its session after the v0.4.0 tag):
-    - `pomegranate/LAUNCHER`: `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, keep `carry`, add `oldest v0.3.0`.
-    - `feedgen.py` writes `open`, and leaves out releases older than `oldest`.
+  - **The site side is live** (site `ef573f7`, feed `2026-10-03T17:36:29Z`, checked here with minisign):
+    - `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, and `carry` unchanged.
+    - Releases are only v0.3.0 (`oldest v0.3.0`), with stable v0.3.0 and nightly `f1a2c09`. Strawberry is unchanged apart from `open: []`.
+  - Launchers before v0.4.0 can't start Pomegranate from this feed. With no self-update until M6, update them by hand from GitHub.
   - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
-  - Until the site changes, Pomegranate runs exactly as in v0.3.0.
 - **Crabapple**: will need `--slot N` too once it ships.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 - **Site**: deployed. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
