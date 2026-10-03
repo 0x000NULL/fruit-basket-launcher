@@ -8,13 +8,13 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03; site main is at `26ceac2`, and the live feed is verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03; site main is at `d866b48`, and the live feed is verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; the site mirrors each release (below) | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 is live in the feed | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -75,13 +75,16 @@ bumped in the same commit, and the release notes come from a
   - Builds before v0.3.0 have no `--data`, so they won't be offered (Ethan's call, 2026-10-03). Their zips stay on the site.
 - **Couch flags** (asked of each emulator on 2026-10-03, with the same convention everywhere): `--fullscreen` for that run only, `--exit-on-quit` (the pause menu's Quit exits with 0), and a pad route to pause (Guide, or SELECT+START held 1 s).
   - **Pomegranate:** done in ps2emu v0.4.0 (tag commit `58d24fe`). It is live: the feed (generated 2026-10-03T18:14:23Z, site `26ceac2`) has stable v0.4.0, nightly `58d24fe`, `couch ["--fullscreen","--exit-on-quit"]`, and only v0.4.0 in releases (`oldest v0.4.0`). Launcher v0.5.1 gives `couch` only to builds the feed lists, so an installed or kept v0.3.0 doesn't get it.
-  - **Strawberry:** done in v1.5.0 (`4ecce2e`, released 2026-10-03, with windows-x64, linux-x64, macos-x64 and macos-arm64). It is not on the site yet. The site still has to mirror it, set `couch --fullscreen --exit-on-quit`, and raise `oldest` to v1.5.0, through Ethan. The launcher gives `couch` to every build the feed lists, so v1.4.0 has to leave the feed then.
+  - **Strawberry:** done in v1.5.0 (`4ecce2e`, released 2026-10-03, with windows-x64, linux-x64, macos-x64 and macos-arm64). It is live: stable v1.5.0, nightly `4ecce2e` (the same zip), releases only v1.5.0 (`oldest v1.5.0`), and `couch ["--fullscreen","--exit-on-quit"]`. v1.4.0 and earlier stay on the site but out of the feed.
   - **Crabapple:** all four (`--slot N` 1–8, `--fullscreen`, `--exit-on-quit`, Guide or SELECT+START held 1 s) are on its main at `12c1737`, after v0.9.0 and not yet in a release. It isn't in the feed yet. When it goes in (Ethan's call): `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, and `oldest` set to the first tag with the flags.
   - Without the flags a fruit still works from couch mode: in a window, back when the emulator exits.
 - **Site, deployed at `26ceac2`** (2026-10-03, by Ethan through the site session):
   - `812813b`: Strawberry's nightly is now the v1.4.0 build (`5b00fe8`), which has `--slot`.
   - `5af8902`: the `couch` key, `site/fruit-basket/launcher/` for M6, and fetch-release checking a release's own `.sha256` files.
-  - The launcher entry is still null. The site session was asked to mirror v0.5.1 (not v0.5.0), with Ethan's OK.
+- **Site, deployed at `d866b48`** (2026-10-03, by Ethan through the site session). The feed was generated 2026-10-03T20:45:27Z and checked here with minisign.
+  - `launcher` is v1.0.0, with all four platforms. The windows-x64 zip downloaded from the live URL hashes to the feed's SHA-256 (`5d0b3b99…`), and that matches GitHub's `.sha256`.
+  - Strawberry v1.5.0 with `couch` (above).
+  - v0.5.x was never mirrored.
 - **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 - **Site**: deployed at `ef573f7`. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
   - The feed's LAUNCHER keys: `launch`, `load_slot`, `open` (all may use `{rom}`, `{slot}`, `{data}`), `carry`, and `oldest` (feedgen only; not in the feed).
