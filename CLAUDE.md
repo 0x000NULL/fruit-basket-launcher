@@ -16,7 +16,7 @@ The docs:
     cargo test                       # unit tests + renders to target/shots/
     cargo run                        # the real window
     FRUITBASKET_FEED=http://127.0.0.1:8765/fruit-basket/feed.json cargo run
-    FRUITBASKET_E2E=1 FRUITBASKET_FEED=... cargo test e2e -- --ignored --nocapture
+    FRUITBASKET_E2E=1 cargo test e2e -- --ignored --nocapture   # against the live site
 
 For a local site, run `python -m http.server 8765 --bind 127.0.0.1` in
 `../projects.ethanaldrich.net/site` after rebuilding and signing its feed.

@@ -8,7 +8,7 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site commits `8940a3b` and `0764b32`, not yet pushed or deployed | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03 (site main at `850ed22`), live feed verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
@@ -29,8 +29,8 @@ bumped in the same commit, and the release notes come from a
   - queue order, dedupe and retry; history; library scan, titles, serials, saves, play time
   - compat matching; SHA-1 and CHD header hashes; the hash cache; launch sessions
   - renders of every tab state
-- `e2e_install_switch_and_refuse` (opt-in: `FRUITBASKET_E2E=1` and `FRUITBASKET_FEED` pointing at a local copy of the site) does all of this over HTTP:
-  - installs Strawberry v1.3.1 from the live site
+- `e2e_install_switch_and_refuse` (opt-in: `FRUITBASKET_E2E=1`; `FRUITBASKET_FEED` can point it at a local copy of the site instead) does all of this over HTTP. On 2026-10-03 it passed against the live feed:
+  - installs Strawberry v1.4.0
   - fetches and matches its compat list
   - switches it to nightly with the stable build kept
   - refuses a job with a wrong hash, leaving nothing on disk
@@ -43,10 +43,17 @@ bumped in the same commit, and the release notes come from a
   - Released in v1.4.0 (2026-10-03) and mirrored to the site.
   - `strawberry/LAUNCHER` now has `load_slot {rom} --slot {slot}`, in site commit `0764b32`.
   - Strawberry's nightly is still the v1.3.1 build (`e8bc5e3`), which lacks the flag, so couch Load (M5) must offer Load only on builds that have it.
-- **Pomegranate**: needs `--slot N` for couch Load, and `--data DIR` so its saves can live outside the build folder. Not asked for yet: ps2emu was busy with other work. Until then the launcher moves the files on its `carry` list between builds.
+- **Pomegranate**:
+  - v0.2.0 is mirrored and live; the nightly is the same v0.2.0 Windows zip (build `0105053`).
+  - Asked for in ps2emu v0.3.0 (session `ps2emu-39`, 2026-10-03):
+    - `--slot N`: couch Load needs it.
+    - `--data DIR`: lets its saves live outside the build folder.
+  - Until then the launcher moves the files on its `carry` list between builds.
+  - When v0.3.0 is out, the site session adds `load_slot play {rom} --slot {slot}` to its LAUNCHER file.
+  - Then this repo adds `{data}` support and a one-time migration, and changes `launch` to `play {rom} --data {data}` and drops `carry`, together (M4).
 - **Crabapple**: will need `--slot N` too once it ships.
-- **Dump lists**: no fruit has a `dumps.txt` on the site yet. Run `tools/make-dumps.py` on the No-Intro (GBA) and Redump (PS2) DATs, then rebuild and re-sign the feed. Until then the Library says "No dump list for this fruit yet".
-- **Site deploy**: the live site has no `feed.json` until the site is deployed (`make deploy`, or the same steps by hand; `make` isn't installed on this box).
+- **Dump lists**: none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
+- **Site**: deployed. The live `feed.json` and `.minisig` verify with key `9A7C56F99E6460E9`. nginx serves the feed as `application/json` and the signature as text, both no-cache.
 
 ## Known gaps
 

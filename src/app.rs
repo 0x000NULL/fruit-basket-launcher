@@ -1029,11 +1029,11 @@ mod tests {
         }
     }
 
-    /// End to end through the real worker: fetch and verify the feed from
-    /// `FRUITBASKET_FEED`, install Strawberry with the Install command,
-    /// switch it to nightly, then feed a job a wrong hash. Run with
-    /// `FRUITBASKET_E2E=1 FRUITBASKET_FEED=http://localhost:8765/fruit-basket/feed.json
-    /// cargo test e2e -- --ignored --nocapture`.
+    /// End to end through the real worker: fetch and verify the live feed
+    /// (or `FRUITBASKET_FEED`), install Strawberry with the Install command,
+    /// match a game against its compat list, switch it to nightly, then
+    /// feed a job a wrong hash. Downloads real builds. Run with
+    /// `FRUITBASKET_E2E=1 cargo test e2e -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn e2e_install_switch_and_refuse() {
