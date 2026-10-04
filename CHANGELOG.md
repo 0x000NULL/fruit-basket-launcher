@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.1.0
+
+Pictures, Continue, favorites and play stats.
+
+- **Save pictures.** Couch mode's saves list and the Saves dialog show each save's picture, for emulators that write one next to the save (Pomegranate does today). In couch mode, the big cover shows the picked save.
+- **Real covers.** A game's cover is its newest save's picture. Without one, it is a cover picture the emulator keeps, from the feed's new `art` key. Otherwise it is the striped placeholder, as before.
+- **Continue loads your newest save.** The Library's Continue button, the Continue cards, A on the grid, and couch mode's A all start from it, and the button says which slot. **Start fresh**, under the button, starts without it. A game with no saves, or a fruit that can't load them, just plays.
+- **Favorites.** Mark a game with the star beside its cover (or A in couch mode's Details). A **Favorites** chip shows only those, covers wear a star, and couch mode lists favorites first. They follow the games when the basket moves.
+- **Stats**, the Library's third view beside Covers and List:
+  - play time, this week, sessions and games played
+  - play time by week for the last 12 weeks
+  - time per fruit, the most played games, and recent sessions
+  - It follows the chips and FIND.
+  - A game's panel shows its sessions too.
+  - Sessions are logged from this version on. Play time from before still counts in the totals.
+- The sort control's Recent is now **Last played**.
+
 ## v1.0.1
 
 Fixes, and the first update a v1.0.0 launcher installs by itself.

@@ -64,6 +64,8 @@ downloaded. The banner offers the asset's URL instead.
   launcher/downloads/*.part       in-flight downloads
   launcher/history.log            Downloads → Earlier (history.rs)
   launcher/played.tsv             last played + play time per game (library.rs)
+  launcher/sessions.tsv           every finished session, appended: started, secs, path (library.rs)
+  launcher/favorites.tsv          favourite games, one path a line (library.rs)
   launcher/hashes.tsv             SHA-1 per game, keyed by size + mtime (dumps.rs)
   launcher/lists/<fruit>.{compat,dumps}.txt
   launcher/update/                a launcher update: <build>/, and `staged` naming it (update.rs)
@@ -122,11 +124,12 @@ Pomegranate would otherwise copy back).
 | `jobs.rs` | the download worker thread: a free-space check, then Download 0–70 %, Verify 70–85 %, Install 85–100 % |
 | `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `job_for_build`, `update_for`, `updates`, `rollback_options` |
 | `history.rs` | `history.log` append and read |
-| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `slots` / `delete_slot`, `Played`, `rebase` (paths after a move) |
+| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `slots` / `delete_slot` / `Slot::picture`, `Played`, `Sessions`, `Favorites`, `rebase` (paths after a move) |
 | `lists.rs` | fetches and caches compat and dump lists, checked against the feed |
 | `compat.rs` | `compat.txt` parse; level by serial, then title |
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
-| `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), start, a thread that times the session |
+| `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), `path` for the feed's `art` (`{rom_dir}`, `{stem}`, `{data}`, `{code}`, `{cache}`; unfilled gives none), start, a thread that times the session |
+| `pics.rs` | pictures for covers and saves: PNGs decoded and shrunk on a thread, kept by path; drawing never waits |
 | `mover.rs` | Move basket: where it goes, then rename or a checked copy on a thread |
 | `update.rs` | the launcher's own update: `newer`, `offer` (not a build the player said Later to), stage (download, hash, unpack, `--version`), `apply_staged` / `undo` / `clean` at start |
 | `shelf.rs` | the Library's state: games, lists, hashing, the running game (from a slot, with couch arguments), `view()`, `couch_rows()` |
@@ -138,7 +141,8 @@ Pomegranate would otherwise copy back).
 | `ui/frame.rs` | header (tabs, FIND, Update all, couch button), the banner (launcher update, ripe fruit), footer |
 | `ui/modal.rs` | the dialog: Roll back, Uninstall, Move basket, Saves, Delete save, Map buttons |
 | `ui/couch.rs` | couch mode: laid out at the mocks' 1280×720 and scaled |
-| `ui/library.rs`, `ui/basket.rs`, `ui/downloads.rs`, `ui/settings.rs` | the four tabs |
+| `ui/library.rs`, `ui/basket.rs`, `ui/downloads.rs`, `ui/settings.rs` | the four tabs; `ui/library.rs::cover` draws every cover (picture or stripes) |
+| `ui/stats.rs` | the Library's Stats view |
 
 ## The frame
 

@@ -22,7 +22,7 @@ bumped in the same commit, and the release notes come from a
 
 ## Verified
 
-- `cargo test`: 65 pass. Covers:
+- `cargo test`: 71 pass. Covers:
   - feed signature: a real signed feed passes; a tampered feed, the wrong key or an older feed is refused
   - install, switch, prune, uninstall; a bad archive leaves the current build running
   - a wrong hash deletes the download; a network failure changes nothing
@@ -37,6 +37,7 @@ bumped in the same commit, and the release notes come from a
   - Map buttons: listen, bind with a swap, Done saves `[gamepad]`, Reset; the settings round trip keeps unknown keys
   - self-update: version order; staging refuses a wrong hash or a build that doesn't name itself, leaving nothing behind; the swap, the undo and the clean-up; an unwritable folder
   - `couch` arguments only for builds the feed lists
+  - v1.1.0: pictures decode on a thread and shrink; `art` paths fill, and an unfilled one gives none; a save's picture beats `art`, which beats the stripes; Continue passes the newest slot, Start fresh doesn't, and a fruit without `load_slot` plays fresh; favorites filter, sort first in couch mode and follow a move; weekly buckets and totals from the session log, read back on a new run; shots of the pictures, favorites and Stats (three sizes, both themes)
   - v1.0.1: Map buttons in two columns at 1024×680 (Left/Right jump); sort and view round-trip through settings; Later holds for that build only; the folders' signature changes with a file added, grown or removed; Rescan finds a new file, an unchanged feed doesn't rescan and a newer one does
   - renders of every tab state, the dialogs, the ripe banner, the space failure, couch mode at 1280×720 and 1920×1080, the focus ring and the Map dialog
 - `e2e_install_switch_and_refuse` (opt-in: `FRUITBASKET_E2E=1`; `FRUITBASKET_FEED` can point it at a local copy of the site instead) does all of this over HTTP. On 2026-10-03 it passed against the live feed:
@@ -102,11 +103,12 @@ As of 2026-10-03, nothing the launcher needs is waiting on another repo.
 ## Known gaps
 
 - The macOS launcher is a bare binary in a tar.gz, not a signed `.app`. Gatekeeper may stop the first run of a download from the browser. Updates the launcher stages itself aren't affected.
-- Couch mode's covers are placeholders, like the Library's. The saves list has no pictures, though Pomegranate writes a `.png` for each slot.
+- Save pictures and covers come only from what an emulator writes. Pomegranate writes `.sN.png` slot pictures and `cache/covers/<serial>.png`; Strawberry and Crabapple keep their slot pictures inside the `.state` and their title captures under a path hash, so they show stripes until they write `<stem>.sN.png` and `<cache>/<app>/covers/<stem>.png` (asked of their sessions).
+- Pomegranate's cover cache is keyed by the disc's boot serial. The launcher knows a serial only when it's in the file name, so other discs fall back to `{stem}`, which matches only when Pomegranate couldn't read a serial either.
+- Sessions are logged from v1.1.0 on. Older play time counts in the totals but not in the weekly chart or the session lists.
 - Saves on a fruit without `load_slot` can be shown and deleted but not loaded. The dialog's button becomes Show file.
 - The ripe banner shows only while the launcher is open; there is no OS notification.
 - Roll back offers only what the feed lists: one nightly, plus the stable releases at or after `oldest`. Older builds can't be re-downloaded (Strawberry v1.4.0 and Pomegranate v0.3.0 today); ones kept on disk still work.
-- Game covers are the mocks' striped placeholders. Real art (title captures, slot pictures) needs per-fruit probes.
 - Tick boxes use basket-ui's filled square, not the mocks' check, to match the emulators.
 
 ## Deviations from the mocks
