@@ -16,6 +16,7 @@ mod launch;
 mod library;
 mod lists;
 mod mover;
+mod pics;
 mod platform;
 mod queue;
 mod settings;

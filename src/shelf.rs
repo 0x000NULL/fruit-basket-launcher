@@ -2,16 +2,19 @@
 //! and dump lists, background hashing, and the running game. `App` owns
 //! one and forwards to it; `view` builds what the tab draws.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
 
 use crate::basket::{Basket, Current};
 use crate::compat::Compat;
 use crate::dumps::{self, DumpDb, Hashes, Want};
 use crate::feed::{Feed, Fruit};
 use crate::launch::{self, Session};
-use crate::library::{self, Game, Played};
+use crate::library::{self, Game, Played, Slot};
+use crate::pics::Pics;
 use crate::lists::{self, Kind};
 use crate::settings::{LibView, Settings};
 use crate::ui::library::{Dump, Empty, GameDetail, LibraryView, PlayState, Row};
@@ -34,6 +37,15 @@ pub struct Shelf {
     pub az: bool,
     pub view: LibView,
     pub selected: Option<PathBuf>,
+    /// Each game's cover picture: its newest save's, else the feed's `art`.
+    covers: HashMap<PathBuf, PathBuf>,
+    covers_rx: Option<Receiver<HashMap<PathBuf, PathBuf>>>,
+    pub pics: Pics,
+    /// Slots by game, read once, not every frame; cleared when saves can
+    /// have changed (a game exited, a save deleted, a rescan).
+    slots: RefCell<HashMap<PathBuf, Vec<Slot>>>,
+    /// A game exited: the covers need looking for again.
+    pub stale_covers: bool,
 }
 
 impl Shelf {
@@ -50,6 +62,74 @@ impl Shelf {
         let fruits = Shelf::installed(feed, installed);
         self.games = library::scan(basket, &fruits, &settings.folders, &settings.hidden);
         self.start_hashing();
+        self.index_covers(basket, feed);
+    }
+
+    /// Find every game's cover on a thread: the newest save that has a
+    /// picture, else the first of the feed's `art` paths that exists.
+    pub fn index_covers(&mut self, basket: &Basket, feed: Option<&Feed>) {
+        self.slots.borrow_mut().clear();
+        self.stale_covers = false;
+        let cache = dirs::cache_dir();
+        let jobs: Vec<(PathBuf, Vec<PathBuf>, Vec<PathBuf>)> = self
+            .games
+            .iter()
+            .filter_map(|g| {
+                let f = feed?.fruit(&g.fruit)?;
+                let data = f.uses_data().then(|| basket.data_dir(&f.id));
+                let place = launch::Place { rom: &g.path, data: data.as_deref(), code: g.code.as_deref(), cache: cache.as_deref() };
+                let art = f.art.iter().filter_map(|t| launch::path(t, &place)).collect();
+                Some((g.path.clone(), library::save_dirs(basket, f), art))
+            })
+            .collect();
+        let (tx, rx) = channel();
+        thread::spawn(move || {
+            let found = jobs
+                .into_iter()
+                .filter_map(|(game, dirs, art)| {
+                    let slot = library::slots(&game, &dirs).iter().find_map(|s| s.picture().map(Path::to_path_buf));
+                    slot.or_else(|| art.into_iter().find(|p| p.is_file())).map(|p| (game, p))
+                })
+                .collect();
+            let _ = tx.send(found);
+        });
+        self.covers_rx = Some(rx);
+    }
+
+    /// The game's save slots, newest first, read once until something
+    /// could have changed them.
+    pub fn slots(&self, game: &Path, basket: &Basket, fruit: &Fruit) -> Vec<Slot> {
+        self.slots
+            .borrow_mut()
+            .entry(game.to_path_buf())
+            .or_insert_with(|| library::slots(game, &library::save_dirs(basket, fruit)))
+            .clone()
+    }
+
+    /// Saves changed (one was deleted): read them again.
+    pub fn forget_slots(&mut self) {
+        self.slots.borrow_mut().clear();
+        self.stale_covers = true;
+    }
+
+    /// Wait for the cover index and its pictures: the render tests draw
+    /// what's loaded.
+    #[cfg(test)]
+    pub fn settle(&mut self) {
+        if let Some(rx) = self.covers_rx.take() {
+            if let Ok(found) = rx.recv_timeout(std::time::Duration::from_secs(10)) {
+                for p in found.values() {
+                    self.pics.want(p);
+                }
+                self.covers = found;
+            }
+        }
+        self.pics.settle();
+    }
+
+    /// The game's cover picture, if it has one and it's loaded.
+    pub fn cover(&self, game: &Path) -> Option<&tiny_skia::Pixmap> {
+        self.pics.get(self.covers.get(game)?)
     }
 
     /// Read the cached lists that match the feed, and fetch the rest.
@@ -91,7 +171,17 @@ impl Shelf {
 
     /// Pick up lists, hashes and finished games. True if the view changed.
     pub fn poll(&mut self, launcher_dir: &Path, feed: Option<&Feed>) -> bool {
-        let mut changed = false;
+        let mut changed = self.pics.poll();
+        if let Some(rx) = &self.covers_rx {
+            if let Ok(found) = rx.try_recv() {
+                self.covers_rx = None;
+                for p in found.values() {
+                    self.pics.want(p);
+                }
+                self.covers = found;
+                changed = true;
+            }
+        }
         if let Some(rx) = &self.lists_rx {
             let mut got = false;
             let done = loop {
@@ -145,6 +235,10 @@ impl Shelf {
                     eprintln!("fruitbasket: saving play time: {e}");
                 }
                 self.running = None;
+                // The game may have saved: new slots, new pictures.
+                self.slots.borrow_mut().clear();
+                self.stale_covers = true;
+                self.pics.reload();
                 changed = true;
             }
         }
@@ -224,6 +318,7 @@ impl Shelf {
             level: self.compat.get(&g.fruit).and_then(|c| c.level(g, serial)),
             last: self.played.last(&g.path),
             secs: self.played.secs(&g.path),
+            picture: self.cover(&g.path),
         }
     }
 

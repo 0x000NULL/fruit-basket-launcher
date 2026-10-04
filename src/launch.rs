@@ -31,6 +31,34 @@ pub fn args(template: &[String], rom: Option<&Path>, slot: Option<u8>, data: Opt
     template.iter().map(fill).collect()
 }
 
+/// What a picture path (the feed's `art`) can name.
+pub struct Place<'a> {
+    pub rom: &'a Path,
+    pub data: Option<&'a Path>,
+    pub code: Option<&'a str>,
+    pub cache: Option<&'a Path>,
+}
+
+/// A picture path with its placeholders filled; `None` if one has nothing
+/// to fill it (a game without a serial has no `{code}` cover).
+pub fn path(template: &str, p: &Place) -> Option<PathBuf> {
+    let text = |o: Option<&Path>| o.map(|p| p.to_string_lossy().into_owned());
+    let values = [
+        ("{rom_dir}", text(p.rom.parent())),
+        ("{stem}", p.rom.file_stem().map(|s| s.to_string_lossy().into_owned())),
+        ("{data}", text(p.data)),
+        ("{code}", p.code.map(str::to_string)),
+        ("{cache}", text(p.cache)),
+    ];
+    let mut out = template.to_string();
+    for (key, value) in values {
+        if out.contains(key) {
+            out = out.replace(key, &value?);
+        }
+    }
+    (!out.contains('{')).then(|| PathBuf::from(out))
+}
+
 /// A finished session.
 #[derive(Debug, Clone)]
 pub struct Session {
@@ -75,6 +103,18 @@ mod tests {
         let d = vec!["play".to_string(), "{rom}".to_string(), "--data".to_string(), "{data}".to_string()];
         assert!(args(&d, Some(Path::new("x.iso")), None, None).unwrap_err().contains("{data}"));
         assert!(args(&["--slot".to_string(), "{slot}".to_string()], None, None, None).is_err());
+    }
+
+    #[test]
+    fn fills_a_picture_path() {
+        let rom = Path::new("games/Ico (SCUS-97113).iso");
+        let p = Place { rom, data: Some(Path::new("pom/data")), code: Some("SCUS-97113"), cache: Some(Path::new("cache")) };
+        assert_eq!(path("{data}/cache/covers/{code}.png", &p), Some(PathBuf::from("pom/data/cache/covers/SCUS-97113.png")));
+        assert_eq!(path("{cache}/strawberry/covers/{stem}.png", &p), Some(PathBuf::from("cache/strawberry/covers/Ico (SCUS-97113).png")));
+        assert_eq!(path("{rom_dir}/{stem}.png", &p), Some(PathBuf::from("games/Ico (SCUS-97113).png")));
+        let bare = Place { rom, data: None, code: None, cache: None };
+        assert_eq!(path("{data}/cache/covers/{code}.png", &bare), None, "nothing to fill it");
+        assert_eq!(path("{rom_dir}/{nope}.png", &bare), None, "an unknown placeholder");
     }
 
     #[test]

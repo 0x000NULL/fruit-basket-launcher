@@ -189,6 +189,14 @@ pub struct Slot {
     pub extra: Vec<PathBuf>,
 }
 
+impl Slot {
+    /// The picture the emulator saved with it, if it writes one
+    /// (`<stem>.sN.png`).
+    pub fn picture(&self) -> Option<&Path> {
+        self.extra.iter().find(|p| p.extension().is_some_and(|e| e.eq_ignore_ascii_case("png"))).map(PathBuf::as_path)
+    }
+}
+
 /// The game's slots, newest first: `<stem>.s<N>.state` beside the game or
 /// in `dirs`. The numbers come from the files, so Strawberry's 1–8 and
 /// Pomegranate's 0–9 both work.
@@ -332,6 +340,7 @@ mod tests {
             open: vec![],
             couch: vec![],
             carry: vec![],
+            art: vec![],
             url: String::new(),
             readme_url: String::new(),
             compat: None,

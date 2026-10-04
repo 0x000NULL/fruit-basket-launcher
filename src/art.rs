@@ -99,7 +99,7 @@ fn draw_drawing(cv: &mut Canvas, d: &Drawing, t: Transform) {
 }
 
 /// Decode an 8-bit RGBA PNG into a premultiplied pixmap.
-fn decode_png(bytes: &[u8]) -> Option<Pixmap> {
+pub(crate) fn decode_png(bytes: &[u8]) -> Option<Pixmap> {
     let mut decoder = png::Decoder::new(bytes);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
@@ -126,7 +126,7 @@ fn decode_png(bytes: &[u8]) -> Option<Pixmap> {
 /// Shrink by a whole factor, averaging each `f`×`f` block. On a pixel
 /// fruit (16 px grid, 8 px per cell at 128) every block lies inside one
 /// cell, so edges stay hard.
-fn shrink(src: &Pixmap, f: u32) -> Pixmap {
+pub(crate) fn shrink(src: &Pixmap, f: u32) -> Pixmap {
     let (w, h) = (src.width() / f, src.height() / f);
     let mut out = Pixmap::new(w, h).expect("icon size");
     let s = src.data();

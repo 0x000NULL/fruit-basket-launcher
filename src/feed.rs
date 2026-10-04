@@ -56,6 +56,11 @@ pub struct Fruit {
     /// for a fruit whose templates use `{data}`, they move into `data/` once.
     #[serde(default)]
     pub carry: Vec<String>,
+    /// Where the emulator keeps a game's cover picture, tried in order:
+    /// paths with `{rom_dir}`, `{stem}`, `{data}`, `{code}` and `{cache}`.
+    /// Only ever read as a PNG.
+    #[serde(default)]
+    pub art: Vec<String>,
     pub url: String,
     pub readme_url: String,
     pub compat: Option<FileRef>,

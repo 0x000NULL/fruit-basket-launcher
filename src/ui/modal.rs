@@ -6,6 +6,7 @@ use basket_ui::text::Style;
 use tiny_skia::{Pixmap, Transform};
 
 use super::basket::number_line;
+use super::library::picture;
 use super::{Cmd, Size, Ui};
 use crate::feed::Fruit;
 
@@ -18,6 +19,9 @@ pub struct ModalView<'a> {
     pub current: Option<(String, String)>,
     /// Radio rows: label and note.
     pub rows: Vec<(String, String)>,
+    /// A picture per row (save slots); empty for none. A row with `None`
+    /// still keeps the space, so labels line up.
+    pub pics: Vec<Option<&'a Pixmap>>,
     pub pick: usize,
     /// A tick box under the body: label and state.
     pub tick: Option<(&'a str, bool)>,
@@ -119,7 +123,18 @@ pub fn draw(ui: &mut Ui, v: &ModalView) -> usize {
             if on {
                 ui.cv.circle(rx + 9.0, ry + ROW_H / 2.0, 4.0, ui.pal.fg);
             }
-            ui.cv.text(rx + 30.0, ry + 15.0, label, &mono.color(ui.pal.fg));
+            let mut lx = rx + 30.0;
+            if !v.pics.is_empty() {
+                // A 4:3 thumbnail between the radio and the label.
+                let (tw, th) = (48.0, 36.0);
+                let ty = ry + (ROW_H - th) / 2.0;
+                match v.pics.get(i).copied().flatten() {
+                    Some(pm) => picture(ui, pm, lx, ty, tw, th),
+                    None => ui.cv.stroke_rect(lx, ty, tw, th, 1.0, ui.pal.line),
+                }
+                lx += tw + 12.0;
+            }
+            ui.cv.text(lx, ry + 15.0, label, &mono.color(ui.pal.fg));
             ui.cv.text_right(rx + col_w, ry + 16.0, what, &note.color(ui.muted()));
             if ui.clicked(rx, ry, col_w, ROW_H) && !on {
                 ui.emit(Cmd::ModalPick(i));

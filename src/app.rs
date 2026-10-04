@@ -24,6 +24,7 @@ use crate::jobs::{Job, Worker};
 use crate::key;
 use crate::library::{self, Slot};
 use crate::mover;
+use crate::pics::Pics;
 use crate::platform;
 use crate::queue::{self, Finished, Queue, RollOpt};
 use crate::settings::{LibView, Settings, ThemePref};
@@ -446,6 +447,9 @@ impl App {
         if self.shelf.poll(&self.basket.launcher_dir(), self.feed.as_ref()) && self.shelf.running().is_none() {
             self.play_error = None;
         }
+        if self.shelf.stale_covers {
+            self.shelf.index_covers(&self.basket, self.feed.as_ref());
+        }
         if self.settings.theme == ThemePref::System && self.os_dark_at.elapsed() > Duration::from_secs(5) {
             self.os_dark = platform::os_dark();
             self.os_dark_at = Instant::now();
@@ -525,6 +529,7 @@ impl App {
             self.focus = None;
         }
 
+        self.want_slot_pictures();
         let status = self.status();
         let hints: Vec<(&str, &str)> = self.hints();
         let night = self.night() || self.couch.is_some();
@@ -569,7 +574,7 @@ impl App {
         });
         let lv = (self.tab == Tab::Library).then(|| self.shelf.view(&self.basket, self.feed.as_ref(), &self.find, self.sheet, self.scroll, self.aside_scroll));
         let banner = banner(self.launcher_update.as_deref(), self.update_manual.as_ref(), &ctx);
-        let mv = self.modal.as_ref().and_then(|m| modal_view(m, self.feed.as_ref(), &self.basket, &self.installed));
+        let mv = self.modal.as_ref().and_then(|m| modal_view(m, self.feed.as_ref(), &self.basket, &self.installed, &self.shelf.pics));
         // Under a dialog the page draws, but nothing on it can be clicked.
         let cview = self.couch.as_ref().map(|c| couch_view(c, &self.shelf, self.feed.as_ref(), &self.basket, &self.installed, &self.controllers));
         let blind = UiInput { mouse: (-1.0e6, -1.0e6), ..UiInput::default() };
@@ -878,8 +883,21 @@ impl App {
 
     fn game_slots(&self, game: &Path) -> Vec<Slot> {
         match self.game_fruit(game) {
-            Some(f) => library::slots(game, &library::save_dirs(&self.basket, f)),
+            Some(f) => self.shelf.slots(game, &self.basket, f),
             None => Vec::new(),
+        }
+    }
+
+    /// Ask for the pictures of the saves on screen: couch mode's list or
+    /// the Saves dialog.
+    fn want_slot_pictures(&mut self) {
+        let slots = match (&self.modal, &self.couch) {
+            (Some(Modal::Saves { slots, .. }), _) => slots.clone(),
+            (None, Some(c)) if matches!(c.panel, CouchPanel::Saves(_)) => self.couch_slots(),
+            _ => return,
+        };
+        for p in slots.iter().filter_map(Slot::picture) {
+            self.shelf.pics.want(p);
         }
     }
 
@@ -1724,7 +1742,7 @@ fn banner(launcher_update: Option<&str>, manual: Option<&(String, String)>, ctx:
 }
 
 /// What the open dialog shows, from the mocks' Rollback and Uninstall.
-fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, installed: &HashMap<String, Current>) -> Option<ModalView<'a>> {
+fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, installed: &HashMap<String, Current>, pics: &'a Pics) -> Option<ModalView<'a>> {
     let sep = std::path::MAIN_SEPARATOR;
     match m {
         Modal::Rollback { fruit, options, pick } => {
@@ -1745,6 +1763,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
                         (format!("{} {}", o.channel.name(), o.build), note)
                     })
                     .collect(),
+                pics: Vec::new(),
                 pick: *pick,
                 tick: None,
                 cancel: "Cancel",
@@ -1763,6 +1782,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
                 ),
                 current: None,
                 rows: Vec::new(),
+                pics: Vec::new(),
                 pick: 0,
                 tick: Some(("Also delete games and saves", *delete)),
                 cancel: "Keep it",
@@ -1780,6 +1800,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
             ),
             current: None,
             rows: Vec::new(),
+            pics: Vec::new(),
             pick: 0,
             tick: None,
             cancel: "Cancel",
@@ -1799,6 +1820,11 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
                 },
                 current: None,
                 rows: slots.iter().map(|s| (format!("Slot {}", s.n), basket_ui::fmt::fmt_when(s.saved))).collect(),
+                pics: if slots.iter().any(|s| s.picture().is_some()) {
+                    slots.iter().map(|s| s.picture().and_then(|p| pics.get(p))).collect()
+                } else {
+                    Vec::new()
+                },
                 pick: *pick,
                 tick: None,
                 cancel: "Close",
@@ -1819,6 +1845,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
                     (name.to_string(), bound)
                 })
                 .collect(),
+            pics: Vec::new(),
             pick: *pick,
             tick: None,
             cancel: "Cancel",
@@ -1831,6 +1858,7 @@ fn modal_view<'a>(m: &'a Modal, feed: Option<&'a Feed>, basket: &Basket, install
             body: format!("Slot {} of {title}, saved {}, is deleted for good.", slot.n, basket_ui::fmt::fmt_when(slot.saved)),
             current: None,
             rows: Vec::new(),
+            pics: Vec::new(),
             pick: 0,
             tick: None,
             cancel: "Keep it",
@@ -1867,12 +1895,17 @@ fn couch_view<'a>(
     let game = rows.get(pick);
     let gfruit = game.and_then(|r| feed?.fruit(&r.game.fruit));
     let slots = match (game, gfruit) {
-        (Some(r), Some(f)) => library::slots(&r.game.path, &library::save_dirs(basket, f)),
+        (Some(r), Some(f)) => shelf.slots(&r.game.path, basket, f),
         _ => Vec::new(),
     };
     let panel = match (c.panel, game) {
         (CouchPanel::Details, Some(r)) => Panel::Details(shelf.detail(r, basket, feed)),
         (CouchPanel::Saves(i), Some(_)) => Panel::Saves {
+            pics: if slots.iter().any(|s| s.picture().is_some()) {
+                slots.iter().map(|s| s.picture().and_then(|p| shelf.pics.get(p))).collect()
+            } else {
+                Vec::new()
+            },
             rows: slots
                 .iter()
                 .map(|s| (format!("Slot {}", s.n), basket_ui::fmt::fmt_when(s.saved)))
@@ -1898,6 +1931,10 @@ fn couch_view<'a>(
         panel,
         saves: slots.len(),
         playing: shelf.running(),
+        hero: match c.panel {
+            CouchPanel::Saves(i) => slots.get(i).and_then(Slot::picture).and_then(|p| shelf.pics.get(p)),
+            _ => None,
+        },
         hints,
     }
 }
@@ -2440,6 +2477,57 @@ mod tests {
         app.apply(Cmd::Focus(Some("Map buttons…".into())));
         app.draw(&UiInput::default(), 1280, 900);
         app.canvas.save_png(&dir.join("settings-pad-regular-paper.png")).unwrap();
+    }
+
+    /// Covers: a save's picture beats the feed's `art`, which beats the
+    /// stripes. Saves show their pictures in couch mode and the dialog.
+    #[test]
+    fn pictures_for_covers_and_saves() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, mut feed, rom) = couch_basket(tmp.path());
+        feed.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap().art = vec!["{rom_dir}/{stem}.cover.png".into()];
+        let games = b.games_dir("strawberry");
+        let png = |name: &str, rgb: [u8; 3]| std::fs::write(games.join(name), crate::pics::png_bytes(240, 160, rgb)).unwrap();
+        png("homebrew.s5.png", [40, 90, 200]);
+        for t in ["Golden Sun (USA)", "Metroid Fusion (USA)", "Cars (USA)"] {
+            std::fs::write(games.join(format!("{t}.gba")), "x").unwrap();
+        }
+        png("Golden Sun (USA).cover.png", [40, 160, 70]);
+        png("Metroid Fusion (USA).cover.png", [40, 160, 70]);
+        std::fs::write(games.join("Metroid Fusion (USA).s1.state"), "x").unwrap();
+        png("Metroid Fusion (USA).s1.png", [220, 120, 30]);
+        let mut app = App::with(Settings { theme: ThemePref::Paper, ..Settings::default() }, b, Some(feed));
+        app.shelf.settle();
+        let red = |p: &Path| app.shelf.cover(p).map(|pm| pm.pixel(0, 0).unwrap().red());
+        assert_eq!(red(&rom), Some(40), "the save's picture");
+        assert_eq!(red(&games.join("Golden Sun (USA).gba")), Some(40), "art");
+        assert_eq!(app.shelf.cover(&games.join("Golden Sun (USA).gba")).unwrap().pixel(0, 0).unwrap().green(), 160);
+        assert_eq!(red(&games.join("Metroid Fusion (USA).gba")), Some(220), "a save beats art");
+        assert_eq!(red(&games.join("Cars (USA).gba")), None, "stripes");
+
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        app.shelf.selected = Some(rom.clone());
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-pictures-regular-paper.png")).unwrap();
+        app.apply(Cmd::LibView(LibView::List));
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-pictures-list-regular-paper.png")).unwrap();
+        app.apply(Cmd::ShowSaves(rom.clone()));
+        app.draw(&UiInput::default(), 1280, 900);
+        app.shelf.settle();
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-saves-pictures-regular-paper.png")).unwrap();
+        app.modal = None;
+        app.apply(Cmd::Couch);
+        app.apply(Cmd::CouchSystem(1));
+        let pick = app.shelf.couch_rows(app.feed.as_ref(), Some("strawberry")).iter().position(|r| r.game.path == rom).unwrap();
+        app.apply(Cmd::CouchPick(pick));
+        app.apply(Cmd::CouchSaves);
+        app.draw(&UiInput::default(), 1280, 720);
+        app.shelf.settle();
+        app.draw(&UiInput::default(), 1280, 720);
+        app.canvas.save_png(&dir.join("couch-saves-pictures-1280.png")).unwrap();
     }
 
     fn job(app: &App, id: &str) -> Job {

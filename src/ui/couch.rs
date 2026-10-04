@@ -4,15 +4,17 @@
 //! A Continue, X Saves, Y Details, B back, ☰ desktop); clicks work too.
 
 use basket_ui::text::Style;
+use tiny_skia::Pixmap;
 
-use super::library::{cover, level_label, squares, when, Dump, GameDetail, Row};
+use super::library::{cover, level_label, picture, squares, when, Dump, GameDetail, Row};
 use super::{Cmd, Ui};
 
 pub enum Panel<'a> {
     /// Continue · Saves · Details.
     Buttons,
-    /// The game's saves, newest first, then START FRESH.
-    Saves { rows: Vec<(String, String)>, pick: usize, note: Option<String> },
+    /// The game's saves, newest first, then START FRESH. `pics` has a
+    /// picture per save when the fruit writes them, else is empty.
+    Saves { rows: Vec<(String, String)>, pics: Vec<Option<&'a Pixmap>>, pick: usize, note: Option<String> },
     Details(GameDetail<'a>),
 }
 
@@ -29,6 +31,8 @@ pub struct CouchView<'a> {
     pub saves: usize,
     /// The fruit a game is running in.
     pub playing: Option<&'a str>,
+    /// The picked save's picture, shown in the cover's place.
+    pub hero: Option<&'a Pixmap>,
     pub hints: Vec<(&'static str, &'static str)>,
 }
 
@@ -66,7 +70,10 @@ pub fn draw(ui: &mut Ui, v: &CouchView) {
 
     // The hero: cover, eyebrow, title, compat, then the panel.
     let (cw, ch) = (k.v(228.0), k.v(304.0));
-    cover(ui, r, x0, k.y(108.0), cw, ch, false);
+    match v.hero {
+        Some(pm) => cover(ui, &Row { picture: Some(pm), ..r.clone() }, x0, k.y(108.0), cw, ch, false),
+        None => cover(ui, r, x0, k.y(108.0), cw, ch, false),
+    }
     ui.cv.text(x0 + k.v(14.0), k.y(122.0), r.system, &Style::data(k.v(12.0)).color(basket_ui::tokens::hex(0xF2EDE2)));
     let tx = x0 + cw + k.v(48.0);
     let tw = w - x0 - tx;
@@ -97,7 +104,7 @@ pub fn draw(ui: &mut Ui, v: &CouchView) {
     } else {
         match &v.panel {
             Panel::Buttons => buttons(ui, v, &k, tx, py),
-            Panel::Saves { rows, pick, note } => saves(ui, rows, *pick, note.as_deref(), &k, tx, k.y(271.0)),
+            Panel::Saves { rows, pics, pick, note } => saves(ui, rows, pics, *pick, note.as_deref(), &k, tx, k.y(271.0)),
             Panel::Details(d) => details(ui, d, &k, tx, py, tw),
         }
     }
@@ -198,7 +205,8 @@ fn buttons(ui: &mut Ui, v: &CouchView, k: &Scale, x: f32, y: f32) {
     }
 }
 
-fn saves(ui: &mut Ui, rows: &[(String, String)], pick: usize, note: Option<&str>, k: &Scale, x: f32, y: f32) {
+#[allow(clippy::too_many_arguments)]
+fn saves(ui: &mut Ui, rows: &[(String, String)], pics: &[Option<&Pixmap>], pick: usize, note: Option<&str>, k: &Scale, x: f32, y: f32) {
     let rw = k.v(640.0);
     let rh = k.v(58.0);
     let label = Style::display(k.v(21.0)).upper();
@@ -212,7 +220,19 @@ fn saves(ui: &mut Ui, rows: &[(String, String)], pick: usize, note: Option<&str>
             ui.cv.fill_rect(x, ry, rw, rh, ui.pal.fg);
         }
         let ink = if on { ui.pal.bg } else { ui.pal.fg };
-        ui.cv.text(x + k.v(16.0), ry + k.v(18.0), name, &label.color(ink));
+        let mut lx = x + k.v(16.0);
+        if !pics.is_empty() {
+            // A 4:3 thumbnail at the left; Start fresh keeps the space.
+            let (tw, th) = (k.v(60.0), k.v(45.0));
+            let ty = ry + (rh - th) / 2.0;
+            match pics.get(i).copied().flatten() {
+                Some(pm) => picture(ui, pm, x + k.v(8.0), ty, tw, th),
+                None if i < pics.len() => ui.cv.stroke_rect(x + k.v(8.0), ty, tw, th, 1.0, ui.pal.line),
+                None => {}
+            }
+            lx = x + k.v(8.0) + tw + k.v(16.0);
+        }
+        ui.cv.text(lx, ry + k.v(18.0), name, &label.color(ink));
         ui.cv.text_right(x + rw - k.v(16.0), ry + k.v(21.0), when, &date.color(if on { ui.pal.bg } else { ui.muted() }));
         ui.cv.hrule(x, x + rw, ry + rh, 1.0, ui.pal.line);
         if ui.clicked(x, ry, rw, rh) {

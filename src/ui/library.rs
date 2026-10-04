@@ -8,10 +8,11 @@ use std::time::SystemTime;
 use basket_ui::fmt::fmt_play;
 
 use crate::ui::fmt_size;
+use basket_ui::canvas::Clip;
 use basket_ui::text::Style;
 use basket_ui::tokens::{hex, Rgb};
 use basket_ui::widgets::{self, mix};
-use tiny_skia::{PathBuilder, Transform};
+use tiny_skia::{PathBuilder, Pixmap, Transform};
 
 use crate::focus::Area;
 use super::basket::aside_width;
@@ -28,6 +29,8 @@ pub struct Row<'a> {
     pub level: Option<Level>,
     pub last: Option<SystemTime>,
     pub secs: u64,
+    /// The cover picture, once loaded; the striped placeholder until then.
+    pub picture: Option<&'a Pixmap>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -294,21 +297,29 @@ fn play_button(ui: &mut Ui, x: f32, y: f32, s: f32) {
     }
 }
 
-/// A placeholder cover: the title's colour with diagonal stripes, the
-/// system top left and (large covers) the title bottom left.
+/// A game's cover: its picture filling the box, or the placeholder (the
+/// title's colour with diagonal stripes). Then the system top left and
+/// (large covers) the title bottom left.
 pub(crate) fn cover(ui: &mut Ui, r: &Row, x: f32, y: f32, w: f32, h: f32, label: bool) {
     let c = cover_color(&r.game.title);
     ui.cv.fill_rect(x, y, w, h, c);
-    let stripe = mix(c, [0, 0, 0], 0.22);
-    // Lines px + py = k, clipped to the box by hand.
-    let mut k = x + y + 14.0;
-    while k < x + y + w + h {
-        let lo = (k - y - h).max(x);
-        let hi = (k - y).min(x + w);
-        if hi > lo {
-            ui.cv.line(lo, k - lo, hi, k - hi, 1.0, stripe);
+    if let Some(pm) = r.picture {
+        picture(ui, pm, x, y, w, h);
+        if label {
+            // A scrim under the words, so they read over any picture.
+            let shade = |ui: &mut Ui, y0: f32, hh: f32| {
+                if let Some(mut px) = Pixmap::new(1, 1) {
+                    px.fill(tiny_skia::Color::from_rgba(0.0, 0.0, 0.0, 0.55).unwrap_or(tiny_skia::Color::BLACK));
+                    ui.cv.draw_pixmap(&px, 0.0, 0.0, Transform::from_row(w, 0.0, 0.0, hh, x, y0));
+                }
+            };
+            shade(ui, y, 28.0);
+            let lines = ui.cv.fonts.wrap(&Style::display(15.0).upper(), &r.game.title, w - 20.0, 3).len() as f32;
+            let sh = 22.0 + lines * 18.0 + 4.0;
+            shade(ui, y + h - sh, sh);
         }
-        k += 22.0;
+    } else {
+        stripes(ui, c, x, y, w, h);
     }
     if label {
         let sys = Style::data(10.0).color(COVER_TEXT);
@@ -319,6 +330,40 @@ pub(crate) fn cover(ui: &mut Ui, r: &Row, x: f32, y: f32, w: f32, h: f32, label:
         for (i, l) in lines.iter().enumerate() {
             ui.cv.text(x + 10.0, y + h - 22.0 - (n - 1.0 - i as f32) * 18.0, l, &st);
         }
+    }
+}
+
+/// A picture scaled to fill the box and centred, the overflow cut off.
+pub(crate) fn picture(ui: &mut Ui, pm: &Pixmap, x: f32, y: f32, w: f32, h: f32) {
+    let (pw, ph) = (pm.width() as f32, pm.height() as f32);
+    let s = (w / pw).max(h / ph);
+    let (tx, ty) = (x + (w - pw * s) / 2.0, y + (h - ph * s) / 2.0);
+    let old = ui.cv.clip();
+    let (mut x0, mut y0, mut x1, mut y1) = (x as i32, y as i32, (x + w) as i32, (y + h) as i32);
+    if let Some(c) = old {
+        x0 = x0.max(c.x);
+        y0 = y0.max(c.y);
+        x1 = x1.min(c.x + c.w);
+        y1 = y1.min(c.y + c.h);
+    }
+    if x1 > x0 && y1 > y0 {
+        ui.cv.set_clip(Some(Clip { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }));
+        ui.cv.draw_pixmap(pm, 0.0, 0.0, Transform::from_row(s, 0.0, 0.0, s, tx, ty));
+    }
+    ui.cv.set_clip(old);
+}
+
+fn stripes(ui: &mut Ui, c: Rgb, x: f32, y: f32, w: f32, h: f32) {
+    let stripe = mix(c, [0, 0, 0], 0.22);
+    // Lines px + py = k, clipped to the box by hand.
+    let mut k = x + y + 14.0;
+    while k < x + y + w + h {
+        let lo = (k - y - h).max(x);
+        let hi = (k - y).min(x + w);
+        if hi > lo {
+            ui.cv.line(lo, k - lo, hi, k - hi, 1.0, stripe);
+        }
+        k += 22.0;
     }
 }
 
