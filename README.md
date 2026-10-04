@@ -32,6 +32,7 @@ See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) 
   - A failure says what happened on disk (usually: nothing changed), with Try again.
 - **Library.**
   - Everything the installed fruits can play, from each fruit's `games/` folder and any folders added with **Add folder…**.
+  - Zipped games too, for fruits that open zips themselves (Strawberry and Crabapple today): a zip goes to the fruit whose game is inside it.
   - **Play** or **Continue** starts the game in its fruit. The launcher keeps last played and play time.
   - Compat squares come from each fruit's compatibility list on the site. Where the site has a No-Intro or Redump list, each game is checked against it.
   - **Remove** hides a game and never deletes the file.
@@ -58,7 +59,7 @@ See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) 
     cargo build --profile dist     # what the releases ship
     cargo test                     # also renders every screen to target/shots/
 
-Linux needs `libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev`.
+It needs Rust 1.89 or newer (edition 2024). Linux needs `libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev`.
 Releases for Windows x64, Linux x64, macOS arm64 and macOS x64 are built
 from tags by GitHub Actions, and mirrored to the site.
 

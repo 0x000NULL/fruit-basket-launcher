@@ -198,6 +198,14 @@ renders at 1280×720 and 1920×1080.
 | basket move | `mover::start` | `Progress` (percent, then done or the error) |
 | launcher update | `update::start` | `Upd` (staged, or why not) |
 
+## CI
+
+`.github/workflows/ci.yml` runs `cargo test` on every push to main and
+every pull request: on ubuntu-latest and windows-latest with stable Rust,
+and an `msrv` job on Rust 1.89 (Cargo.toml's `rust-version`, the same as
+fruit-basket's) with `--locked`, so the committed Cargo.lock has to build
+there. GitHub-hosted runners only.
+
 ## Releases
 
 A pushed `v*` tag runs `.github/workflows/release.yml` on GitHub-hosted
