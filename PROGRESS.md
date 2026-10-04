@@ -37,7 +37,7 @@ bumped in the same commit, and the release notes come from a
   - Map buttons: listen, bind with a swap, Done saves `[gamepad]`, Reset; the settings round trip keeps unknown keys
   - self-update: version order; staging refuses a wrong hash or a build that doesn't name itself, leaving nothing behind; the swap, the undo and the clean-up; an unwritable folder
   - `couch` arguments only for builds the feed lists
-  - unreleased (v1.2.0): a zip goes to the fruit that lists `.zip` in `archives` and reads a file inside it, so a GBA zip and an NES zip in one folder split correctly, and a fruit without `archives` takes none; unknown feed keys are ignored; sums match a known SHA-256 vector
+  - v1.2.0: a zip goes to the fruit that lists `.zip` in `archives` and reads a file inside it, so a GBA zip and an NES zip in one folder split correctly, and a fruit without `archives` takes none; unknown feed keys are ignored; sums match a known SHA-256 vector
   - v1.1.2: Start fresh (the Library link, couch mode's row) uses the feed's `fresh`, with `couch` after it in couch mode; Play keeps `launch`; without the key Start fresh is `launch`
   - v1.1.1: with `slots 1 8`, an `.s9` resume state is not listed, counted, used as the cover or passed by Continue, even when it is the newest; without the key, every slot shows
   - v1.1.0: pictures decode on a thread and shrink; `art` paths fill, and an unfilled one gives none; a save's picture beats `art`, which beats the stripes; Continue passes the newest slot, Start fresh doesn't, and a fruit without `load_slot` plays fresh; favorites filter, sort first in couch mode and follow a move; weekly buckets and totals from the session log, read back on a new run; shots of the pictures, favorites and Stats (three sizes, both themes)
@@ -56,6 +56,7 @@ bumped in the same commit, and the release notes come from a
   - The exe on disk then said v0.9.9, and the start after that removed `fruitbasket.old.exe` and the update folder.
   - A release build's `--version` reads through a pipe (`Command::output`), as the smoke test uses it.
   - Not done: clicking Restart now (the same spawn-and-quit path, untested by hand), macOS, Linux, and an unwritable folder by hand.
+- **Self-update on fruit-basket v0.4.0 (2026-10-03).** The same dry run, a debug v1.1.9 against a local feed offering a debug v1.2.0 build: staged in 2.5 s, swapped (exit 0, started with `--updated v1.1.9`), the exe then said v1.2.0, and the next start cleaned up.
 - The release workflow, run by hand on 2026-10-03, built and packaged all four targets, macos-x64 included.
 - Not yet done by hand for M5: anything with a real controller. Untested by hand: the pad walking each tab, hot-plugging with "open in couch mode" on, couch mode's borderless window entering and leaving on each OS, and Map buttons with a real pad. CI builds the macOS (CoreGraphics) and Linux (xrandr) screen-size code but nothing runs it.
 - Not yet done by hand: starting a real game from the Library (no ROM was available; `launch.rs` is tested with a stand-in program), clicking through the dialogs in a real window, and Move basket across two drives. The copy path is unit-tested, but every test move so far stayed on one volume and was a rename.
@@ -99,7 +100,7 @@ As of 2026-10-03, the launcher waits on one thing: Strawberry releasing save pic
   - Strawberry has them on main (`7f41e18`) and will ship them as v1.7.0.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
   - With Strawberry v1.7.0, the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`. No launcher change is needed.
-- **fruit-basket** (the shared crates): the launcher pins v0.2.0 (`4416212`); v0.3.0 is tagged and v0.4.0 (edition 2024, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1) is coming, and the launcher re-pins to that. v0.2.0 adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+- **fruit-basket** (the shared crates): launcher v1.2.0 pins v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
 ## Releasing from here

@@ -110,6 +110,7 @@ both.
 
 - `docs/mocks/`: the 32 mock screens the UI follows, the interactive mock source, and the brand pack
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): modules, threads, the frame loop, and the release workflow
+- [fruit-basket docs](https://github.com/0x000NULL/fruit-basket/tree/main/docs): the shared crates the launcher and the emulators are built on
 
 ## License
 

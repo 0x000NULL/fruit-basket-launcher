@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.2.0
 
 - **Games inside .zip files.** A fruit can list `.zip` under the feed's new `archives` key. A zip in a games folder or an extra folder then goes to the fruit whose game is inside it, so a GBA zip and an NES zip in the same folder each find their emulator. The emulator is handed the zip itself. Covers and saves go by the zip's name.
   - A fruit without `archives` never takes a zip, as before. Launchers before this one ignore the key.
+- Built on fruit-basket v0.4.0, with newer window, drawing and download libraries underneath. Nothing should look or work differently.
 
 ## v1.1.2
 

@@ -100,10 +100,10 @@ fn draw_drawing(cv: &mut Canvas, d: &Drawing, t: Transform) {
 
 /// Decode an 8-bit RGBA PNG into a premultiplied pixmap.
 pub(crate) fn decode_png(bytes: &[u8]) -> Option<Pixmap> {
-    let mut decoder = png::Decoder::new(bytes);
+    let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().ok()?;
-    let mut buf = vec![0; reader.output_buffer_size()];
+    let mut buf = vec![0; reader.output_buffer_size()?];
     let info = reader.next_frame(&mut buf).ok()?;
     let (w, h) = (info.width, info.height);
     let rgba: Vec<u8> = match info.color_type {
