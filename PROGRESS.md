@@ -99,7 +99,7 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
 - **Every launcher release the site mirrors updates every v1.0.0+ install.** Mirror one only when it's meant to ship:
   1. Tag it.
   2. With Ethan's OK, the site session runs `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`.
-  3. It writes a notes line from this CHANGELOG.
+  3. It writes the notes line in the site's CHANGELOG.txt by hand, from this CHANGELOG: `fetch-release.sh` writes only "Release vX: builds in…", which would leave the update prompt with no notes.
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
 - **The first real self-update** is v1.1.0, mirrored 2026-10-04, when a v1.0.0 picks it up. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
