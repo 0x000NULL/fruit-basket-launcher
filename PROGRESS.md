@@ -8,13 +8,13 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `fa16e5a` (2026-10-04), and the live feed is verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `2020f90` (2026-10-04), and the live feed is verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.1.2 is live in the feed (2026-10-04) | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.2.0 is live in the feed (2026-10-04) | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -63,43 +63,43 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-03, the launcher waits on one thing: Strawberry releasing save pictures and covers, as v1.7.0 (below).
+As of 2026-10-04, the launcher waits on nothing. Strawberry v1.7.0, Crabapple v0.12.0, Pomegranate v0.5.0 and launcher v1.2.0 went into the feed together (site `2020f90`).
 
-- **The site** is deployed at `fa16e5a`.
-  - The live feed was generated 2026-10-04T03:37:00Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
+- **The site** is deployed at `2020f90`.
+  - The live feed was generated 2026-10-04T16:37:52Z. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open`, `couch` and `fresh` may use `{rom}`, `{slot}` and `{data}`. `fresh` (from launcher v1.1.2) replaces `launch` for Start fresh.
     - `couch` goes after `launch` or `load_slot` in couch mode, never after `open`.
     - Also `carry`, and `oldest`, which feedgen uses and the feed doesn't carry.
-  - **The launcher entry** is v1.1.2 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 2 notes.
-    - The Windows zip's SHA-256 (`d08134ef…`) matches GitHub's `.sha256`, the feed and the live file.
-    - The e2e test passed against this feed.
-    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update. v1.0.1 and v0.5.x were never mirrored.
+  - **The launcher entry** is v1.2.0 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 3 notes.
+    - The Windows zip's SHA-256 (`d67f06fb…`) matches GitHub's `.sha256` and the feed.
+    - The e2e test passed against this feed (it installs Strawberry v1.7.0).
+    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update; v1.1.1, v1.1.2 and v1.2.0 followed. v1.0.1 and v0.5.x were never mirrored.
   - **`slots`**: feedgen emits it from site `67899bc`, two whole numbers, lowest first, `[]` when absent. Crabapple declares `1 8`. feedgen emits `fresh` from `1808778`.
-  - **`art`**, the new key: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`. Older launchers ignore it.
-- **Strawberry** is stable v1.5.0, with nightly `4ecce2e` (the same zip).
-  - The feed lists only v1.5.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
-  - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`.
+  - **`art`**: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`; Strawberry's and Crabapple's are `{cache}/<fruit>/covers/{stem}.png`. Older launchers ignore it.
+  - **`archives`** (launcher v1.2.0): Strawberry and Crabapple declare `.zip`. Older launchers ignore it and don't list zips.
+- **Strawberry** is stable v1.7.0, with nightly `6ea5f27`.
+  - The feed lists v1.5.0 to v1.7.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
+  - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, `slots 1 8`, `archives .zip`, `art {cache}/strawberry/covers/{stem}.png`.
   - Its slots are 1–8, beside the ROM. `--fullscreen` covers the primary display. Its pad route to pause is Guide, or Select+Start held 1 s.
   - Strawberry pins fruit-basket v0.3.0.
-- **Pomegranate** (ps2emu) is stable v0.4.0, with nightly `58d24fe` (the same zip).
-  - The feed lists only v0.4.0 (`oldest v0.4.0`).
+- **Pomegranate** (ps2emu) is stable v0.5.0, with nightly `ede45ad`.
+  - The feed lists v0.4.0 and v0.5.0 (`oldest v0.4.0`). Its `ext` is now `.chd .iso .cue`.
   - `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, `couch --fullscreen --exit-on-quit`.
   - `carry` is `ps2emu.toml cards states`; they move into `data/` once (cache/ rebuilds itself).
   - Its slots are 0–9 in `data/states/`, each with a `.png` and a `.toml` (`saved_at`). Deleting slot 0 also deletes a pre-slots `<stem>.state`. ps2emu asked that the launcher never write `ps2emu.toml`.
   - Launcher v0.5.1+ passes `couch` only to builds the feed lists, so an installed or kept v0.3.0 runs from couch mode in a window.
-- **Crabapple** is in the feed (2026-10-04): released, stable v0.11.0, windows-x64 and linux-x64 only.
+- **Crabapple** is released: stable v0.12.0, with nightly `0d1cf1d`, windows-x64 and linux-x64 only.
+  - The feed lists v0.11.0 and v0.12.0 (`oldest v0.11.0`).
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `fresh {rom} --no-resume`, `couch --fullscreen --exit-on-quit`.
-  - `slots 1 8`, `art {cache}/crabapple/covers/{stem}.png`, `oldest v0.11.0`, bios "not needed".
+  - `slots 1 8`, `archives .zip`, `art {cache}/crabapple/covers/{stem}.png`, bios "not needed".
   - It writes slot pictures and covers (fruit-basket v0.3.0), and a resume state `.s9` on quit, which `slots` hides. A plain Play resumes from it; Start fresh passes `--no-resume`.
   - Its slots are 1–8, beside the ROM. Its pad route to pause is Guide, or SELECT+START held 1 s.
-- **Save pictures and covers**: only Strawberry still waits.
-  - They live in fruit-basket's `basket-app` v0.3.0 (`64fc2b1`): `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
-  - Crabapple v0.11.0 ships them, and its feed entry has `art`, `slots` and `fresh` (above).
-  - Strawberry has them on main (`7f41e18`) and will ship them as v1.7.0.
+- **Save pictures and covers** now come from all three released fruits.
+  - Strawberry and Crabapple get them from fruit-basket's `basket-app` v0.3.0 (`64fc2b1`): `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
+  - Crabapple has shipped them since v0.11.0, Strawberry since v1.7.0. Both feed entries have `art` and `slots`.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
-  - With Strawberry v1.7.0, the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`. No launcher change is needed.
 - **fruit-basket** (the shared crates): launcher v1.2.0 pins v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
@@ -111,13 +111,13 @@ As of 2026-10-03, the launcher waits on one thing: Strawberry releasing save pic
   3. It writes the notes line in the site's CHANGELOG.txt by hand, from this CHANGELOG: `fetch-release.sh` writes only "Release vX: builds in…", which would leave the update prompt with no notes.
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
-- **The first real self-update** is v1.1.0 or v1.1.1 (both mirrored 2026-10-04), when a v1.0.0 picks it up. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **The first real self-update**: a v1.0.0 install now goes straight to v1.2.0 (mirrored 2026-10-04); v1.1.x installs go there too. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
 - **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps
 
 - The macOS launcher is a bare binary in a tar.gz, not a signed `.app`. Gatekeeper may stop the first run of a download from the browser. Updates the launcher stages itself aren't affected.
-- Save pictures and covers come only from what an emulator writes. Pomegranate writes `.sN.png` slot pictures and `cache/covers/<serial>.png`; Crabapple v0.11.0 writes `<stem>.sN.png` and `<cache>/<app>/covers/<stem>.png`; Strawberry keeps its slot pictures inside the `.state` until v1.7.0, so its games show stripes until then.
+- Save pictures and covers come only from what an emulator writes. Pomegranate writes `.sN.png` slot pictures and `cache/covers/<serial>.png`; Strawberry (v1.7.0+) and Crabapple (v0.11.0+) write `<stem>.sN.png` and `<cache>/<app>/covers/<stem>.png`. An older Strawberry kept on disk writes none, so its games show stripes.
 - Pomegranate's cover cache is keyed by the disc's boot serial. The launcher knows a serial only when it's in the file name, so other discs fall back to `{stem}`, which matches only when Pomegranate couldn't read a serial either.
 - Sessions are logged from v1.1.0 on. Older play time counts in the totals but not in the weekly chart or the session lists.
 - Saves on a fruit without `load_slot` can be shown and deleted but not loaded. The dialog's button becomes Show file.

@@ -28,3 +28,15 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
+
+  msrv:
+    name: test rust 1.89 (rust-version)
+    # Cargo.toml's rust-version, built from the committed lockfile. GitHub-hosted only.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.89
+      - name: Linux build dependencies (ALSA, udev for gilrs, xkbcommon/wayland for minifb)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked

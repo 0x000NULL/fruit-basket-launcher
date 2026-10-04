@@ -91,8 +91,9 @@ to them depends on the fruit's templates (`launch`, `load_slot`, `open`):
 `launch::args` fills `{rom}`, `{slot}` and `{data}`, and refuses a
 placeholder it has nothing for, so a literal `{data}` never reaches an
 emulator. The feed lists only a fruit's builds at or after `oldest` in its
-LAUNCHER file. Today those are Pomegranate v0.4.0 and Strawberry v1.5.0,
-the first builds with `--data` (Pomegranate) and the couch flags. Older
+LAUNCHER file. Today those are Pomegranate v0.4.0, Strawberry v1.5.0 and
+Crabapple v0.11.0: the first builds with `--data` (Pomegranate), the couch
+flags, and for Crabapple its first release in the feed. Older
 builds kept on disk can still be rolled back to.
 
 A game started from couch mode gets the fruit's `couch` arguments after
