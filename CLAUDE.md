@@ -12,6 +12,7 @@ The docs:
 - `docs/ARCHITECTURE.md`: the code map and the trust chain
 - `docs/mocks/`: the design. Screens are in `screens/*.png`; where they conflict with the emulators' look, basket-ui tokens win.
 - `README.md`: user-facing; `CHANGELOG.md`: per release
+- fruit-basket's docs, for the shared crates: https://github.com/0x000NULL/fruit-basket/tree/main/docs
 
 ## Commands
 
