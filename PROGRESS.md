@@ -22,7 +22,7 @@ bumped in the same commit, and the release notes come from a
 
 ## Verified
 
-- `cargo test`: 73 pass. Covers:
+- `cargo test`: 76 pass (and the opt-in e2e). Covers:
   - feed signature: a real signed feed passes; a tampered feed, the wrong key or an older feed is refused
   - install, switch, prune, uninstall; a bad archive leaves the current build running
   - a wrong hash deletes the download; a network failure changes nothing
@@ -37,6 +37,7 @@ bumped in the same commit, and the release notes come from a
   - Map buttons: listen, bind with a swap, Done saves `[gamepad]`, Reset; the settings round trip keeps unknown keys
   - self-update: version order; staging refuses a wrong hash or a build that doesn't name itself, leaving nothing behind; the swap, the undo and the clean-up; an unwritable folder
   - `couch` arguments only for builds the feed lists
+  - unreleased (v1.2.0): a zip goes to the fruit that lists `.zip` in `archives` and reads a file inside it, so a GBA zip and an NES zip in one folder split correctly, and a fruit without `archives` takes none; unknown feed keys are ignored; sums match a known SHA-256 vector
   - v1.1.2: Start fresh (the Library link, couch mode's row) uses the feed's `fresh`, with `couch` after it in couch mode; Play keeps `launch`; without the key Start fresh is `launch`
   - v1.1.1: with `slots 1 8`, an `.s9` resume state is not listed, counted, used as the cover or passed by Continue, even when it is the newest; without the key, every slot shows
   - v1.1.0: pictures decode on a thread and shrink; `art` paths fill, and an unfilled one gives none; a save's picture beats `art`, which beats the stripes; Continue passes the newest slot, Start fresh doesn't, and a fruit without `load_slot` plays fresh; favorites filter, sort first in couch mode and follow a move; weekly buckets and totals from the session log, read back on a new run; shots of the pictures, favorites and Stats (three sizes, both themes)
@@ -61,7 +62,7 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writing save pictures and covers (below).
+As of 2026-10-03, the launcher waits on one thing: Strawberry releasing save pictures and covers, as v1.7.0 (below).
 
 - **The site** is deployed at `fa16e5a`.
   - The live feed was generated 2026-10-04T03:37:00Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
@@ -80,7 +81,7 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
   - The feed lists only v1.5.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`.
   - Its slots are 1–8, beside the ROM. `--fullscreen` covers the primary display. Its pad route to pause is Guide, or Select+Start held 1 s.
-  - Strawberry stays on fruit-basket v0.1.0, which is fine because v0.2.0 only adds things.
+  - Strawberry pins fruit-basket v0.3.0.
 - **Pomegranate** (ps2emu) is stable v0.4.0, with nightly `58d24fe` (the same zip).
   - The feed lists only v0.4.0 (`oldest v0.4.0`).
   - `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, `couch --fullscreen --exit-on-quit`.
@@ -92,12 +93,13 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
   - `slots 1 8`, `art {cache}/crabapple/covers/{stem}.png`, `oldest v0.11.0`, bios "not needed".
   - It writes slot pictures and covers (fruit-basket v0.3.0), and a resume state `.s9` on quit, which `slots` hides. A plain Play resumes from it; Start fresh passes `--no-resume`.
   - Its slots are 1–8, beside the ROM. Its pad route to pause is Guide, or SELECT+START held 1 s.
-- **Save pictures and covers for Strawberry and Crabapple** are in progress (asked 2026-10-04).
-  - The Crabapple session is adding them once, to fruit-basket's `basket-app`, as an additive v0.3.0: `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
-  - Done in code: fruit-basket v0.3.0 (`64fc2b1`), Crabapple main `bc38085`, Strawberry main `7f41e18` (after v1.6.1). Neither is in a tagged release yet; players get the pictures from each one's next release.
+- **Save pictures and covers**: only Strawberry still waits.
+  - They live in fruit-basket's `basket-app` v0.3.0 (`64fc2b1`): `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
+  - Crabapple v0.11.0 ships them, and its feed entry has `art`, `slots` and `fresh` (above).
+  - Strawberry has them on main (`7f41e18`) and will ship them as v1.7.0.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
-  - Then the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`, and Crabapple's gets the same with `crabapple` when it goes in the feed. No launcher change is needed.
-- **fruit-basket** (the shared crates) is at v0.2.0 (`4416212`). It adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+  - With Strawberry v1.7.0, the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`. No launcher change is needed.
+- **fruit-basket** (the shared crates): the launcher pins v0.2.0 (`4416212`); v0.3.0 is tagged and v0.4.0 (edition 2024, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1) is coming, and the launcher re-pins to that. v0.2.0 adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
 ## Releasing from here
@@ -114,7 +116,7 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
 ## Known gaps
 
 - The macOS launcher is a bare binary in a tar.gz, not a signed `.app`. Gatekeeper may stop the first run of a download from the browser. Updates the launcher stages itself aren't affected.
-- Save pictures and covers come only from what an emulator writes. Pomegranate writes `.sN.png` slot pictures and `cache/covers/<serial>.png`; Strawberry and Crabapple keep their slot pictures inside the `.state` and their title captures under a path hash, so they show stripes until they write `<stem>.sN.png` and `<cache>/<app>/covers/<stem>.png` (asked of their sessions).
+- Save pictures and covers come only from what an emulator writes. Pomegranate writes `.sN.png` slot pictures and `cache/covers/<serial>.png`; Crabapple v0.11.0 writes `<stem>.sN.png` and `<cache>/<app>/covers/<stem>.png`; Strawberry keeps its slot pictures inside the `.state` until v1.7.0, so its games show stripes until then.
 - Pomegranate's cover cache is keyed by the disc's boot serial. The launcher knows a serial only when it's in the file name, so other discs fall back to `{stem}`, which matches only when Pomegranate couldn't read a serial either.
 - Sessions are logged from v1.1.0 on. Older play time counts in the totals but not in the weekly chart or the session lists.
 - Saves on a fruit without `load_slot` can be shown and deleted but not loaded. The dialog's button becomes Show file.
