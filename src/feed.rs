@@ -61,6 +61,11 @@ pub struct Fruit {
     /// Only ever read as a PNG.
     #[serde(default)]
     pub art: Vec<String>,
+    /// Arguments for Start fresh, in place of `launch`, for an emulator
+    /// that otherwise picks up where it left off (`{rom} --no-resume`).
+    /// Empty: Start fresh uses `launch`.
+    #[serde(default)]
+    pub fresh: Vec<String>,
     /// The save slots the emulator loads, lowest and highest (`["1", "8"]`).
     /// Others (Crabapple's resume state, `.s9`) aren't listed. Empty: all.
     #[serde(default)]

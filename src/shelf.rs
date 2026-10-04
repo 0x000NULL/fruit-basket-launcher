@@ -257,9 +257,11 @@ impl Shelf {
         self.running.as_ref().map(|(name, _)| name.as_str())
     }
 
-    /// Start a game in its fruit's current build, from save `slot` if
-    /// given, with the fruit's couch arguments if `couch`. One game at a time.
-    pub fn play(&mut self, path: &Path, basket: &Basket, feed: Option<&Feed>, slot: Option<u8>, couch: bool) -> Result<(), String> {
+    /// Start a game in its fruit's current build: from save `slot` if
+    /// given, else with the feed's `fresh` arguments if `fresh` (Start
+    /// fresh) and the fruit has them, else `launch`; with the fruit's couch
+    /// arguments if `couch`. One game at a time.
+    pub fn play(&mut self, path: &Path, basket: &Basket, feed: Option<&Feed>, slot: Option<u8>, fresh: bool, couch: bool) -> Result<(), String> {
         if self.running.is_some() {
             return Err("a game is already running".into());
         }
@@ -274,6 +276,7 @@ impl Shelf {
         }
         let template = match slot {
             Some(_) => fruit.load_slot.as_ref().filter(|t| !t.is_empty()).ok_or_else(|| format!("{} can't start from a save", fruit.name))?,
+            None if fresh && !fruit.fresh.is_empty() => &fruit.fresh,
             None => &fruit.launch,
         };
         let mut args = launch::args(template, Some(path), slot, data.as_deref())?;

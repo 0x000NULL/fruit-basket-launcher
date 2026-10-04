@@ -152,6 +152,9 @@ pub enum Cmd {
     CouchContinue,
     /// Start the game from its newest save, or fresh if it has none.
     Continue(std::path::PathBuf),
+    /// Start the game without any save, not even one the emulator resumes
+    /// by itself (the feed's `fresh`).
+    StartFresh(std::path::PathBuf),
     /// Mark or unmark a favourite.
     Favorite(std::path::PathBuf),
     /// The Favorites chip.

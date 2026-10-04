@@ -918,15 +918,16 @@ impl App {
         self.shelf.games.iter().find(|g| g.path == game).map(|g| g.title.clone()).unwrap_or_default()
     }
 
-    /// Start `game` from `slot` (or fresh); the reason it can't, if not.
-    fn play_from(&mut self, game: &Path, slot: Option<u8>) -> bool {
+    /// Start `game` from `slot`, or without one (`fresh`: Start fresh);
+    /// the reason it can't, if not.
+    fn play_from(&mut self, game: &Path, slot: Option<u8>, fresh: bool) -> bool {
         if slot.is_some() && !self.game_fruit(game).is_some_and(Fruit::loads_slots) {
             let name = self.game_fruit(game).map(|f| f.name.clone()).unwrap_or_default();
             self.play_error = Some(format!("{name} can't start from a save yet"));
             return false;
         }
         let couch = self.couch.is_some();
-        self.play_error = self.shelf.play(game, &self.basket, self.feed.as_ref(), slot, couch).err();
+        self.play_error = self.shelf.play(game, &self.basket, self.feed.as_ref(), slot, fresh, couch).err();
         self.play_error.is_none()
     }
 
@@ -1058,7 +1059,10 @@ impl App {
                 self.sheet = true;
             }
             Cmd::Play(p) => {
-                self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref(), None, false).err();
+                self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref(), None, false, false).err();
+            }
+            Cmd::StartFresh(p) => {
+                self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref(), None, true, false).err();
             }
             Cmd::Favorite(p) => self.shelf.toggle_favorite(&self.basket.launcher_dir(), &p),
             Cmd::LibFavorites(on) => {
@@ -1067,7 +1071,7 @@ impl App {
             }
             Cmd::Continue(p) => match self.resume(&p) {
                 Some(slot) => {
-                    self.play_from(&p, Some(slot.n));
+                    self.play_from(&p, Some(slot.n), false);
                 }
                 None => self.apply(Cmd::Play(p)),
             },
@@ -1263,12 +1267,16 @@ impl App {
             },
             Cmd::CouchContinue => {
                 let Some(game) = self.couch_game() else { return };
-                let slot = match self.couch.as_ref().map(|c| c.panel) {
-                    Some(CouchPanel::Saves(i)) => self.couch_slots().get(i).map(|s| s.n),
+                // The saves list's last row is Start fresh.
+                let (slot, fresh) = match self.couch.as_ref().map(|c| c.panel) {
+                    Some(CouchPanel::Saves(i)) => {
+                        let slot = self.couch_slots().get(i).map(|s| s.n);
+                        (slot, slot.is_none())
+                    }
                     // The buttons' Continue: the newest save.
-                    _ => self.resume(&game).map(|s| s.n),
+                    _ => (self.resume(&game).map(|s| s.n), false),
                 };
-                if self.play_from(&game, slot) {
+                if self.play_from(&game, slot, fresh) {
                     if let Some(c) = &mut self.couch {
                         c.panel = CouchPanel::Buttons;
                     }
@@ -1338,7 +1346,7 @@ impl App {
             Modal::Saves { game, slots, pick, .. } => {
                 let Some(slot) = slots.get(pick) else { return };
                 if self.game_fruit(&game).is_some_and(Fruit::loads_slots) {
-                    self.play_from(&game, Some(slot.n));
+                    self.play_from(&game, Some(slot.n), false);
                 } else {
                     platform::reveal(&slot.path);
                 }
@@ -2615,6 +2623,48 @@ mod tests {
 
     fn app_game(path: &Path) -> library::Game {
         library::Game { path: path.to_path_buf(), fruit: "strawberry".into(), title: "Golden Sun".into(), size: 1, mtime: 0, code: None }
+    }
+
+    /// Start fresh uses the feed's `fresh` when the fruit has it (Crabapple
+    /// resumes by itself otherwise), with the couch arguments after it in
+    /// couch mode; Play keeps `launch`; without the key, Start fresh is `launch`.
+    #[test]
+    fn start_fresh_uses_the_feeds_fresh() {
+        let wait = |app: &mut App| {
+            let start = Instant::now();
+            while app.shelf.running().is_some() {
+                assert!(start.elapsed() < Duration::from_secs(30), "the stand-in never exited");
+                app.poll();
+                thread::sleep(Duration::from_millis(20));
+            }
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, mut feed, rom) = couch_basket(tmp.path());
+        feed.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap().fresh = ["--list", "{rom}", "--no-resume"].map(String::from).to_vec();
+        let r = rom.to_str().unwrap();
+        let mut app = App::with(Settings::default(), b, Some(feed.clone()));
+        app.apply(Cmd::StartFresh(rom.clone()));
+        assert_eq!(app.shelf.launched, ["--list", r, "--no-resume"]);
+        wait(&mut app);
+        app.apply(Cmd::Play(rom.clone()));
+        assert_eq!(app.shelf.launched, ["--list", r], "Play is launch");
+        wait(&mut app);
+        // Couch mode's Start fresh row, past the two saves.
+        app.apply(Cmd::Couch);
+        let pick = app.shelf.couch_rows(app.feed.as_ref(), None).iter().position(|row| row.game.path == rom).unwrap();
+        app.apply(Cmd::CouchPick(pick));
+        app.apply(Cmd::CouchSaves);
+        app.apply(Cmd::CouchSavePick(2));
+        app.apply(Cmd::CouchContinue);
+        assert_eq!(app.shelf.launched, ["--list", r, "--no-resume", "--fullscreen"]);
+        wait(&mut app);
+
+        let mut plain = feed;
+        plain.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap().fresh = Vec::new();
+        let mut app = App::with(Settings::default(), Basket::new(tmp.path()), Some(plain));
+        app.apply(Cmd::StartFresh(rom.clone()));
+        assert_eq!(app.shelf.launched, ["--list", r], "no fresh: launch");
+        wait(&mut app);
     }
 
     /// The feed's `slots` hides a save the emulator can't load (Crabapple's

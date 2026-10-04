@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.2
+
+- **Start fresh really starts fresh.** A fruit can give its own arguments for Start fresh with the feed's new `fresh` key (e.g. `{rom} --no-resume`). The Library's Start fresh link and couch mode's Start fresh row use them, with the couch arguments after them in couch mode. Play, and Continue for a game with no saves, still use the fruit's usual launch.
+  - This is for Crabapple, which picks up where you left off unless asked not to.
+  - Without the key, Start fresh starts the game as before.
+
 ## v1.1.1
 
 - **A fruit can say which save slots it loads.** The feed's new `slots` key (lowest and highest, e.g. `1 8`) hides any other save from the saves lists, the Saves count, covers and Continue. Without it, every slot shows, as before.

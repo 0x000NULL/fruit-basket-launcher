@@ -447,6 +447,7 @@ mod tests {
             couch: vec![],
             carry: vec![],
             art: vec![],
+            fresh: vec![],
             slots: vec![],
             url: String::new(),
             readme_url: String::new(),

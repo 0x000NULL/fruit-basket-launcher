@@ -588,7 +588,7 @@ fn aside(ui: &mut Ui, d: &GameDetail, x: f32, top: f32, w: f32, bottom: f32, scr
         let tw = ui.cv.text(x, y + 2.0, &format!("Slot {slot} · {}", basket_ui::fmt::fmt_when(*saved)), &mono);
         let (_, fresh) = ui.link(x + tw + 14.0, y + 2.0, "Start fresh", ui.pal.fg);
         if fresh {
-            ui.emit(Cmd::Play(r.game.path.clone()));
+            ui.emit(Cmd::StartFresh(r.game.path.clone()));
         }
         y += 28.0;
     }
