@@ -14,7 +14,7 @@ map: `docs/ARCHITECTURE.md`.
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 is live in the feed | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.1.0 is live in the feed (since 2026-10-04) | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
