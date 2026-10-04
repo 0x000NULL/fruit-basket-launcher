@@ -2,7 +2,8 @@
 
 One window for the Fruit Basket emulators: the game library, installing and
 updating the fruits, a downloads queue, settings, couch mode for a controller,
-and updating itself. All milestones (M0–M6) are done; v1.0.0 is live.
+and updating itself. All milestones (M0–M6) are done; v1.1.1 is live
+(v1.1 added save pictures, covers, Continue, favorites and Stats).
 It is Rust, built on the `fruit-basket` crates (`basket-ui`, `basket-app`,
 `basket-build`, public repo `0x000NULL/fruit-basket`, pinned by git tag).
 
