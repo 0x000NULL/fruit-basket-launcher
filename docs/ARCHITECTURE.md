@@ -119,12 +119,12 @@ Pomegranate would otherwise copy back).
 | `focus.rs` | the controller's focus: `Spot`s the frame drew, `next` (nearest in a direction, level ones first), `cycle` (Tab) |
 | `app.rs` | `App`: state, the frame loop (poll → draw → apply `Cmd`s), `Ctx` (read-only view of the state shared by views and commands), the render and e2e tests |
 | `key.rs` | embedded public key, key ID, feed URL (`FRUITBASKET_FEED` overrides) |
-| `feed.rs` | feed types, `verify` / `fetch` / `load_cached` / `save_cached`, platform keys, `lists_slot` (the feed's `slots`); `fresh`, Start fresh's template |
+| `feed.rs` | feed types, `verify` / `fetch` / `load_cached` / `save_cached`, platform keys, `lists_slot` (the feed's `slots`); `fresh`, Start fresh's template; `archives` (`takes_archive`) |
 | `basket.rs` | the on-disk basket: install (extract to `.tmp`, flatten, rename, switch), switch, prune, uninstall, `migrate_data`, `exe`, `move_path` / `copy_tree` |
 | `jobs.rs` | the download worker thread: a free-space check, then Download 0–70 %, Verify 70–85 %, Install 85–100 % |
 | `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `job_for_build`, `update_for`, `updates`, `rollback_options` |
 | `history.rs` | `history.log` append and read |
-| `library.rs` | game scan, titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `slots` / `delete_slot` / `Slot::picture`, `Played`, `Sessions`, `Favorites`, `rebase` (paths after a move) |
+| `library.rs` | game scan and `plays` (an `ext`, or a zip from `archives` holding one), titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `slots` / `delete_slot` / `Slot::picture`, `Played`, `Sessions`, `Favorites`, `rebase` (paths after a move) |
 | `lists.rs` | fetches and caches compat and dump lists, checked against the feed |
 | `compat.rs` | `compat.txt` parse; level by serial, then title |
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |

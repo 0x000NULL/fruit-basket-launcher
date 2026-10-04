@@ -2059,7 +2059,7 @@ fn count_games(dir: &Path, fruit: &Fruit, depth: u32) -> usize {
     rd.flatten()
         .map(|e| match e.file_type() {
             Ok(t) if t.is_dir() && depth > 0 => count_games(&e.path(), fruit, depth - 1),
-            Ok(t) if t.is_file() && fruit.reads(&e.path()) => 1,
+            Ok(t) if t.is_file() && crate::library::plays(fruit, &e.path(), &mut None) => 1,
             _ => 0,
         })
         .sum()

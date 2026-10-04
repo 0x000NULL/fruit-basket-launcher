@@ -37,6 +37,11 @@ pub struct Fruit {
     pub system: String,
     pub pixel: bool,
     pub ext: Vec<String>,
+    /// Archives the emulator opens itself (`[".zip"]`). An archive is this
+    /// fruit's only if a file inside it has one of `ext`, since several
+    /// fruits can list `.zip`.
+    #[serde(default)]
+    pub archives: Vec<String>,
     pub status: Status,
     pub summary: String,
     pub blurb: String,
@@ -212,6 +217,13 @@ impl Fruit {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
         self.ext.iter().any(|e| name.ends_with(&e.to_ascii_lowercase()))
     }
+
+    /// True if `path` has one of this fruit's `archives` extensions; whether
+    /// the archive holds a game of this fruit's is `library::plays`.
+    pub fn takes_archive(&self, path: &Path) -> bool {
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
+        self.archives.iter().any(|e| name.ends_with(&e.to_ascii_lowercase()))
+    }
 }
 
 /// The platform key of this PC, as the feed spells it.
@@ -380,6 +392,21 @@ pub(crate) mod tests {
         assert_eq!(platform_label("windows-x64"), "Windows x64");
         assert_eq!(platform_label("macos-arm64"), "macOS arm64");
         assert_eq!(host("https://projects.ethanaldrich.net/fruit-basket/feed.json"), "projects.ethanaldrich.net");
+    }
+
+    /// Old launchers must keep reading feeds that grow keys (v1.2's
+    /// `archives`), so nothing here may deny unknown fields.
+    #[test]
+    fn unknown_keys_are_ignored_and_archives_parse() {
+        let mut v: serde_json::Value = serde_json::from_slice(FEED).unwrap();
+        v["someday"] = serde_json::json!(true);
+        let f = &mut v["fruits"][0];
+        f["someday"] = serde_json::json!({"x": 1});
+        f["archives"] = serde_json::json!([".zip"]);
+        let feed: Feed = serde_json::from_value(v).unwrap();
+        assert_eq!(feed.fruits[0].archives, [".zip"]);
+        assert!(feed.fruits[0].takes_archive(Path::new("Game (USA).Zip")));
+        assert!(feed.fruits[1].archives.is_empty(), "absent: no archives");
     }
 
     #[test]

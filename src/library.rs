@@ -28,7 +28,7 @@ pub struct Game {
 }
 
 /// Scan for games. `fruits` are the installed ones, in feed order; a file
-/// in an extra folder goes to the first fruit that reads its extension.
+/// in an extra folder goes to the first fruit that plays it (`plays`).
 pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[PathBuf]) -> Vec<Game> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -42,19 +42,43 @@ pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[Pat
     };
     for f in fruits {
         for path in files(&basket.games_dir(&f.id), DEPTH) {
-            if f.reads(&path) {
+            if plays(f, &path, &mut None) {
                 add(path, f, &mut out);
             }
         }
     }
     for folder in extra {
         for path in files(folder, DEPTH) {
-            if let Some(f) = fruits.iter().find(|f| f.reads(&path)) {
+            let mut names = None;
+            if let Some(f) = fruits.iter().find(|f| plays(f, &path, &mut names)) {
                 add(path, f, &mut out);
             }
         }
     }
     out
+}
+
+/// True if `fruit` plays the file at `path`: it has one of the fruit's
+/// `ext`, or it is one of the fruit's `archives` with a file inside that
+/// has. `names` caches the archive's file names across fruits.
+pub fn plays(fruit: &Fruit, path: &Path, names: &mut Option<Vec<String>>) -> bool {
+    if fruit.reads(path) {
+        return true;
+    }
+    if !fruit.takes_archive(path) {
+        return false;
+    }
+    names.get_or_insert_with(|| zip_names(path)).iter().any(|n| fruit.reads(Path::new(n)))
+}
+
+/// The file names inside a zip, from its central directory; none if it
+/// isn't one.
+fn zip_names(path: &Path) -> Vec<String> {
+    let Ok(f) = fs::File::open(path) else { return Vec::new() };
+    match zip::ZipArchive::new(io::BufReader::new(f)) {
+        Ok(z) => z.file_names().map(str::to_string).collect(),
+        Err(_) => Vec::new(),
+    }
 }
 
 pub(crate) fn files(dir: &Path, depth: u32) -> Vec<PathBuf> {
@@ -435,6 +459,7 @@ mod tests {
             system: "GBA".into(),
             pixel: true,
             ext: ext.iter().map(|s| s.to_string()).collect(),
+            archives: vec![],
             status: Status::Released,
             summary: String::new(),
             blurb: String::new(),
@@ -483,6 +508,48 @@ mod tests {
         assert_eq!(titles, ["Final Fantasy IV Advance", "The Legend of Zelda"]);
         let ff = got.iter().find(|g| g.title.starts_with("Final")).unwrap();
         assert_eq!(ff.code.as_deref(), Some("BZ4E"));
+    }
+
+    fn zip_with(path: &Path, inner: &str) {
+        let mut w = zip::ZipWriter::new(fs::File::create(path).unwrap());
+        w.start_file(inner, zip::write::SimpleFileOptions::default()).unwrap();
+        std::io::Write::write_all(&mut w, b"rom").unwrap();
+        w.finish().unwrap();
+    }
+
+    #[test]
+    fn zips_go_to_the_fruit_that_reads_what_is_inside() {
+        let t = tempfile::tempdir().unwrap();
+        let b = Basket::new(t.path().join("basket"));
+        let extra = t.path().join("extra");
+        fs::create_dir_all(&extra).unwrap();
+        zip_with(&extra.join("Golden Sun (USA).zip"), "Golden Sun (USA).gba");
+        zip_with(&extra.join("Super Mario Bros. (World).zip"), "smb.nes");
+        zip_with(&extra.join("Readme.zip"), "readme.txt");
+        fs::write(extra.join("Broken.zip"), b"not a zip").unwrap();
+        // A fruit that doesn't list .zip in archives never takes one.
+        zip_with(&extra.join("Disc.zip"), "disc.iso");
+
+        // NES first in feed order: the GBA zip must still skip it.
+        let mut apple = fruit("crabapple", &[".nes"]);
+        apple.archives = vec![".zip".into()];
+        let mut berry = fruit("strawberry", &[".gba"]);
+        berry.archives = vec![".ZIP".into()];
+        let pom = fruit("pomegranate", &[".iso"]);
+        let got = scan(&b, &[&apple, &berry, &pom], &[extra.clone()], &[]);
+        let mut by: Vec<(&str, &str)> = got.iter().map(|g| (g.fruit.as_str(), g.title.as_str())).collect();
+        by.sort();
+        assert_eq!(by, [("crabapple", "Super Mario Bros."), ("strawberry", "Golden Sun")]);
+        let gs = got.iter().find(|g| g.fruit == "strawberry").unwrap();
+        assert_eq!(gs.path, extra.join("Golden Sun (USA).zip"), "launched as the zip itself");
+
+        // In a fruit's own games folder too, and counted there.
+        let games = b.games_dir("strawberry");
+        fs::create_dir_all(&games).unwrap();
+        zip_with(&games.join("Minish Cap.zip"), "minish.gba");
+        let got = scan(&b, &[&berry], &[], &[]);
+        assert_eq!(got.len(), 1);
+        assert!(!plays(&berry, &extra.join("Broken.zip"), &mut None));
     }
 
     #[test]

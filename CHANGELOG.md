@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Games inside .zip files.** A fruit can list `.zip` under the feed's new `archives` key. A zip in a games folder or an extra folder then goes to the fruit whose game is inside it, so a GBA zip and an NES zip in the same folder each find their emulator. The emulator is handed the zip itself. Covers and saves go by the zip's name.
+  - A fruit without `archives` never takes a zip, as before. Launchers before this one ignore the key.
+
 ## v1.1.2
 
 - **Start fresh really starts fresh.** A fruit can give its own arguments for Start fresh with the feed's new `fresh` key (e.g. `{rom} --no-resume`). The Library's Start fresh link and couch mode's Start fresh row use them, with the couch arguments after them in couch mode. Play, and Continue for a game with no saves, still use the fruit's usual launch.
