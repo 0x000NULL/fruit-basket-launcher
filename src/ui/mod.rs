@@ -151,6 +151,10 @@ pub enum Cmd {
     CouchContinue,
     /// Start the game from its newest save, or fresh if it has none.
     Continue(std::path::PathBuf),
+    /// Mark or unmark a favourite.
+    Favorite(std::path::PathBuf),
+    /// The Favorites chip.
+    LibFavorites(bool),
     /// X: open the saves list, or in it, delete the picked save.
     CouchSaves,
     CouchSavePick(usize),
@@ -476,6 +480,29 @@ impl<'a> Ui<'a> {
             w
         } else {
             widgets::keycap(self.cv, x, y, label, &self.pal, false)
+        }
+    }
+
+    /// A five-pointed star centred on (`cx`, `cy`): filled, or outlined.
+    pub fn star(&mut self, cx: f32, cy: f32, r: f32, filled: bool, color: Rgb) {
+        let mut pb = tiny_skia::PathBuilder::new();
+        for i in 0..10 {
+            let a = std::f32::consts::PI * (i as f32 / 5.0 - 0.5);
+            let d = if i % 2 == 0 { r } else { r * 0.45 };
+            let (px, py) = (cx + d * a.cos(), cy + d * a.sin());
+            if i == 0 {
+                pb.move_to(px, py);
+            } else {
+                pb.line_to(px, py);
+            }
+        }
+        pb.close();
+        if let Some(p) = pb.finish() {
+            if filled {
+                self.cv.fill_path(&p, color, tiny_skia::Transform::identity());
+            } else {
+                self.cv.stroke_path(&p, 1.5, color, false, tiny_skia::Transform::identity());
+            }
         }
     }
 

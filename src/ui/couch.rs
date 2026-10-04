@@ -261,12 +261,29 @@ fn details(ui: &mut Ui, d: &GameDetail, k: &Scale, x: f32, y: f32, w: f32) {
         Dump::NoMatch(db) => format!("not in {db}"),
     };
     let rows = [("Dump", dump), ("Saves", d.saves.to_string()), ("File", d.file.clone())];
-    let mut ry = y;
-    for (name, text) in rows {
-        ui.cv.text(x, ry, name, &label);
-        let t = ui.cv.fonts.ellipsize_middle(&value, &text, w);
-        ui.cv.text(x, ry + k.v(20.0), &t, &value);
-        ry += k.v(54.0);
+    // A: favourite, the panel's one button.
+    let fav = if d.row.favorite { "Favorite" } else { "Add to favorites" };
+    let st = Style::interface_bold(k.v(19.0));
+    let bh = k.v(54.0);
+    let bw = ui.cv.measure(fav, &st) + k.v(110.0);
+    ui.cv.stroke_rect(x, y, bw, bh, 2.0, ui.pal.fg);
+    ui.star(x + k.v(28.0), y + bh / 2.0, k.v(11.0), d.row.favorite, ui.pal.fg);
+    ui.cv.text(x + k.v(50.0), y + k.v(15.0), fav, &st.color(ui.pal.fg));
+    if ui.clicked(x, y, bw, bh) {
+        ui.emit(Cmd::Favorite(d.row.game.path.clone()));
+    }
+    // Dump and Saves side by side, then File, to stay above the strip.
+    let ry = y + bh + k.v(22.0);
+    let col = w * 0.62;
+    for (i, (name, text)) in rows.iter().enumerate() {
+        let (cx, cy, cw) = match i {
+            0 => (x, ry, col - k.v(24.0)),
+            1 => (x + col, ry, w - col),
+            _ => (x, ry + k.v(54.0), w),
+        };
+        ui.cv.text(cx, cy, name, &label);
+        let t = ui.cv.fonts.ellipsize_middle(&value, text, cw);
+        ui.cv.text(cx, cy + k.v(20.0), &t, &value);
     }
 }
 

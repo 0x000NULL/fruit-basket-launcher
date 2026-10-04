@@ -31,6 +31,7 @@ pub struct Row<'a> {
     pub secs: u64,
     /// The cover picture, once loaded; the striped placeholder until then.
     pub picture: Option<&'a Pixmap>,
+    pub favorite: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +71,10 @@ pub struct LibraryView<'a> {
     /// (fruit id or None for All, label, count).
     pub chips: Vec<(Option<&'a str>, &'a str, usize)>,
     pub filter: Option<&'a str>,
+    /// How many games are favourites (the chip shows when any are), and
+    /// whether the chip is on.
+    pub favorites: usize,
+    pub fav_only: bool,
     pub az: bool,
     pub view: LibView,
     pub continue_rows: Vec<Row<'a>>,
@@ -206,18 +211,37 @@ fn toolbar(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
         }
         cx += cw + 6.0;
     }
+    if v.favorites > 0 {
+        let on = v.fav_only;
+        let st = Style::interface_bold(13.0).color(if on { ui.pal.bg } else { ui.pal.fg });
+        let ns = Style::interface(12.0).color(if on { mix(ui.pal.bg, ui.pal.fg, 0.4) } else { ui.muted() });
+        let n = v.favorites.to_string();
+        let lw = ui.cv.measure("Favorites", &st);
+        let cw = (lw + ui.cv.measure(&n, &ns) + 48.0).round();
+        if on {
+            ui.cv.fill_rect(cx, y, cw, 34.0, ui.pal.fg);
+        }
+        ui.cv.stroke_rect(cx, y, cw, 34.0, 1.5, ui.pal.fg);
+        ui.star(cx + 19.0, y + 17.0, 6.5, true, if on { ui.pal.bg } else { ui.pal.fg });
+        ui.cv.text(cx + 31.0, y + 9.0, "Favorites", &st);
+        ui.cv.text(cx + 35.0 + lw, y + 10.0, &n, &ns);
+        if ui.hot("Favorites", cx, y, cw, 34.0) {
+            ui.emit(Cmd::LibFavorites(!on));
+        }
+        cx += cw + 6.0;
+    }
 
     // Toggles and Add folder…, right; Add folder… drops to its own row
     // when there is no room.
     let add_w = ui.small_button_width("Add folder…");
     let rescan_w = ui.small_button_width("Rescan");
-    let sort_w = seg_width(ui, &["Recent", "A–Z"]);
+    let sort_w = seg_width(ui, &["Last played", "A–Z"]);
     let view_w = seg_width(ui, &["Covers", "List"]);
     let all = sort_w + 14.0 + view_w + 14.0 + add_w + 10.0 + rescan_w;
     let one_row = cx + 20.0 + all <= x + w;
     let mut rx = x + w - if one_row { all } else { sort_w + 14.0 + view_w };
     let ty = if one_row || ui.size != Size::Narrow { y } else { y + 44.0 };
-    let (_, hit) = ui.segmented(rx, ty, &["Recent", "A–Z"], v.az as usize);
+    let (_, hit) = ui.segmented(rx, ty, &["Last played", "A–Z"], v.az as usize);
     if let Some(i) = hit {
         ui.emit(Cmd::LibSort(i == 1));
     }
@@ -321,6 +345,10 @@ pub(crate) fn cover(ui: &mut Ui, r: &Row, x: f32, y: f32, w: f32, h: f32, label:
         }
     } else {
         stripes(ui, c, x, y, w, h);
+    }
+    if r.favorite && w >= 50.0 {
+        let s = if w >= 100.0 { 9.0 } else { 6.0 };
+        ui.star(x + w - s - 8.0, y + s + 8.0, s, true, COVER_TEXT);
     }
     if label {
         let sys = Style::data(10.0).color(COVER_TEXT);
@@ -480,6 +508,12 @@ fn aside(ui: &mut Ui, d: &GameDetail, x: f32, top: f32, w: f32, bottom: f32, scr
     cover(ui, r, x, y, 120.0, 160.0, false);
     ui.cv.text(x + 10.0, y + 11.0, r.system, &Style::data(10.0).color(COVER_TEXT));
     let lx = x + 138.0;
+    let fav = if r.favorite { "Favorite" } else { "Add to favorites" };
+    ui.star(lx + 8.0, y + 14.0, 8.0, r.favorite, ui.pal.fg);
+    let fw = ui.cv.text(lx + 24.0, y + 6.0, fav, &Style::interface_bold(13.0).color(ui.pal.fg));
+    if ui.hot("Favorite", lx - 2.0, y, fw + 28.0, 28.0) {
+        ui.emit(Cmd::Favorite(r.game.path.clone()));
+    }
     let sw = squares(ui, lx, y + 106.0, r.level);
     ui.cv.text(lx + sw + 3.0, y + 102.0, level_label(r.level), &Style::interface_bold(14.0).color(ui.pal.fg));
     let source = match r.level {

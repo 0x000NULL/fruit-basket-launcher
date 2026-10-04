@@ -13,7 +13,7 @@ use crate::compat::Compat;
 use crate::dumps::{self, DumpDb, Hashes, Want};
 use crate::feed::{Feed, Fruit};
 use crate::launch::{self, Session};
-use crate::library::{self, Game, Played, Slot};
+use crate::library::{self, Favorites, Game, Played, Slot};
 use crate::pics::Pics;
 use crate::lists::{self, Kind};
 use crate::settings::{LibView, Settings};
@@ -23,6 +23,9 @@ use crate::ui::library::{Dump, Empty, GameDetail, LibraryView, PlayState, Row};
 pub struct Shelf {
     pub games: Vec<Game>,
     played: Played,
+    favorites: Favorites,
+    /// The Favorites chip: only favourites, on top of the fruit chip.
+    pub fav_only: bool,
     hashes: Hashes,
     compat: HashMap<String, Compat>,
     dumps: HashMap<String, DumpDb>,
@@ -53,7 +56,7 @@ pub struct Shelf {
 
 impl Shelf {
     pub fn load(launcher_dir: &Path) -> Shelf {
-        Shelf { played: Played::load(launcher_dir), hashes: Hashes::load(launcher_dir), ..Shelf::default() }
+        Shelf { played: Played::load(launcher_dir), favorites: Favorites::load(launcher_dir), hashes: Hashes::load(launcher_dir), ..Shelf::default() }
     }
 
     fn installed<'a>(feed: Option<&'a Feed>, installed: &HashMap<String, Current>) -> Vec<&'a Fruit> {
@@ -295,7 +298,8 @@ impl Shelf {
     pub fn rebase(&mut self, launcher_dir: &Path, old: &Path, new: &Path) {
         self.played.rebase(old, new);
         self.hashes.rebase(old, new);
-        if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.hashes.save(launcher_dir)) {
+        self.favorites.rebase(old, new);
+        if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.hashes.save(launcher_dir)).and_then(|_| self.favorites.save(launcher_dir)) {
             eprintln!("fruitbasket: saving library state: {e}");
         }
         self.selected = self.selected.as_deref().map(|p| library::rebase(p, old, new));
@@ -331,6 +335,7 @@ impl Shelf {
             last: self.played.last(&g.path),
             secs: self.played.secs(&g.path),
             picture: self.cover(&g.path),
+            favorite: self.favorites.contains(&g.path),
         }
     }
 
@@ -347,12 +352,23 @@ impl Shelf {
         GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, &dirs).len(), file: crate::platform::tilde(&r.game.path) }
     }
 
-    /// Couch mode's games: one fruit's (or all), most recently played
-    /// first. Couch mode ignores the desktop's chip, sort and FIND.
+    /// Couch mode's games: one fruit's (or all), favourites first, then
+    /// most recently played. Couch mode ignores the desktop's chip, sort and FIND.
     pub fn couch_rows<'a>(&'a self, feed: Option<&'a Feed>, fruit: Option<&str>) -> Vec<Row<'a>> {
         let mut rows: Vec<Row> = self.games.iter().filter(|g| fruit.is_none_or(|f| f == g.fruit)).map(|g| self.row(g, feed)).collect();
-        rows.sort_by(|a, b| b.last.cmp(&a.last).then_with(|| a.game.title.to_lowercase().cmp(&b.game.title.to_lowercase())));
+        rows.sort_by(|a, b| b.favorite.cmp(&a.favorite).then(b.last.cmp(&a.last)).then_with(|| a.game.title.to_lowercase().cmp(&b.game.title.to_lowercase())));
         rows
+    }
+
+    /// Mark or unmark a favourite, and keep it.
+    pub fn toggle_favorite(&mut self, launcher_dir: &Path, game: &Path) {
+        self.favorites.toggle(game);
+        if let Err(e) = self.favorites.save(launcher_dir) {
+            eprintln!("fruitbasket: saving favourites: {e}");
+        }
+        if self.favorites.len() == 0 {
+            self.fav_only = false;
+        }
     }
 
     /// The games the chip and FIND leave, in the chosen order.
@@ -362,6 +378,7 @@ impl Shelf {
             .games
             .iter()
             .filter(|g| self.filter.as_deref().is_none_or(|f| f == g.fruit))
+            .filter(|g| !self.fav_only || self.favorites.contains(&g.path))
             .map(|g| self.row(g, feed))
             .filter(|r| q.is_empty() || r.game.title.to_lowercase().contains(&q) || r.system.to_lowercase().contains(&q) || r.fruit_name.to_lowercase().contains(&q))
             .collect();
@@ -401,6 +418,7 @@ impl Shelf {
 
         let detail = selected.and_then(|p| rows.iter().find(|r| r.game.path == p)).map(|r| self.detail(r, basket, feed));
 
+        let favorites = self.games.iter().filter(|g| self.favorites.contains(&g.path)).count();
         let empty = if self.games.is_empty() {
             Empty::NoGames
         } else if rows.is_empty() {
@@ -411,6 +429,8 @@ impl Shelf {
         LibraryView {
             chips: counts,
             filter: self.filter.as_deref(),
+            favorites,
+            fav_only: self.fav_only,
             az: self.az,
             view: self.view,
             continue_rows,

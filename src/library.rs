@@ -305,6 +305,51 @@ impl Played {
     }
 }
 
+/// The games marked as favourites: `launcher/favorites.tsv`, one path a line.
+#[derive(Debug, Default)]
+pub struct Favorites {
+    set: std::collections::BTreeSet<PathBuf>,
+}
+
+impl Favorites {
+    fn path(launcher_dir: &Path) -> PathBuf {
+        launcher_dir.join("favorites.tsv")
+    }
+
+    pub fn load(launcher_dir: &Path) -> Favorites {
+        let text = fs::read_to_string(Favorites::path(launcher_dir)).unwrap_or_default();
+        Favorites { set: text.lines().filter(|l| !l.trim().is_empty()).map(PathBuf::from).collect() }
+    }
+
+    pub fn save(&self, launcher_dir: &Path) -> io::Result<()> {
+        let text: String = self.set.iter().map(|p| format!("{}\n", p.display())).collect();
+        write_atomic(&Favorites::path(launcher_dir), text.as_bytes())
+    }
+
+    pub fn contains(&self, game: &Path) -> bool {
+        self.set.contains(game)
+    }
+
+    pub fn len(&self) -> usize {
+        self.set.len()
+    }
+
+    /// Mark or unmark; true if it is a favourite now.
+    pub fn toggle(&mut self, game: &Path) -> bool {
+        if self.set.remove(game) {
+            false
+        } else {
+            self.set.insert(game.to_path_buf());
+            true
+        }
+    }
+
+    /// After a basket move.
+    pub fn rebase(&mut self, old: &Path, new: &Path) {
+        self.set = std::mem::take(&mut self.set).into_iter().map(|p| rebase(&p, old, new)).collect();
+    }
+}
+
 /// Lowercase letters and digits only, articles moved: for matching a
 /// file's title against a list's ("Legend of Zelda, The" = "The Legend of Zelda").
 pub fn norm_title(title: &str) -> String {

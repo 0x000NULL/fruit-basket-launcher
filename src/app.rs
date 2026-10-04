@@ -839,7 +839,11 @@ impl App {
             }
         }
         if input.action(Action::Confirm) {
-            out.push(Cmd::CouchContinue);
+            // In Details, A marks the game a favourite; elsewhere it plays.
+            match (c.panel, self.couch_game()) {
+                (CouchPanel::Details, Some(g)) => out.push(Cmd::Favorite(g)),
+                _ => out.push(Cmd::CouchContinue),
+            }
         }
         // X: the pad's X, or S (and Delete) on the keyboard, where X is B.
         if input.pad_buttons.contains(&self.padmap.button_for(X)) || input.pressed(Key::S) || input.pressed(Key::Delete) {
@@ -1055,6 +1059,11 @@ impl App {
             }
             Cmd::Play(p) => {
                 self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref(), None, false).err();
+            }
+            Cmd::Favorite(p) => self.shelf.toggle_favorite(&self.basket.launcher_dir(), &p),
+            Cmd::LibFavorites(on) => {
+                self.shelf.fav_only = on;
+                self.scroll = 0.0;
             }
             Cmd::Continue(p) => match self.resume(&p) {
                 Some(slot) => {
@@ -1932,7 +1941,7 @@ fn couch_view<'a>(
     let hints = match c.panel {
         CouchPanel::Buttons => vec![("A", if resume.is_some() { "Continue" } else { "Play" }), ("B", "Back"), ("X", "Saves"), ("LB RB", "Switch system")],
         CouchPanel::Saves(_) => vec![("A", "Load"), ("B", "Back"), ("X", "Delete save")],
-        CouchPanel::Details => vec![("B", "Back"), ("LB RB", "Switch system")],
+        CouchPanel::Details => vec![("A", if game.is_some_and(|r| r.favorite) { "Unfavorite" } else { "Favorite" }), ("B", "Back"), ("LB RB", "Switch system")],
     };
     CouchView {
         systems: std::iter::once("All").chain(systems.iter().map(|f| f.name.as_str())).collect(),
@@ -2492,6 +2501,56 @@ mod tests {
         app.apply(Cmd::Focus(Some("Map buttons…".into())));
         app.draw(&UiInput::default(), 1280, 900);
         app.canvas.save_png(&dir.join("settings-pad-regular-paper.png")).unwrap();
+    }
+
+    /// Favourites: kept across runs, filtered by the chip, first in couch
+    /// mode, and following the games when the basket moves.
+    #[test]
+    fn favorites_toggle_filter_and_follow_a_move() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, feed, rom) = couch_basket(tmp.path());
+        for t in ["Golden Sun (USA)", "Cars (USA)"] {
+            std::fs::write(b.games_dir("strawberry").join(format!("{t}.gba")), "x").unwrap();
+        }
+        let golden = b.games_dir("strawberry").join("Golden Sun (USA).gba");
+        let mut app = App::with(Settings { theme: ThemePref::Paper, ..Settings::default() }, b, Some(feed.clone()));
+        app.shelf.played_mut().record(&rom, std::time::SystemTime::now(), 60);
+        app.apply(Cmd::Favorite(golden.clone()));
+        assert_eq!(app.shelf.couch_rows(app.feed.as_ref(), None)[0].game.path, golden, "favourites first");
+        app.apply(Cmd::LibFavorites(true));
+        let rows = app.shelf.rows(app.feed.as_ref(), "");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].favorite);
+
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        app.apply(Cmd::LibFavorites(false));
+        app.shelf.selected = Some(golden.clone());
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-favorites-regular-paper.png")).unwrap();
+        app.apply(Cmd::Couch);
+        app.apply(Cmd::CouchDetails);
+        app.draw(&UiInput::default(), 1280, 720);
+        app.canvas.save_png(&dir.join("couch-details-favorite-1280.png")).unwrap();
+        // A in Details unmarks it.
+        app.draw(&UiInput { actions: vec![Action::Confirm], ..UiInput::default() }, 1280, 720);
+        assert!(!app.shelf.rows(app.feed.as_ref(), "").iter().any(|r| r.favorite));
+        app.apply(Cmd::Favorite(golden.clone()));
+
+        // A new run reads them back; a move takes them along.
+        let launcher = app.basket.launcher_dir();
+        let mut shelf = Shelf::load(&launcher);
+        let moved = tmp.path().join("elsewhere");
+        shelf.rebase(&launcher, tmp.path(), &moved);
+        let again = Shelf::load(&launcher);
+        let mut app = App::with(Settings::default(), Basket::new(tmp.path()), Some(feed));
+        app.shelf = again;
+        app.shelf.games = vec![library::Game { path: moved.join("strawberry/games/Golden Sun (USA).gba"), ..app_game(&golden) }];
+        assert!(app.shelf.rows(app.feed.as_ref(), "")[0].favorite, "followed the move");
+    }
+
+    fn app_game(path: &Path) -> library::Game {
+        library::Game { path: path.to_path_buf(), fruit: "strawberry".into(), title: "Golden Sun".into(), size: 1, mtime: 0, code: None }
     }
 
     /// Continue loads the newest save; Start fresh (Play) doesn't; a fruit
