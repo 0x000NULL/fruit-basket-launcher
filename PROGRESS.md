@@ -8,13 +8,13 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `55e08e4` (2026-10-04), and the live feed is verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `af29a93` (2026-10-04), and the live feed is verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.1.0 is live in the feed (since 2026-10-04) | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.1.1 is live in the feed (2026-10-04) | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -62,16 +62,17 @@ bumped in the same commit, and the release notes come from a
 
 As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writing save pictures and covers (below).
 
-- **The site** is deployed at `55e08e4`.
-  - The live feed was generated 2026-10-04T03:07:03Z (a docs redeploy, `d1a3989`; `55e08e4` shipped v1.1.0). It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
+- **The site** is deployed at `af29a93`.
+  - The live feed was generated 2026-10-04T03:18:54Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open` and `couch` may use `{rom}`, `{slot}` and `{data}`.
     - `couch` goes after `launch` or `load_slot` in couch mode, never after `open`.
     - Also `carry`, and `oldest`, which feedgen uses and the feed doesn't carry.
-  - **The launcher entry** is v1.1.0 for windows-x64, linux-x64, macos-arm64 and macos-x64.
-    - The Windows zip's SHA-256 (`c4906c10…`) matches GitHub's `.sha256`, the feed and the live file.
-    - v1.0.1 is on GitHub but was never mirrored; v1.1.0 includes it. v0.5.x was never mirrored either.
+  - **The launcher entry** is v1.1.1 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 2 notes.
+    - The Windows zip's SHA-256 (`025b4589…`) matches GitHub's `.sha256`, the feed and the live file.
+    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update. v1.0.1 and v0.5.x were never mirrored.
+  - **`slots`**: feedgen emits it from site `67899bc`, two whole numbers, lowest first, `[]` when absent. No fruit declares it yet.
   - **`art`**, the new key: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`. Older launchers ignore it.
 - **Strawberry** is stable v1.5.0, with nightly `4ecce2e` (the same zip).
   - The feed lists only v1.5.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
@@ -91,7 +92,7 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
 - **Save pictures and covers for Strawberry and Crabapple** are in progress (asked 2026-10-04).
   - The Crabapple session is adding them once, to fruit-basket's `basket-app`, as an additive v0.3.0: `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
   - Done in code: fruit-basket v0.3.0 (`64fc2b1`), Crabapple main `bc38085`, Strawberry main `7f41e18` (after v1.6.1). Neither is in a tagged release yet; players get the pictures from each one's next release.
-  - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple's LAUNCHER needs `slots	1 8`, and feedgen needs to emit the key, before Crabapple goes in the feed. Strawberry writes no resume state.
+  - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple's LAUNCHER needs `slots	1 8` before it goes in the feed; feedgen emits the key already. Its LAUNCHER entry and a v0.10.0 mirror wait on Ethan. Strawberry writes no resume state.
   - Then the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`, and Crabapple's gets the same with `crabapple` when it goes in the feed. No launcher change is needed.
 - **fruit-basket** (the shared crates) is at v0.2.0 (`4416212`). It adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
@@ -104,7 +105,7 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
   3. It writes the notes line in the site's CHANGELOG.txt by hand, from this CHANGELOG: `fetch-release.sh` writes only "Release vX: builds in…", which would leave the update prompt with no notes.
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
-- **The first real self-update** is v1.1.0, mirrored 2026-10-04, when a v1.0.0 picks it up. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **The first real self-update** is v1.1.0 or v1.1.1 (both mirrored 2026-10-04), when a v1.0.0 picks it up. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
 - **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps
