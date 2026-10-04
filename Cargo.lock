@@ -555,7 +555,7 @@ dependencies = [
 
 [[package]]
 name = "fruitbasket"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "basket-app",
  "basket-build",

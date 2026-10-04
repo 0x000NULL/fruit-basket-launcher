@@ -21,6 +21,15 @@ pub enum ThemePref {
     Night,
 }
 
+/// How the Library shows its games.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LibView {
+    #[default]
+    Covers,
+    List,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Settings {
     /// The basket folder; `None` is `~/FruitBasket`.
@@ -44,11 +53,15 @@ pub struct Settings {
     /// The launcher's own controller map (Map buttons…), as
     /// `A = "South"`; buttons left out keep their defaults.
     pub gamepad: Option<PadBindings>,
+    /// The Library's sort (A–Z, or last played first) and view, kept
+    /// between runs.
+    pub library_az: bool,
+    pub library_view: LibView,
     #[serde(skip)]
     pub extra: Hidden<toml::Table>,
 }
 
-const KNOWN_KEYS: [&str; 13] = [
+const KNOWN_KEYS: [&str; 15] = [
     "root",
     "folders",
     "rescan_on_open",
@@ -62,6 +75,8 @@ const KNOWN_KEYS: [&str; 13] = [
     "hidden",
     "window",
     "gamepad",
+    "library_az",
+    "library_view",
 ];
 
 impl Default for Settings {
@@ -81,6 +96,8 @@ impl Default for Settings {
             hidden: Vec::new(),
             window: None,
             gamepad: None,
+            library_az: false,
+            library_view: LibView::Covers,
             extra: Hidden::default(),
         }
     }
@@ -116,7 +133,7 @@ impl Settings {
             )*};
         }
         take!(root, folders, rescan_on_open, new_channel, check_on_open, install_without_asking, keep,
-              couch_on_controller, theme, watch, hidden, window, gamepad);
+              couch_on_controller, theme, watch, hidden, window, gamepad, library_az, library_view);
         s.keep = s.keep.clamp(1, 3);
         s.extra = Hidden(t);
         s
@@ -142,6 +159,16 @@ impl<'de> Deserialize<'de> for ThemePref {
             "paper" => Ok(ThemePref::Paper),
             "night" => Ok(ThemePref::Night),
             other => Err(serde::de::Error::custom(format!("unknown theme {other}"))),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LibView {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        match String::deserialize(d)?.as_str() {
+            "covers" => Ok(LibView::Covers),
+            "list" => Ok(LibView::List),
+            other => Err(serde::de::Error::custom(format!("unknown library view {other}"))),
         }
     }
 }
@@ -187,5 +214,19 @@ mod tests {
         assert_eq!(back.gamepad, s.gamepad);
         assert_eq!(back.theme, ThemePref::Paper);
         assert!(back.extra.0.contains_key("future"));
+    }
+
+    #[test]
+    fn library_sort_and_view_round_trip() {
+        let s = Settings { library_az: true, library_view: LibView::List, ..Settings::default() };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.toml");
+        prefs::write(&path, APP_NAME, &s.extra.0, &KNOWN_KEYS, &s).unwrap();
+        let back = Settings::from_table(prefs::read(&path).unwrap());
+        assert!(back.library_az);
+        assert_eq!(back.library_view, LibView::List);
+
+        let t: toml::Table = toml::from_str("library_view = \"shelves\"\n").unwrap();
+        assert_eq!(Settings::from_table(t).library_view, LibView::Covers, "an unknown view falls back");
     }
 }

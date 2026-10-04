@@ -12,7 +12,7 @@ use crate::basket::{write_atomic, Basket};
 use crate::feed::Fruit;
 
 /// Folders below a games folder that are still searched.
-const DEPTH: u32 = 3;
+pub(crate) const DEPTH: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Game {
@@ -57,7 +57,7 @@ pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[Pat
     out
 }
 
-fn files(dir: &Path, depth: u32) -> Vec<PathBuf> {
+pub(crate) fn files(dir: &Path, depth: u32) -> Vec<PathBuf> {
     let Ok(rd) = fs::read_dir(dir) else { return Vec::new() };
     let mut out = Vec::new();
     for e in rd.flatten() {

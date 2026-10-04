@@ -42,6 +42,12 @@ fn key(v: &str) -> (Vec<u64>, bool) {
 }
 
 /// Where staged builds live.
+/// Whether to offer `build`: newer than what runs, and not the one the
+/// player said Later to (a recheck would otherwise bring the banner back).
+pub fn offer(build: &str, running: &str, dismissed: Option<&str>) -> bool {
+    newer(build, running) && dismissed != Some(build)
+}
+
 pub fn dir(launcher_dir: &Path) -> PathBuf {
     launcher_dir.join("update")
 }
@@ -185,6 +191,16 @@ mod tests {
         assert!(!newer("v1.0.0", "v1.0.0"));
         assert!(!newer("v0.5.1", "v1.0.0"));
         assert!(newer("v1.0.0", "v1.0.0-rc1"), "a release beats its pre-release");
+    }
+
+    /// Later holds for that build only: a recheck that finds it again stays
+    /// quiet, and a newer one is offered.
+    #[test]
+    fn later_holds_for_that_build() {
+        assert!(offer("v1.0.1", "v1.0.0", None));
+        assert!(!offer("v1.0.1", "v1.0.0", Some("v1.0.1")));
+        assert!(offer("v1.0.2", "v1.0.0", Some("v1.0.1")));
+        assert!(!offer("v1.0.0", "v1.0.0", None));
     }
 
     fn zip_with(name: &str, body: &[u8]) -> Vec<u8> {

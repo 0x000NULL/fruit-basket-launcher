@@ -18,6 +18,7 @@ use crate::art::Art;
 use crate::basket::{Basket, Current, Games};
 use crate::feed::{self, Channel, Feed, FeedError, Fetched, Fruit, Status};
 use crate::focus::{self, Area, Dir, Spot};
+use crate::folders;
 use crate::history::{self, Entry};
 use crate::jobs::{Job, Worker};
 use crate::key;
@@ -25,7 +26,7 @@ use crate::library::{self, Slot};
 use crate::mover;
 use crate::platform;
 use crate::queue::{self, Finished, Queue, RollOpt};
-use crate::settings::{Settings, ThemePref};
+use crate::settings::{LibView, Settings, ThemePref};
 use crate::shelf::Shelf;
 use crate::ui::basket::{BasketView, Card, CardState, Detail, Primary};
 use crate::ui::couch::{self, CouchView, Panel};
@@ -39,6 +40,10 @@ use crate::update::{self, Upd};
 use crate::window::Video;
 
 pub const VERSION: &str = concat!("v", env!("CARGO_PKG_VERSION"));
+/// How often a launcher left open fetches the feed again.
+const RECHECK: Duration = Duration::from_secs(4 * 60 * 60);
+/// How often the game folders are checked for new or removed files.
+const FOLDERS_EVERY: Duration = Duration::from_secs(15);
 
 // Menu buttons: the launcher has no game, so the set is just the roles.
 const UP: u16 = 1;
@@ -118,6 +123,16 @@ pub struct App {
     /// A newer launcher this folder can't take: (build, download URL).
     update_manual: Option<(String, String)>,
     update_rx: Option<Receiver<Upd>>,
+    /// The launcher build the player said Later to, this run.
+    update_dismissed: Option<String>,
+    /// When the feed was last fetched, for the recheck while open; `None`
+    /// in an app made by `with`, which never touches the network.
+    feed_at: Option<Instant>,
+    /// The game folders' last signature, the check on its way, and when
+    /// it was asked for (a live app only, like `feed_at`).
+    folders_sig: Option<u64>,
+    folders_rx: Option<Receiver<u64>>,
+    folders_at: Instant,
     storage: Option<(String, Vec<FruitStorage>)>,
     keymap: KeyMap,
     padmap: PadMap,
@@ -152,6 +167,8 @@ pub struct App {
     spots: Vec<Spot>,
     /// Scroll the focused control into view on the next frame.
     reveal: bool,
+    /// The open dialog's columns at the last frame (Left and Right jump).
+    modal_cols: usize,
     /// Where the page scrolls: below the header, above the footer.
     band: (f32, f32),
     /// Couch mode, when it is on.
@@ -212,6 +229,7 @@ impl App {
         let basket = settings.basket();
         let cached = feed::load_cached(&basket.launcher_dir(), &key::public_key());
         let mut app = App::with(settings, basket, cached);
+        app.feed_at = Some(Instant::now());
         app.check_launcher_update();
         if app.settings.check_on_open || app.feed.is_none() {
             app.check_feed();
@@ -222,7 +240,9 @@ impl App {
     /// An app with no window and no network: `new` without the side effects.
     pub fn with(settings: Settings, basket: Basket, cached: Option<Feed>) -> App {
         let history = history::read(&basket.launcher_dir());
-        let shelf = Shelf::load(&basket.launcher_dir());
+        let mut shelf = Shelf::load(&basket.launcher_dir());
+        shelf.az = settings.library_az;
+        shelf.view = settings.library_view;
         let mut app = App {
             worker: Worker::start(basket.clone()),
             feed: cached,
@@ -242,6 +262,11 @@ impl App {
             launcher_update: None,
             update_manual: None,
             update_rx: None,
+            update_dismissed: None,
+            feed_at: None,
+            folders_sig: None,
+            folders_rx: None,
+            folders_at: Instant::now(),
             storage: None,
             keymap: keymap(),
             padmap: settings.gamepad.as_ref().map_or_else(padmap, |b| b.to_padmap(padmap())),
@@ -262,6 +287,7 @@ impl App {
             focus: None,
             spots: Vec::new(),
             reveal: false,
+            modal_cols: 1,
             band: (0.0, 0.0),
             couch: None,
             controllers: Vec::new(),
@@ -328,7 +354,7 @@ impl App {
             return;
         }
         let Some(b) = self.feed.as_ref().and_then(|f| f.launcher.as_ref()) else { return };
-        if !update::newer(&b.build, VERSION) {
+        if !update::offer(&b.build, VERSION, self.update_dismissed.as_deref()) {
             return;
         }
         let Some(asset) = b.assets.get(feed::this_platform()).cloned() else { return };
@@ -361,11 +387,17 @@ impl App {
                 self.feed_rx = None;
                 match result {
                     Ok(fetched) => {
+                        self.feed_error = None;
+                        // The same feed again (a recheck with nothing new):
+                        // no rescan, no lists, no updates to start.
+                        if self.feed.as_ref().is_some_and(|f| f.generated == fetched.feed.generated) {
+                            self.check_launcher_update();
+                            return self.poll_rest();
+                        }
                         if let Err(e) = feed::save_cached(&self.basket.launcher_dir(), &fetched) {
                             eprintln!("fruitbasket: caching feed: {e}");
                         }
                         self.feed = Some(fetched.feed);
-                        self.feed_error = None;
                         self.refresh_installed();
                         if let Some(feed) = &self.feed {
                             self.shelf.lists(&self.basket.launcher_dir(), feed);
@@ -379,6 +411,10 @@ impl App {
                 }
             }
         }
+        self.poll_rest();
+    }
+
+    fn poll_rest(&mut self) {
         for event in self.worker.poll() {
             let (finished, next) = self.queue.on_event(&event);
             if let Some(job) = next {
@@ -414,6 +450,39 @@ impl App {
             self.os_dark = platform::os_dark();
             self.os_dark_at = Instant::now();
         }
+        self.watch_folders();
+        // A launcher left open still hears about new builds, but never
+        // while a game runs or a job is going.
+        if self.feed_at.is_some_and(|at| at.elapsed() > RECHECK)
+            && self.settings.check_on_open
+            && self.shelf.running().is_none()
+            && self.queue.count() == 0
+        {
+            self.feed_at = Some(Instant::now());
+            self.check_feed();
+        }
+    }
+
+    /// Every few seconds, hash the game folders on a thread; rescan when
+    /// they changed. The first answer is only the baseline.
+    fn watch_folders(&mut self) {
+        if let Some(rx) = &self.folders_rx {
+            if let Ok(sig) = rx.try_recv() {
+                self.folders_rx = None;
+                if self.folders_sig.is_some_and(|old| old != sig) {
+                    self.rescan();
+                }
+                self.folders_sig = Some(sig);
+            }
+            return;
+        }
+        if self.feed_at.is_none() || self.folders_at.elapsed() < FOLDERS_EVERY {
+            return;
+        }
+        self.folders_at = Instant::now();
+        let mut dirs: Vec<PathBuf> = self.installed.keys().map(|id| self.basket.games_dir(id)).collect();
+        dirs.extend(self.settings.folders.iter().cloned());
+        self.folders_rx = Some(folders::start(dirs));
     }
 
     pub fn night(&self) -> bool {
@@ -548,7 +617,7 @@ impl App {
         }
         if let Some(mv) = &mv {
             let mut ui = Ui::new(&mut self.canvas, input, &self.art, night, self.pad_used);
-            modal::draw(&mut ui, mv);
+            self.modal_cols = modal::draw(&mut ui, mv);
             cmds.extend(ui.cmds);
         }
         let modal_open = mv.is_some();
@@ -583,6 +652,13 @@ impl App {
                 out.push(Cmd::ModalPick(pick - 1));
             } else if input.action(Action::Down) && pick + 1 < MAP_ROWS.len() {
                 out.push(Cmd::ModalPick(pick + 1));
+            } else if self.modal_cols == 2 {
+                let half = MAP_ROWS.len().div_ceil(2);
+                if input.action(Action::Right) && pick + half < MAP_ROWS.len() {
+                    out.push(Cmd::ModalPick(pick + half));
+                } else if input.action(Action::Left) && *pick >= half {
+                    out.push(Cmd::ModalPick(pick - half));
+                }
             }
             // A listens for the picked row; Start (or Enter) is Done.
             if input.action(Action::Confirm) {
@@ -664,7 +740,7 @@ impl App {
         if self.tab == Tab::Library && self.focus.is_none() {
             let rows = self.shelf.rows(self.feed.as_ref(), &self.find);
             let at = self.shelf.selected_in(&rows).and_then(|p| rows.iter().position(|r| r.game.path == p));
-            let cols = if self.shelf.list { 1 } else if Size::of(self.canvas.width()) == Size::Narrow { 4 } else { 5 };
+            let cols = if self.shelf.view == LibView::List { 1 } else if Size::of(self.canvas.width()) == Size::Narrow { 4 } else { 5 };
             let step = if input.action(Action::Left) {
                 -1
             } else if input.action(Action::Right) {
@@ -923,6 +999,7 @@ impl App {
                     self.rescan();
                 }
             }
+            Cmd::Rescan => self.rescan(),
             Cmd::AddFolder => {
                 if let Some(dir) = rfd::FileDialog::new().set_title("Add a game folder").pick_folder() {
                     if !s.folders.contains(&dir) {
@@ -936,8 +1013,16 @@ impl App {
                 self.shelf.filter = f;
                 self.scroll = 0.0;
             }
-            Cmd::LibSort(az) => self.shelf.az = az,
-            Cmd::LibView(list) => self.shelf.list = list,
+            Cmd::LibSort(az) => {
+                self.shelf.az = az;
+                self.settings.library_az = az;
+                self.settings.save();
+            }
+            Cmd::LibView(view) => {
+                self.shelf.view = view;
+                self.settings.library_view = view;
+                self.settings.save();
+            }
             Cmd::SelectGame(p) => {
                 if self.shelf.selected.as_ref() != Some(&p) {
                     self.aside_scroll = 0.0;
@@ -975,7 +1060,8 @@ impl App {
             Cmd::CheckNow => self.check_feed(),
             Cmd::OpenUrl(url) => platform::open(&url),
             Cmd::DismissLauncherUpdate => {
-                self.launcher_update = None;
+                let build = self.launcher_update.take().or(self.update_manual.take().map(|(b, _)| b));
+                self.update_dismissed = build.or(self.update_dismissed.take());
                 self.update_manual = None;
             }
             Cmd::Select(id) => {
@@ -2285,6 +2371,15 @@ mod tests {
         app.settings.theme = ThemePref::Paper;
         app.draw(&UiInput::default(), 1280, 900);
         app.canvas.save_png(&dir.join("settings-map-regular-paper.png")).unwrap();
+        // A 680-high window takes two columns, so Done stays on screen;
+        // Right jumps across.
+        app.draw(&UiInput::default(), 1024, 680);
+        app.canvas.save_png(&dir.join("settings-map-compact-paper.png")).unwrap();
+        assert_eq!(app.modal_cols, 2);
+        app.draw(&act(Action::Right), 1024, 680);
+        assert!(matches!(app.modal, Some(Modal::Map { pick: 6, .. })));
+        app.draw(&act(Action::Left), 1024, 680);
+        assert!(matches!(app.modal, Some(Modal::Map { pick: 0, .. })));
         app.draw(&act(Action::Start), 1280, 900);
         assert!(app.modal.is_none());
         assert_eq!(app.padmap.button_for(A), Button::East);
@@ -2352,6 +2447,35 @@ mod tests {
         queue::job_for(f, app.ctx().new_channel(f), 2).expect("a build for this PC")
     }
 
+    /// Rescan finds a new file now; a recheck that brings the same feed
+    /// back doesn't rescan, and one with a newer feed does.
+    #[test]
+    fn rescan_and_an_unchanged_recheck() {
+        let tmp = tempfile::tempdir().unwrap();
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let mut app = App::with(Settings::default(), stocked(tmp.path()), Some(feed.clone()));
+        assert_eq!(app.shelf.games.len(), 1);
+        std::fs::write(app.basket.games_dir("strawberry").join("second.gba"), "y").unwrap();
+        let fetched = |feed: Feed| {
+            let (tx, rx) = channel();
+            tx.send(Ok(Fetched { feed, bytes: Vec::new(), sig: String::new() })).unwrap();
+            rx
+        };
+        app.feed_rx = Some(fetched(feed.clone()));
+        app.poll();
+        assert!(app.feed_rx.is_none());
+        assert_eq!(app.shelf.games.len(), 1, "the same feed: no rescan");
+        app.apply(Cmd::Rescan);
+        assert_eq!(app.shelf.games.len(), 2, "Rescan");
+
+        std::fs::write(app.basket.games_dir("strawberry").join("third.gba"), "z").unwrap();
+        let mut newer = feed;
+        newer.generated = "2099-01-01T00:00:00Z".into();
+        app.feed_rx = Some(fetched(newer));
+        app.poll();
+        assert_eq!(app.shelf.games.len(), 3, "a newer feed rescans");
+    }
+
     /// The Library states from the mocks, every size and theme: empty,
     /// covers, list, one fruit's chip, a dump that didn't match.
     #[test]
@@ -2375,10 +2499,10 @@ mod tests {
         let states: [(&str, bool, Setup); 5] = [
             ("library-first-run", false, |_| {}),
             ("library-covers", true, |_| {}),
-            ("library-list", true, |app| app.shelf.list = true),
+            ("library-list", true, |app| app.shelf.view = LibView::List),
             ("library-strawberry", true, |app| app.shelf.filter = Some("strawberry".into())),
             ("library-unverified", true, |app| {
-                app.shelf.list = true;
+                app.shelf.view = LibView::List;
                 let g = app.shelf.games.iter().find(|g| g.title == "Golden Sun").unwrap().clone();
                 app.shelf.set_hash(&g, &"ab".repeat(20));
                 app.shelf.selected = Some(g.path);

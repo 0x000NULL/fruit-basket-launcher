@@ -18,6 +18,7 @@ use super::basket::aside_width;
 use super::{Cmd, Size, Ui};
 use crate::compat::Level;
 use crate::library::Game;
+use crate::settings::LibView;
 
 #[derive(Debug, Clone)]
 pub struct Row<'a> {
@@ -66,7 +67,7 @@ pub struct LibraryView<'a> {
     pub chips: Vec<(Option<&'a str>, &'a str, usize)>,
     pub filter: Option<&'a str>,
     pub az: bool,
-    pub list: bool,
+    pub view: LibView,
     pub continue_rows: Vec<Row<'a>>,
     pub rows: Vec<Row<'a>>,
     /// "All games" or "Strawberry games".
@@ -131,7 +132,7 @@ pub fn draw(ui: &mut Ui, v: &LibraryView, top: f32, bottom: f32) {
     }
     let note = if v.az { "a to z" } else { "most recent first" };
     y = ui.section(x0, y, list_w, &format!("{} · {}", v.heading, v.rows.len()), Some(note));
-    y = if v.list { list(ui, v, x0, y, list_w) } else { covers(ui, v, x0, y + 14.0, list_w) };
+    y = if v.view == LibView::List { list(ui, v, x0, y, list_w) } else { covers(ui, v, x0, y + 14.0, list_w) };
     y += 24.0;
     ui.unclip();
     ui.emit(Cmd::ScrollMax((y + v.scroll - bottom).max(0.0)));
@@ -205,9 +206,10 @@ fn toolbar(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
     // Toggles and Add folder…, right; Add folder… drops to its own row
     // when there is no room.
     let add_w = ui.small_button_width("Add folder…");
+    let rescan_w = ui.small_button_width("Rescan");
     let sort_w = seg_width(ui, &["Recent", "A–Z"]);
     let view_w = seg_width(ui, &["Covers", "List"]);
-    let all = sort_w + 14.0 + view_w + 14.0 + add_w;
+    let all = sort_w + 14.0 + view_w + 14.0 + add_w + 10.0 + rescan_w;
     let one_row = cx + 20.0 + all <= x + w;
     let mut rx = x + w - if one_row { all } else { sort_w + 14.0 + view_w };
     let ty = if one_row || ui.size != Size::Narrow { y } else { y + 44.0 };
@@ -216,14 +218,18 @@ fn toolbar(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
         ui.emit(Cmd::LibSort(i == 1));
     }
     rx += sort_w + 14.0;
-    let (_, hit) = ui.segmented(rx, ty, &["Covers", "List"], v.list as usize);
+    let (_, hit) = ui.segmented(rx, ty, &["Covers", "List"], v.view as usize);
     if let Some(i) = hit {
-        ui.emit(Cmd::LibView(i == 1));
+        ui.emit(Cmd::LibView(if i == 1 { LibView::List } else { LibView::Covers }));
     }
     let (ax, ay, end) = if one_row { (rx + view_w + 14.0, y, y + 34.0) } else { (x, ty + 44.0, ty + 78.0) };
     let (_, add) = ui.small_button(ax, ay, "Add folder…");
     if add {
         ui.emit(Cmd::AddFolder);
+    }
+    let (_, rescan) = ui.small_button(ax + add_w + 10.0, ay, "Rescan");
+    if rescan {
+        ui.emit(Cmd::Rescan);
     }
     end
 }

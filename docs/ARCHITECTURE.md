@@ -113,6 +113,7 @@ Pomegranate would otherwise copy back).
 | File | What it does |
 |---|---|
 | `main.rs` | `--version`; swap in a staged update; `app::run()` |
+| `folders.rs` | watching the game folders: a signature (path, size, mtime) on a thread every 15 s; a change rescans |
 | `focus.rs` | the controller's focus: `Spot`s the frame drew, `next` (nearest in a direction, level ones first), `cycle` (Tab) |
 | `app.rs` | `App`: state, the frame loop (poll → draw → apply `Cmd`s), `Ctx` (read-only view of the state shared by views and commands), the render and e2e tests |
 | `key.rs` | embedded public key, key ID, feed URL (`FRUITBASKET_FEED` overrides) |
@@ -127,7 +128,7 @@ Pomegranate would otherwise copy back).
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
 | `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), start, a thread that times the session |
 | `mover.rs` | Move basket: where it goes, then rename or a checked copy on a thread |
-| `update.rs` | the launcher's own update: `newer`, stage (download, hash, unpack, `--version`), `apply_staged` / `undo` / `clean` at start |
+| `update.rs` | the launcher's own update: `newer`, `offer` (not a build the player said Later to), stage (download, hash, unpack, `--version`), `apply_staged` / `undo` / `clean` at start |
 | `shelf.rs` | the Library's state: games, lists, hashing, the running game (from a slot, with couch arguments), `view()`, `couch_rows()` |
 | `settings.rs` | `Settings` (with `[gamepad]`, the launcher's controller map), unknown keys kept |
 | `platform.rs` | OS dark mode, free space, screen size, open / reveal, `~` paths |

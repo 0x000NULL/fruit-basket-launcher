@@ -40,25 +40,37 @@ fn scrim(ui: &mut Ui) {
     ui.cv.draw_pixmap(&px, 0.0, 0.0, Transform::from_scale(w, h));
 }
 
-pub fn draw(ui: &mut Ui, v: &ModalView) {
+/// Draws the dialog and returns its column count: a long list (Map
+/// buttons) that would run off the window goes into two columns.
+pub fn draw(ui: &mut Ui, v: &ModalView) -> usize {
     scrim(ui);
     let gutter = if ui.size == Size::Narrow { 16.0 } else { 32.0 };
-    let cw = (ui.w() - 2.0 * gutter).min(540.0);
-    let inner = cw - 2.0 * PAD;
-    let cx = ((ui.w() - cw) / 2.0).round();
+    let rows = v.rows.len() + v.current.is_some() as usize;
+    let reading = Style::reading(16.0).color(ui.pal.fg);
+    let title_sizes = [38.0, 32.0, 28.0, 24.0];
 
     // Measure first, so the card can be centred.
-    let title_sizes = [38.0, 32.0, 28.0, 24.0];
-    let (tsize, tlines) = ui.cv.fonts.fit_display(Style::display(38.0).upper(), &v.title, inner, 2, &title_sizes);
-    let reading = Style::reading(16.0).color(ui.pal.fg);
-    let blines = ui.cv.fonts.wrap(&reading, &v.body, inner, 5);
-    let rows = v.rows.len() + v.current.is_some() as usize;
-    let mut ch = PAD + if v.fruit.is_some() { 22.0 } else { 0.0 };
-    ch += tlines.len() as f32 * tsize * 1.05 + 14.0;
-    ch += blines.len() as f32 * 24.0 + 16.0;
-    ch += rows as f32 * ROW_H + if rows > 0 { 16.0 } else { 0.0 };
-    ch += if v.tick.is_some() { 38.0 } else { 0.0 };
-    ch += BUTTON_H + PAD;
+    let measure = |ui: &mut Ui, cols: usize| {
+        let cw = (ui.w() - 2.0 * gutter).min(if cols == 2 { 760.0 } else { 540.0 });
+        let inner = cw - 2.0 * PAD;
+        let (tsize, tlines) = ui.cv.fonts.fit_display(Style::display(38.0).upper(), &v.title, inner, 2, &title_sizes);
+        let blines = ui.cv.fonts.wrap(&reading, &v.body, inner, 5);
+        let mut ch = PAD + if v.fruit.is_some() { 22.0 } else { 0.0 };
+        ch += tlines.len() as f32 * tsize * 1.05 + 14.0;
+        ch += blines.len() as f32 * 24.0 + 16.0;
+        ch += rows.div_ceil(cols) as f32 * ROW_H + if rows > 0 { 16.0 } else { 0.0 };
+        ch += if v.tick.is_some() { 38.0 } else { 0.0 };
+        ch += BUTTON_H + PAD;
+        (cw, inner, tsize, tlines, blines, ch)
+    };
+    let mut cols = 1;
+    let mut m = measure(ui, 1);
+    if m.5 > ui.h() - 32.0 && v.current.is_none() && v.rows.len() > 6 && ui.size != Size::Narrow {
+        cols = 2;
+        m = measure(ui, 2);
+    }
+    let (cw, inner, tsize, tlines, blines, ch) = m;
+    let cx = ((ui.w() - cw) / 2.0).round();
     let cy = ((ui.h() - ch) / 2.0).max(16.0).round();
 
     ui.cv.fill_rect(cx, cy, cw, ch, ui.pal.bg);
@@ -83,30 +95,38 @@ pub fn draw(ui: &mut Ui, v: &ModalView) {
     y += 16.0;
 
     if rows > 0 {
-        ui.cv.hrule(x, x + inner, y, 1.0, ui.pal.line);
         let mono = Style::data(14.0);
         let note = Style::interface(13.0);
         if let Some((label, what)) = &v.current {
+            ui.cv.hrule(x, x + inner, y, 1.0, ui.pal.line);
             ui.cv.text(x + 30.0, y + 15.0, label, &mono.color(ui.muted()));
             ui.cv.text_right(x + inner, y + 16.0, what, &note.color(ui.muted()));
             y += ROW_H;
-            ui.cv.hrule(x, x + inner, y, 1.0, ui.pal.line);
+        }
+        // Column-major, so Up and Down still walk the rows in order.
+        let gap = 28.0;
+        let col_w = if cols == 2 { (inner - gap) / 2.0 } else { inner };
+        let per = v.rows.len().div_ceil(cols).max(1);
+        for c in 0..cols {
+            let rx = x + c as f32 * (col_w + gap);
+            ui.cv.hrule(rx, rx + col_w, y, 1.0, ui.pal.line);
         }
         for (i, (label, what)) in v.rows.iter().enumerate() {
             let on = i == v.pick;
-            ui.cv.stroke_circle(x + 9.0, y + ROW_H / 2.0, 8.0, 2.0, ui.pal.fg);
+            let rx = x + (i / per) as f32 * (col_w + gap);
+            let ry = y + (i % per) as f32 * ROW_H;
+            ui.cv.stroke_circle(rx + 9.0, ry + ROW_H / 2.0, 8.0, 2.0, ui.pal.fg);
             if on {
-                ui.cv.circle(x + 9.0, y + ROW_H / 2.0, 4.0, ui.pal.fg);
+                ui.cv.circle(rx + 9.0, ry + ROW_H / 2.0, 4.0, ui.pal.fg);
             }
-            ui.cv.text(x + 30.0, y + 15.0, label, &mono.color(ui.pal.fg));
-            ui.cv.text_right(x + inner, y + 16.0, what, &note.color(ui.muted()));
-            if ui.clicked(x, y, inner, ROW_H) && !on {
+            ui.cv.text(rx + 30.0, ry + 15.0, label, &mono.color(ui.pal.fg));
+            ui.cv.text_right(rx + col_w, ry + 16.0, what, &note.color(ui.muted()));
+            if ui.clicked(rx, ry, col_w, ROW_H) && !on {
                 ui.emit(Cmd::ModalPick(i));
             }
-            y += ROW_H;
-            ui.cv.hrule(x, x + inner, y, 1.0, ui.pal.line);
+            ui.cv.hrule(rx, rx + col_w, ry + ROW_H, 1.0, ui.pal.line);
         }
-        y += 16.0;
+        y += v.rows.len().div_ceil(cols) as f32 * ROW_H + 16.0;
     }
 
     if let Some((label, on)) = v.tick {
@@ -141,4 +161,5 @@ pub fn draw(ui: &mut Ui, v: &ModalView) {
             ui.emit(Cmd::ModalExtra);
         }
     }
+    cols
 }

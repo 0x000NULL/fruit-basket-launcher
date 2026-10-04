@@ -1,6 +1,6 @@
 [package]
 name = "fruitbasket"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 rust-version = "1.82"
 description = "Fruit Basket launcher: the game library and the emulators, from one window"

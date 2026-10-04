@@ -21,7 +21,7 @@ use minifb::Key;
 use crate::art::Art;
 use crate::feed::Channel;
 use crate::focus::{Area, Spot};
-use crate::settings::ThemePref;
+use crate::settings::{LibView, ThemePref};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
@@ -98,6 +98,8 @@ pub enum Cmd {
     Keep(u8),
     Toggle(Flag),
     AddFolder,
+    /// Scan the game folders again now.
+    Rescan,
     RemoveFolder(usize),
     MoveBasket,
     ClearOldBuilds(String),
@@ -122,7 +124,7 @@ pub enum Cmd {
     // Library; games are named by path.
     LibFilter(Option<String>),
     LibSort(bool),
-    LibView(bool),
+    LibView(LibView),
     SelectGame(std::path::PathBuf),
     Play(std::path::PathBuf),
     ShowFile(std::path::PathBuf),

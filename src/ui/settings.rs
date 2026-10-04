@@ -105,7 +105,7 @@ pub fn draw(ui: &mut Ui, v: &SettingsView, top: f32, bottom: f32) {
         ui.emit(Cmd::NewChannel(if i == 0 { Channel::Stable } else { Channel::Nightly }));
     }
     y += 50.0;
-    y = check(ui, cx, y, "Check every fruit when the launcher opens", s.check_on_open, Flag::CheckOnOpen);
+    y = check(ui, cx, y, "Check for updates automatically", s.check_on_open, Flag::CheckOnOpen);
     y = check(ui, cx, y, "Install updates without asking", s.install_without_asking, Flag::InstallWithoutAsking);
     let signed = format!("Only install builds signed with {} · always on", v.key_id);
     let (h, _) = ui.check(cx, y, &signed, true, false);

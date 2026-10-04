@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.1
+
+Fixes, and the first update a v1.0.0 launcher installs by itself.
+
+- **Map buttons** fits a short window. When the eleven rows won't fit (a 680-high window), they go into two columns, and Left and Right jump between them.
+- **The Library keeps its sort and view** (Recent or A–Z, Covers or List) between runs.
+- **A launcher left open checks for updates every 4 hours**, and never while a game runs or a download is going.
+  - The setting is now "Check for updates automatically".
+  - **Later** on a launcher update holds for that build. A recheck doesn't bring the banner back; a newer build does.
+  - A recheck that finds the same feed doesn't rescan the library.
+- **Rescan** in the Library toolbar. The game folders are also checked every 15 seconds, so a ROM copied in shows up without a restart.
+
 ## v1.0.0
 
 The launcher updates itself.

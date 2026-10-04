@@ -8,6 +8,7 @@ mod compat;
 mod dumps;
 mod feed;
 mod focus;
+mod folders;
 mod history;
 mod jobs;
 mod key;

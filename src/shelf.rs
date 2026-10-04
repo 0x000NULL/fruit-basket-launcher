@@ -13,7 +13,7 @@ use crate::feed::{Feed, Fruit};
 use crate::launch::{self, Session};
 use crate::library::{self, Game, Played};
 use crate::lists::{self, Kind};
-use crate::settings::Settings;
+use crate::settings::{LibView, Settings};
 use crate::ui::library::{Dump, Empty, GameDetail, LibraryView, PlayState, Row};
 
 #[derive(Default)]
@@ -32,7 +32,7 @@ pub struct Shelf {
     /// Chip: a fruit id, or None for All.
     pub filter: Option<String>,
     pub az: bool,
-    pub list: bool,
+    pub view: LibView,
     pub selected: Option<PathBuf>,
 }
 
@@ -305,7 +305,7 @@ impl Shelf {
             chips: counts,
             filter: self.filter.as_deref(),
             az: self.az,
-            list: self.list,
+            view: self.view,
             continue_rows,
             rows,
             heading,
