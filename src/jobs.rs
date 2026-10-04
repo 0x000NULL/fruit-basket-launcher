@@ -213,7 +213,7 @@ pub(crate) fn download(url: &str, to: &Path, size: u64, progress: &mut dyn FnMut
         fs::create_dir_all(parent)?;
     }
     let resp = ureq::get(url).call().map_err(io::Error::other)?;
-    let mut reader = resp.into_reader().take(size + 1);
+    let mut reader = resp.into_body().into_reader().take(size + 1);
     let mut out = io::BufWriter::new(fs::File::create(to)?);
     let mut hash = Sha256::new();
     let mut buf = vec![0u8; 64 * 1024];
@@ -229,7 +229,7 @@ pub(crate) fn download(url: &str, to: &Path, size: u64, progress: &mut dyn FnMut
         progress(total);
     }
     out.flush()?;
-    Ok(format!("{:x}", hash.finalize()))
+    Ok(crate::basket::hex(&hash.finalize()))
 }
 
 #[cfg(test)]
@@ -267,7 +267,7 @@ mod tests {
             fs::create_dir_all(to.parent().unwrap())?;
             fs::write(to, &data)?;
             progress(data.len() as u64);
-            Ok(format!("{:x}", Sha256::digest(&data)))
+            Ok(crate::basket::hex(&Sha256::digest(&data)))
         });
         drop(tx);
         rx.into_iter().collect()
@@ -278,7 +278,7 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let b = Basket::new(t.path());
         let data = zip_bytes();
-        let ev = events(&b, &job(&data, format!("{:x}", Sha256::digest(&data))), data, true);
+        let ev = events(&b, &job(&data, crate::basket::hex(&Sha256::digest(&data))), data, true);
         assert!(matches!(ev.last(), Some(Event::Done { build, .. }) if build == "v1"));
         assert_eq!(b.current("berry").unwrap().build, "v1");
         assert!(fs::read_dir(b.downloads_dir()).unwrap().next().is_none(), "the .part is cleaned up");

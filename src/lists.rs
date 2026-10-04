@@ -39,7 +39,7 @@ fn path(launcher_dir: &Path, fruit: &str, kind: Kind) -> PathBuf {
 }
 
 fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    crate::basket::hex(&Sha256::digest(bytes))
 }
 
 /// The cached list, if it matches the feed.
@@ -83,7 +83,7 @@ pub fn fetch_missing(launcher_dir: &Path, feed: &Feed) -> Receiver<(String, Kind
 fn fetch(want: &FileRef) -> Result<Vec<u8>, String> {
     let resp = ureq::get(&want.url).call().map_err(|e| e.to_string())?;
     let mut bytes = Vec::new();
-    resp.into_reader().take(LIMIT).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    resp.into_body().into_reader().take(LIMIT).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
     let got = sha256(&bytes);
     if !got.eq_ignore_ascii_case(&want.sha256) {
         return Err(format!("{} hashed to {got}, not the signed {}", want.url, want.sha256));

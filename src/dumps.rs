@@ -57,7 +57,7 @@ pub fn sha1_of(path: &Path) -> io::Result<String> {
         }
         h.update(&buf[..n]);
     }
-    Ok(hex(&h.finalize()))
+    Ok(crate::basket::hex(&h.finalize()))
 }
 
 /// The raw-data SHA-1 from a v4 or v5 CHD header (big-endian; offset 64
@@ -75,11 +75,7 @@ fn chd_raw_sha1(f: &mut File) -> io::Result<String> {
         4 => 88,
         v => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("CHD version {v}"))),
     };
-    Ok(hex(&head[at..at + 20]))
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    Ok(crate::basket::hex(&head[at..at + 20]))
 }
 
 /// Hashes already computed, keyed by path with the size and mtime they

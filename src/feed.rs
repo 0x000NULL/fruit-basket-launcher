@@ -303,7 +303,7 @@ fn get(url: &str, limit: u64) -> Result<Vec<u8>, FeedError> {
     let net = |e: String| FeedError::Network(host(url), e);
     let resp = ureq::get(url).call().map_err(|e| net(e.to_string()))?;
     let mut out = Vec::new();
-    resp.into_reader().take(limit).read_to_end(&mut out).map_err(|e| net(e.to_string()))?;
+    resp.into_body().into_reader().take(limit).read_to_end(&mut out).map_err(|e| net(e.to_string()))?;
     Ok(out)
 }
 

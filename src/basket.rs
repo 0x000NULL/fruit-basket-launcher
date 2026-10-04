@@ -212,6 +212,11 @@ impl Basket {
     }
 }
 
+/// Lowercase hex, as the feed writes SHA-256 and SHA-1 sums.
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Write `path` through a temporary file and a rename, so a reader sees the
 /// old contents or the new, never half of either.
 pub fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
@@ -379,6 +384,12 @@ mod tests {
 
     fn exe(name: &str) -> String {
         if cfg!(windows) { format!("{name}.exe") } else { name.to_string() }
+    }
+
+    #[test]
+    fn hex_matches_the_feeds_sums() {
+        use sha2::{Digest, Sha256};
+        assert_eq!(hex(&Sha256::digest(b"abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     }
 
     #[test]
