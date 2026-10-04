@@ -2503,6 +2503,70 @@ mod tests {
         app.canvas.save_png(&dir.join("settings-pad-regular-paper.png")).unwrap();
     }
 
+    /// Stats: weekly buckets from the session log (12 weeks, oldest
+    /// first), totals from play time, the log read back on a new run; and
+    /// the view at every size and theme.
+    #[test]
+    fn stats_from_the_session_log() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, feed, rom) = couch_basket(tmp.path());
+        let games = b.games_dir("strawberry");
+        for t in ["Golden Sun (USA)", "Metroid Fusion (USA)", "Mario Kart - Super Circuit (USA)", "Cars (USA)"] {
+            std::fs::write(games.join(format!("{t}.gba")), "x").unwrap();
+        }
+        let launcher = b.launcher_dir();
+        let mut app = App::with(Settings { theme: ThemePref::Paper, ..Settings::default() }, b, Some(feed));
+        let now = std::time::SystemTime::now();
+        let day = Duration::from_secs(24 * 3600);
+        let golden = games.join("Golden Sun (USA).gba");
+        let metroid = games.join("Metroid Fusion (USA).gba");
+        let kart = games.join("Mario Kart - Super Circuit (USA).gba");
+        let log: [(&Path, u32, u64); 9] = [
+            (&rom, 0, 1_800),
+            (&golden, 1, 5_400),
+            (&golden, 3, 2_700),
+            (&golden, 8, 7_200),
+            (&metroid, 10, 3_000),
+            (&metroid, 30, 4_000),
+            (&kart, 45, 1_200),
+            (&kart, 60, 9_000),
+            (&rom, 200, 600),
+        ];
+        for (g, days, secs) in log {
+            app.shelf.log_session(&launcher, g, now - day * days, secs);
+        }
+        let rows = app.shelf.rows(app.feed.as_ref(), "");
+        let st = app.shelf.stats(&rows, app.feed.as_ref(), now);
+        assert_eq!(st.weeks.len(), 12);
+        assert_eq!(st.weeks[11], 1_800 + 5_400 + 2_700, "this week");
+        assert_eq!(st.weeks[10], 7_200 + 3_000);
+        assert_eq!(st.weeks[7], 4_000, "30 days ago is 4 weeks back");
+        assert_eq!(st.weeks.iter().sum::<u64>(), 1_800 + 5_400 + 2_700 + 7_200 + 3_000 + 4_000 + 1_200 + 9_000, "200 days is off the chart");
+        assert_eq!(st.week, 1_800 + 5_400 + 2_700);
+        assert_eq!(st.total, 34_900);
+        assert_eq!((st.sessions, st.games), (9, 4));
+        assert_eq!(st.top[0].game.path, golden);
+        assert_eq!(st.recent[0].0, "homebrew");
+        assert_eq!(Shelf::load(&launcher).stats(&rows, app.feed.as_ref(), now).sessions, 9, "read back");
+
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        app.apply(Cmd::LibView(LibView::Stats));
+        app.shelf.selected = Some(golden.clone());
+        for theme in [ThemePref::Paper, ThemePref::Night] {
+            app.settings.theme = theme;
+            for (w, h, size) in [(1280, 900, "regular"), (1024, 680, "compact"), (640, 880, "narrow")] {
+                app.draw(&UiInput::default(), w, h);
+                let t = if theme == ThemePref::Paper { "paper" } else { "night" };
+                app.canvas.save_png(&dir.join(format!("library-stats-{size}-{t}.png"))).unwrap();
+            }
+        }
+        app.apply(Cmd::Scroll(600.0));
+        app.settings.theme = ThemePref::Paper;
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-stats-scrolled-regular-paper.png")).unwrap();
+    }
+
     /// Favourites: kept across runs, filtered by the chip, first in couch
     /// mode, and following the games when the basket moves.
     #[test]

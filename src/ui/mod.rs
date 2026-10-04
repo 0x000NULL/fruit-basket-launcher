@@ -9,6 +9,7 @@ pub mod frame;
 pub mod library;
 pub mod modal;
 pub mod settings;
+pub mod stats;
 
 use basket_ui::canvas::Clip;
 use basket_ui::input::UiInput;

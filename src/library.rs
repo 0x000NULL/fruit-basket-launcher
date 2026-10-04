@@ -305,6 +305,59 @@ impl Played {
     }
 }
 
+/// Every finished session: `launcher/sessions.tsv`,
+/// `<started unix secs>\t<secs>\t<path>` a line, appended as games exit.
+/// `played.tsv` stays the summary; sessions from before v1.1 are only there.
+#[derive(Debug, Default)]
+pub struct Sessions {
+    /// Oldest first.
+    pub list: Vec<(i64, u64, PathBuf)>,
+}
+
+impl Sessions {
+    fn path(launcher_dir: &Path) -> PathBuf {
+        launcher_dir.join("sessions.tsv")
+    }
+
+    pub fn load(launcher_dir: &Path) -> Sessions {
+        let text = fs::read_to_string(Sessions::path(launcher_dir)).unwrap_or_default();
+        let list = text
+            .lines()
+            .filter_map(|l| {
+                let mut f = l.splitn(3, '\t');
+                Some((f.next()?.parse().ok()?, f.next()?.parse().ok()?, PathBuf::from(f.next()?)))
+            })
+            .collect();
+        Sessions { list }
+    }
+
+    pub fn append(&mut self, launcher_dir: &Path, game: &Path, started: SystemTime, secs: u64) -> io::Result<()> {
+        use std::io::Write;
+        let at = started.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        fs::create_dir_all(launcher_dir)?;
+        let mut f = fs::OpenOptions::new().create(true).append(true).open(Sessions::path(launcher_dir))?;
+        writeln!(f, "{at}\t{secs}\t{}", game.display())?;
+        self.list.push((at, secs, game.to_path_buf()));
+        Ok(())
+    }
+
+    /// After a basket move: the whole log, rewritten.
+    pub fn rebase(&mut self, launcher_dir: &Path, old: &Path, new: &Path) -> io::Result<()> {
+        for s in &mut self.list {
+            s.2 = rebase(&s.2, old, new);
+        }
+        let text: String = self.list.iter().map(|(at, secs, p)| format!("{at}\t{secs}\t{}\n", p.display())).collect();
+        write_atomic(&Sessions::path(launcher_dir), text.as_bytes())
+    }
+
+    /// One game's sessions, newest first.
+    pub fn of(&self, game: &Path) -> Vec<(i64, u64)> {
+        let mut out: Vec<(i64, u64)> = self.list.iter().filter(|s| s.2 == game).map(|s| (s.0, s.1)).collect();
+        out.sort_by(|a, b| b.0.cmp(&a.0));
+        out
+    }
+}
+
 /// The games marked as favourites: `launcher/favorites.tsv`, one path a line.
 #[derive(Debug, Default)]
 pub struct Favorites {

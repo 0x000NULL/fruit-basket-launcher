@@ -13,16 +13,18 @@ use crate::compat::Compat;
 use crate::dumps::{self, DumpDb, Hashes, Want};
 use crate::feed::{Feed, Fruit};
 use crate::launch::{self, Session};
-use crate::library::{self, Favorites, Game, Played, Slot};
+use crate::library::{self, Favorites, Game, Played, Sessions, Slot};
 use crate::pics::Pics;
 use crate::lists::{self, Kind};
 use crate::settings::{LibView, Settings};
 use crate::ui::library::{Dump, Empty, GameDetail, LibraryView, PlayState, Row};
+use crate::ui::stats::StatsView;
 
 #[derive(Default)]
 pub struct Shelf {
     pub games: Vec<Game>,
     played: Played,
+    sessions: Sessions,
     favorites: Favorites,
     /// The Favorites chip: only favourites, on top of the fruit chip.
     pub fav_only: bool,
@@ -56,7 +58,7 @@ pub struct Shelf {
 
 impl Shelf {
     pub fn load(launcher_dir: &Path) -> Shelf {
-        Shelf { played: Played::load(launcher_dir), favorites: Favorites::load(launcher_dir), hashes: Hashes::load(launcher_dir), ..Shelf::default() }
+        Shelf { played: Played::load(launcher_dir), sessions: Sessions::load(launcher_dir), favorites: Favorites::load(launcher_dir), hashes: Hashes::load(launcher_dir), ..Shelf::default() }
     }
 
     fn installed<'a>(feed: Option<&'a Feed>, installed: &HashMap<String, Current>) -> Vec<&'a Fruit> {
@@ -115,12 +117,6 @@ impl Shelf {
     /// The save Continue loads: the newest, if the fruit can start from one.
     pub fn resume(&self, game: &Path, basket: &Basket, fruit: &Fruit) -> Option<Slot> {
         fruit.loads_slots().then(|| self.slots(game, basket, fruit).into_iter().next()).flatten()
-    }
-
-    /// Saves changed (one was deleted): read them again.
-    pub fn forget_slots(&mut self) {
-        self.slots.borrow_mut().clear();
-        self.stale_covers = true;
     }
 
     /// Wait for the cover index and its pictures: the render tests draw
@@ -242,7 +238,7 @@ impl Shelf {
         if let Some((_, rx)) = &self.running {
             if let Ok(s) = rx.try_recv() {
                 self.played.record(&s.game, s.started, s.secs);
-                if let Err(e) = self.played.save(launcher_dir) {
+                if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.sessions.append(launcher_dir, &s.game, s.started, s.secs)) {
                     eprintln!("fruitbasket: saving play time: {e}");
                 }
                 self.running = None;
@@ -299,6 +295,9 @@ impl Shelf {
         self.played.rebase(old, new);
         self.hashes.rebase(old, new);
         self.favorites.rebase(old, new);
+        if let Err(e) = self.sessions.rebase(launcher_dir, old, new) {
+            eprintln!("fruitbasket: saving sessions: {e}");
+        }
         if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.hashes.save(launcher_dir)).and_then(|_| self.favorites.save(launcher_dir)) {
             eprintln!("fruitbasket: saving library state: {e}");
         }
@@ -349,7 +348,17 @@ impl Shelf {
             (None, Some(s)) => PlayState::Continue { slot: s.n, saved: s.saved },
             (None, None) => PlayState::Play,
         };
-        GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, &dirs).len(), file: crate::platform::tilde(&r.game.path) }
+        let sessions = self.sessions.of(&r.game.path);
+        GameDetail {
+            row: r.clone(),
+            dump,
+            play,
+            saves: library::saves(&r.game.path, &dirs).len(),
+            file: crate::platform::tilde(&r.game.path),
+            sessions: sessions.len(),
+            average: if sessions.is_empty() { 0 } else { sessions.iter().map(|s| s.1).sum::<u64>() / sessions.len() as u64 },
+            recent: sessions.into_iter().take(5).collect(),
+        }
     }
 
     /// Couch mode's games: one fruit's (or all), favourites first, then
@@ -358,6 +367,45 @@ impl Shelf {
         let mut rows: Vec<Row> = self.games.iter().filter(|g| fruit.is_none_or(|f| f == g.fruit)).map(|g| self.row(g, feed)).collect();
         rows.sort_by(|a, b| b.favorite.cmp(&a.favorite).then(b.last.cmp(&a.last)).then_with(|| a.game.title.to_lowercase().cmp(&b.game.title.to_lowercase())));
         rows
+    }
+
+    /// The Stats view over `rows` (the chip, Favorites and FIND apply).
+    pub fn stats<'a>(&self, rows: &[Row<'a>], feed: Option<&'a Feed>, now: std::time::SystemTime) -> StatsView<'a> {
+        let now = now.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+        let shown: HashSet<&Path> = rows.iter().map(|r| r.game.path.as_path()).collect();
+        let mut sessions: Vec<&(i64, u64, PathBuf)> = self.sessions.list.iter().filter(|s| shown.contains(s.2.as_path())).collect();
+        sessions.sort_by_key(|s| s.0);
+        const WEEK: i64 = 7 * 24 * 3600;
+        let mut weeks = [0u64; crate::ui::stats::WEEKS];
+        // Oldest week first; the last is the seven days up to now.
+        for s in &sessions {
+            let ago = ((now - s.0).max(0) / WEEK) as usize;
+            if ago < weeks.len() {
+                weeks[weeks.len() - 1 - ago] += s.1;
+            }
+        }
+        let mut fruits: Vec<(&'a str, u64)> = Vec::new();
+        for f in feed.iter().flat_map(|f| f.fruits.iter()) {
+            let secs: u64 = rows.iter().filter(|r| r.game.fruit == f.id).map(|r| r.secs).sum();
+            if secs > 0 {
+                fruits.push((f.name.as_str(), secs));
+            }
+        }
+        fruits.sort_by(|a, b| b.1.cmp(&a.1));
+        let mut top: Vec<Row<'a>> = rows.iter().filter(|r| r.secs > 0).cloned().collect();
+        top.sort_by(|a, b| b.secs.cmp(&a.secs));
+        top.truncate(10);
+        let title = |p: &Path| rows.iter().find(|r| r.game.path == p).map(|r| r.game.title.clone()).unwrap_or_default();
+        StatsView {
+            total: rows.iter().map(|r| r.secs).sum(),
+            week: sessions.iter().filter(|s| now - s.0 < WEEK).map(|s| s.1).sum(),
+            sessions: sessions.len(),
+            games: rows.iter().filter(|r| r.secs > 0).count(),
+            weeks: weeks.to_vec(),
+            fruits,
+            top,
+            recent: sessions.iter().rev().take(20).map(|s| (title(&s.2), s.0, s.1)).collect(),
+        }
     }
 
     /// Mark or unmark a favourite, and keep it.
@@ -417,6 +465,7 @@ impl Shelf {
         };
 
         let detail = selected.and_then(|p| rows.iter().find(|r| r.game.path == p)).map(|r| self.detail(r, basket, feed));
+        let stats = (self.view == LibView::Stats).then(|| self.stats(&rows, feed, std::time::SystemTime::now()));
 
         let favorites = self.games.iter().filter(|g| self.favorites.contains(&g.path)).count();
         let empty = if self.games.is_empty() {
@@ -435,6 +484,7 @@ impl Shelf {
             view: self.view,
             continue_rows,
             rows,
+            stats,
             heading,
             selected,
             detail,
@@ -449,6 +499,13 @@ impl Shelf {
     #[cfg(test)]
     pub fn played_mut(&mut self) -> &mut Played {
         &mut self.played
+    }
+
+    /// For tests: a finished session, as `poll` would log it.
+    #[cfg(test)]
+    pub fn log_session(&mut self, launcher_dir: &Path, game: &Path, started: std::time::SystemTime, secs: u64) {
+        self.played.record(game, started, secs);
+        self.sessions.append(launcher_dir, game, started, secs).unwrap();
     }
 
     #[cfg(test)]

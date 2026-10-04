@@ -20,6 +20,7 @@ use super::{Cmd, Size, Ui};
 use crate::compat::Level;
 use crate::library::Game;
 use crate::settings::LibView;
+use super::stats::StatsView;
 
 #[derive(Debug, Clone)]
 pub struct Row<'a> {
@@ -58,6 +59,11 @@ pub struct GameDetail<'a> {
     pub play: PlayState,
     pub saves: usize,
     pub file: String,
+    /// Sessions logged since v1.1: how many, the average length, and the
+    /// last five (started unix secs, secs), newest first.
+    pub sessions: usize,
+    pub average: u64,
+    pub recent: Vec<(i64, u64)>,
 }
 
 pub enum Empty {
@@ -79,6 +85,8 @@ pub struct LibraryView<'a> {
     pub view: LibView,
     pub continue_rows: Vec<Row<'a>>,
     pub rows: Vec<Row<'a>>,
+    /// Built only when the view is Stats.
+    pub stats: Option<StatsView<'a>>,
     /// "All games" or "Strawberry games".
     pub heading: String,
     pub selected: Option<&'a Path>,
@@ -135,6 +143,22 @@ pub fn draw(ui: &mut Ui, v: &LibraryView, top: f32, bottom: f32) {
         return;
     }
 
+    if let Some(st) = &v.stats {
+        y = super::stats::draw(ui, st, x0, y, list_w) + 24.0;
+        ui.unclip();
+        ui.emit(Cmd::ScrollMax((y + v.scroll - bottom).max(0.0)));
+    } else {
+        y = grid(ui, v, x0, y, list_w);
+        ui.unclip();
+        ui.emit(Cmd::ScrollMax((y + v.scroll - bottom).max(0.0)));
+    }
+
+    let Some(d) = &v.detail else { return };
+    aside_or_sheet(ui, v, d, top, bottom, w, x0, aside_w, sheet_open);
+}
+
+/// Continue, then the covers or the list. Returns the bottom.
+fn grid(ui: &mut Ui, v: &LibraryView, x0: f32, mut y: f32, list_w: f32) -> f32 {
     if !v.continue_rows.is_empty() {
         y = ui.section(x0, y, list_w, "Continue", Some("last played")) + 12.0;
         y = continue_cards(ui, v, x0, y, list_w) + 30.0;
@@ -142,11 +166,11 @@ pub fn draw(ui: &mut Ui, v: &LibraryView, top: f32, bottom: f32) {
     let note = if v.az { "a to z" } else { "most recent first" };
     y = ui.section(x0, y, list_w, &format!("{} · {}", v.heading, v.rows.len()), Some(note));
     y = if v.view == LibView::List { list(ui, v, x0, y, list_w) } else { covers(ui, v, x0, y + 14.0, list_w) };
-    y += 24.0;
-    ui.unclip();
-    ui.emit(Cmd::ScrollMax((y + v.scroll - bottom).max(0.0)));
+    y + 24.0
+}
 
-    let Some(d) = &v.detail else { return };
+#[allow(clippy::too_many_arguments)]
+fn aside_or_sheet(ui: &mut Ui, v: &LibraryView, d: &GameDetail, top: f32, bottom: f32, w: f32, x0: f32, aside_w: f32, sheet_open: bool) {
     if aside_w > 0.0 {
         let ax = w - aside_w;
         let panel = ui.panel();
@@ -236,7 +260,7 @@ fn toolbar(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
     let add_w = ui.small_button_width("Add folder…");
     let rescan_w = ui.small_button_width("Rescan");
     let sort_w = seg_width(ui, &["Last played", "A–Z"]);
-    let view_w = seg_width(ui, &["Covers", "List"]);
+    let view_w = seg_width(ui, &["Covers", "List", "Stats"]);
     let all = sort_w + 14.0 + view_w + 14.0 + add_w + 10.0 + rescan_w;
     let one_row = cx + 20.0 + all <= x + w;
     let mut rx = x + w - if one_row { all } else { sort_w + 14.0 + view_w };
@@ -246,9 +270,9 @@ fn toolbar(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
         ui.emit(Cmd::LibSort(i == 1));
     }
     rx += sort_w + 14.0;
-    let (_, hit) = ui.segmented(rx, ty, &["Covers", "List"], v.view as usize);
+    let (_, hit) = ui.segmented(rx, ty, &["Covers", "List", "Stats"], v.view as usize);
     if let Some(i) = hit {
-        ui.emit(Cmd::LibView(if i == 1 { LibView::List } else { LibView::Covers }));
+        ui.emit(Cmd::LibView([LibView::Covers, LibView::List, LibView::Stats][i.min(2)]));
     }
     let (ax, ay, end) = if one_row { (rx + view_w + 14.0, y, y + 34.0) } else { (x, ty + 44.0, ty + 78.0) };
     let (_, add) = ui.small_button(ax, ay, "Add folder…");
@@ -600,6 +624,23 @@ fn aside(ui: &mut Ui, d: &GameDetail, x: f32, top: f32, w: f32, bottom: f32, scr
     y += 48.0;
     ui.cv.hrule(x, x + half, y, 1.0, ui.pal.line);
     ui.cv.hrule(x + half + 20.0, x + w, y, 1.0, ui.pal.line);
+
+    // Sessions: how many, the average, the last few.
+    if d.sessions > 0 {
+        y += 16.0;
+        let n = if d.sessions == 1 { "1 session".to_string() } else { format!("{} sessions", d.sessions) };
+        ui.cv.text(x, y, "Sessions", &note);
+        ui.cv.text(x, y + 20.0, &format!("{n} · about {} each", super::stats::fmt_hm(d.average)), &data);
+        y += 44.0;
+        let mono = Style::data(12.0).color(ui.muted());
+        for (at, secs) in &d.recent {
+            ui.cv.text(x, y, &super::stats::when(*at), &mono);
+            ui.cv.text_right(x + w, y, &super::stats::fmt_hm(*secs), &mono);
+            y += 20.0;
+        }
+        y += 8.0;
+        ui.cv.hrule(x, x + w, y, 1.0, ui.pal.line);
+    }
 
     // Dump.
     y += 16.0;

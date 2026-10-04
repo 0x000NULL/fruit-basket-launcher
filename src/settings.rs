@@ -28,6 +28,7 @@ pub enum LibView {
     #[default]
     Covers,
     List,
+    Stats,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -168,6 +169,7 @@ impl<'de> Deserialize<'de> for LibView {
         match String::deserialize(d)?.as_str() {
             "covers" => Ok(LibView::Covers),
             "list" => Ok(LibView::List),
+            "stats" => Ok(LibView::Stats),
             other => Err(serde::de::Error::custom(format!("unknown library view {other}"))),
         }
     }
