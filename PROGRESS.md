@@ -8,7 +8,7 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; deployed 2026-10-03; site main is at `d866b48`, and the live feed is verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `55e08e4` (2026-10-04), and the live feed is verified | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
@@ -59,18 +59,19 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-03, nothing the launcher needs is waiting on another repo.
+As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writing save pictures and covers (below).
 
-- **The site** is deployed at `d866b48`.
-  - The live feed was generated 2026-10-03T20:45:27Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
+- **The site** is deployed at `55e08e4`.
+  - The live feed was generated 2026-10-04T02:49:00Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open` and `couch` may use `{rom}`, `{slot}` and `{data}`.
     - `couch` goes after `launch` or `load_slot` in couch mode, never after `open`.
     - Also `carry`, and `oldest`, which feedgen uses and the feed doesn't carry.
-  - **The launcher entry** is v1.0.0 for windows-x64, linux-x64, macos-arm64 and macos-x64.
-    - The Windows zip from the live URL matches the feed's SHA-256 (`5d0b3b99…`) and GitHub's `.sha256`.
-    - v0.5.x was never mirrored.
+  - **The launcher entry** is v1.1.0 for windows-x64, linux-x64, macos-arm64 and macos-x64.
+    - The Windows zip's SHA-256 (`c4906c10…`) matches GitHub's `.sha256`, the feed and the live file.
+    - v1.0.1 is on GitHub but was never mirrored; v1.1.0 includes it. v0.5.x was never mirrored either.
+  - **`art`**, the new key: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`. Older launchers ignore it.
 - **Strawberry** is stable v1.5.0, with nightly `4ecce2e` (the same zip).
   - The feed lists only v1.5.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`.
@@ -86,6 +87,10 @@ As of 2026-10-03, nothing the launcher needs is waiting on another repo.
   - Whether and when it goes in is Ethan's call: tag, then the site mirrors it.
   - Its LAUNCHER would then be `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, with `oldest` set to that tag.
   - v0.9.0 ships windows-x64 and linux-x64 only.
+- **Save pictures and covers for Strawberry and Crabapple** are in progress (asked 2026-10-04).
+  - The Crabapple session is adding them once, to fruit-basket's `basket-app`, as an additive v0.3.0: `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
+  - Both emulators then move to v0.3.0. Strawberry's session will report its commit.
+  - Then the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`, and Crabapple's gets the same with `crabapple` when it goes in the feed. No launcher change is needed.
 - **fruit-basket** (the shared crates) is at v0.2.0 (`4416212`). It adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
@@ -97,7 +102,7 @@ As of 2026-10-03, nothing the launcher needs is waiting on another repo.
   3. It writes a notes line from this CHANGELOG.
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
-- **The first real self-update** happens when v1.0.1 is mirrored and a v1.0.0 picks it up. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **The first real self-update** is v1.1.0, mirrored 2026-10-04, when a v1.0.0 picks it up. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
 - **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps
