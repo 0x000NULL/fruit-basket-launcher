@@ -763,7 +763,7 @@ impl App {
             }
             if input.action(Action::Confirm) {
                 if let Some(p) = self.shelf.selected_in(&rows) {
-                    out.push(Cmd::Play(p.to_path_buf()));
+                    out.push(Cmd::Continue(p.to_path_buf()));
                 }
             }
         }
@@ -899,6 +899,11 @@ impl App {
         for p in slots.iter().filter_map(Slot::picture) {
             self.shelf.pics.want(p);
         }
+    }
+
+    /// The save Continue would load for `game`.
+    fn resume(&self, game: &Path) -> Option<Slot> {
+        self.shelf.resume(game, &self.basket, self.game_fruit(game)?)
     }
 
     fn couch_slots(&self) -> Vec<Slot> {
@@ -1051,6 +1056,12 @@ impl App {
             Cmd::Play(p) => {
                 self.play_error = self.shelf.play(&p, &self.basket, self.feed.as_ref(), None, false).err();
             }
+            Cmd::Continue(p) => match self.resume(&p) {
+                Some(slot) => {
+                    self.play_from(&p, Some(slot.n));
+                }
+                None => self.apply(Cmd::Play(p)),
+            },
             Cmd::ShowFile(p) => platform::reveal(&p),
             Cmd::ShowSaves(p) => {
                 let slots = self.game_slots(&p);
@@ -1245,7 +1256,8 @@ impl App {
                 let Some(game) = self.couch_game() else { return };
                 let slot = match self.couch.as_ref().map(|c| c.panel) {
                     Some(CouchPanel::Saves(i)) => self.couch_slots().get(i).map(|s| s.n),
-                    _ => None,
+                    // The buttons' Continue: the newest save.
+                    _ => self.resume(&game).map(|s| s.n),
                 };
                 if self.play_from(&game, slot) {
                     if let Some(c) = &mut self.couch {
@@ -1493,7 +1505,7 @@ impl App {
             Tab::Library => {
                 let rows: Vec<Row> = self.shelf.rows(self.feed.as_ref(), &self.find);
                 let sel = self.shelf.selected_in(&rows).and_then(|p| rows.iter().find(|r| r.game.path == p));
-                let verb = if sel.is_some_and(|r| r.last.is_some()) { "Continue" } else { "Play" };
+                let verb = if sel.is_some_and(|r| self.resume(&r.game.path).is_some()) { "Continue" } else { "Play" };
                 vec![("Z", verb), ("/", "Find")]
             }
             Tab::Basket => {
@@ -1916,8 +1928,9 @@ fn couch_view<'a>(
         },
         _ => Panel::Buttons,
     };
+    let resume = game.zip(gfruit).and_then(|(r, f)| shelf.resume(&r.game.path, basket, f)).map(|s| s.n);
     let hints = match c.panel {
-        CouchPanel::Buttons => vec![("A", "Continue"), ("B", "Back"), ("X", "Saves"), ("LB RB", "Switch system")],
+        CouchPanel::Buttons => vec![("A", if resume.is_some() { "Continue" } else { "Play" }), ("B", "Back"), ("X", "Saves"), ("LB RB", "Switch system")],
         CouchPanel::Saves(_) => vec![("A", "Load"), ("B", "Back"), ("X", "Delete save")],
         CouchPanel::Details => vec![("B", "Back"), ("LB RB", "Switch system")],
     };
@@ -1931,6 +1944,7 @@ fn couch_view<'a>(
         panel,
         saves: slots.len(),
         playing: shelf.running(),
+        resume,
         hero: match c.panel {
             CouchPanel::Saves(i) => slots.get(i).and_then(Slot::picture).and_then(|p| shelf.pics.get(p)),
             _ => None,
@@ -2048,6 +2062,7 @@ fn dir_size(path: &Path) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::library::PlayState;
 
     /// Render every tab at the three mock sizes, paper and night, to
     /// target/shots/ for comparing with docs/mocks/screens/ by eye.
@@ -2477,6 +2492,43 @@ mod tests {
         app.apply(Cmd::Focus(Some("Map buttons…".into())));
         app.draw(&UiInput::default(), 1280, 900);
         app.canvas.save_png(&dir.join("settings-pad-regular-paper.png")).unwrap();
+    }
+
+    /// Continue loads the newest save; Start fresh (Play) doesn't; a fruit
+    /// that can't load saves, or a game with none, just plays.
+    #[test]
+    fn continue_loads_the_newest_save() {
+        let wait = |app: &mut App| {
+            let start = Instant::now();
+            while app.shelf.running().is_some() {
+                assert!(start.elapsed() < Duration::from_secs(30), "the stand-in never exited");
+                app.poll();
+                thread::sleep(Duration::from_millis(20));
+            }
+        };
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, feed, rom) = couch_basket(tmp.path());
+        let newer = std::time::SystemTime::now() + Duration::from_secs(60);
+        std::fs::File::options().write(true).open(b.games_dir("strawberry").join("homebrew.s5.state")).unwrap().set_modified(newer).unwrap();
+        let mut app = App::with(Settings::default(), b, Some(feed.clone()));
+        let row = app.shelf.couch_rows(app.feed.as_ref(), None).into_iter().find(|r| r.game.path == rom).unwrap();
+        assert!(matches!(app.shelf.detail(&row, &app.basket, app.feed.as_ref()).play, PlayState::Continue { slot: 5, .. }));
+        app.apply(Cmd::Continue(rom.clone()));
+        assert_eq!(app.play_error, None);
+        assert_eq!(app.shelf.launched, ["--list", rom.to_str().unwrap(), "--slot", "5"]);
+        wait(&mut app);
+        app.apply(Cmd::Play(rom.clone()));
+        assert_eq!(app.shelf.launched, ["--list", rom.to_str().unwrap()], "Start fresh");
+        wait(&mut app);
+
+        let mut plain = feed;
+        plain.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap().load_slot = None;
+        let mut app = App::with(Settings::default(), Basket::new(tmp.path()), Some(plain));
+        app.apply(Cmd::Continue(rom.clone()));
+        assert_eq!(app.shelf.launched, ["--list", rom.to_str().unwrap()], "no load_slot: fresh");
+        wait(&mut app);
+        let row = app.shelf.couch_rows(app.feed.as_ref(), None).into_iter().find(|r| r.game.path == rom).unwrap();
+        assert_eq!(app.shelf.detail(&row, &app.basket, app.feed.as_ref()).play, PlayState::Play);
     }
 
     /// Covers: a save's picture beats the feed's `art`, which beats the

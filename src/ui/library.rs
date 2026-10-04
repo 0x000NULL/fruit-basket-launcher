@@ -45,7 +45,8 @@ pub enum Dump<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayState {
     Play,
-    Continue,
+    /// From the newest save: its slot and when it was made.
+    Continue { slot: u8, saved: SystemTime },
     /// A game is running; nothing else starts until it exits.
     Running(String),
 }
@@ -276,7 +277,7 @@ fn continue_cards(ui: &mut Ui, v: &LibraryView, x: f32, y: f32, w: f32) -> f32 {
         let (bx, by) = (cx + cw - 55.0, y + 26.0);
         play_button(ui, bx, by, 44.0);
         if ui.hot("Play", bx, by, 44.0, 44.0) {
-            ui.emit(Cmd::Play(r.game.path.clone()));
+            ui.emit(Cmd::Continue(r.game.path.clone()));
         } else if ui.clicked(cx, y, cw, h) {
             ui.emit(Cmd::SelectGame(r.game.path.clone()));
         }
@@ -509,7 +510,7 @@ fn aside(ui: &mut Ui, d: &GameDetail, x: f32, top: f32, w: f32, bottom: f32, scr
             ui.cv.text_center(x + w / 2.0, y + 16.0, &format!("Running in {fruit}"), &st);
         }
         p => {
-            let label = if *p == PlayState::Continue { "Continue" } else { "Play" };
+            let label = if matches!(p, PlayState::Continue { .. }) { "Continue" } else { "Play" };
             ui.cv.fill_rect(x, y, w, h, ui.pal.fg);
             let st = Style::interface_bold(18.0).color(ui.pal.bg);
             let ks = Style::data(13.0).color(widgets::mix(ui.pal.bg, ui.pal.fg, 0.55));
@@ -518,11 +519,21 @@ fn aside(ui: &mut Ui, d: &GameDetail, x: f32, top: f32, w: f32, bottom: f32, scr
             ui.cv.text(lx, y + 16.0, label, &st);
             ui.cv.text(lx + lw + 12.0, y + 20.0, "Z", &ks);
             if ui.hot(label, x, y, w, h) {
-                ui.emit(Cmd::Play(r.game.path.clone()));
+                ui.emit(Cmd::Continue(r.game.path.clone()));
             }
         }
     }
     y += h + 10.0;
+    // Which save Continue loads, and the way round it.
+    if let PlayState::Continue { slot, saved } = &d.play {
+        let mono = Style::data(13.0).color(ui.muted());
+        let tw = ui.cv.text(x, y + 2.0, &format!("Slot {slot} · {}", basket_ui::fmt::fmt_when(*saved)), &mono);
+        let (_, fresh) = ui.link(x + tw + 14.0, y + 2.0, "Start fresh", ui.pal.fg);
+        if fresh {
+            ui.emit(Cmd::Play(r.game.path.clone()));
+        }
+        y += 28.0;
+    }
 
     // Saves · N, Show file, Remove.
     let saves = format!("Saves · {}", d.saves);

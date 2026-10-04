@@ -149,6 +149,8 @@ pub enum Cmd {
     CouchPick(usize),
     /// A: Continue, or in the saves list, load the picked save.
     CouchContinue,
+    /// Start the game from its newest save, or fresh if it has none.
+    Continue(std::path::PathBuf),
     /// X: open the saves list, or in it, delete the picked save.
     CouchSaves,
     CouchSavePick(usize),

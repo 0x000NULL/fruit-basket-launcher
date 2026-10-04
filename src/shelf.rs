@@ -46,6 +46,9 @@ pub struct Shelf {
     slots: RefCell<HashMap<PathBuf, Vec<Slot>>>,
     /// A game exited: the covers need looking for again.
     pub stale_covers: bool,
+    /// The last game's arguments, for the tests to check.
+    #[cfg(test)]
+    pub launched: Vec<String>,
 }
 
 impl Shelf {
@@ -104,6 +107,11 @@ impl Shelf {
             .entry(game.to_path_buf())
             .or_insert_with(|| library::slots(game, &library::save_dirs(basket, fruit)))
             .clone()
+    }
+
+    /// The save Continue loads: the newest, if the fruit can start from one.
+    pub fn resume(&self, game: &Path, basket: &Basket, fruit: &Fruit) -> Option<Slot> {
+        fruit.loads_slots().then(|| self.slots(game, basket, fruit).into_iter().next()).flatten()
     }
 
     /// Saves changed (one was deleted): read them again.
@@ -273,6 +281,10 @@ impl Shelf {
             let build = basket.current(&fruit.id).map(|c| c.build).unwrap_or_default();
             args.extend(launch::args(fruit.couch_args(&build), Some(path), slot, data.as_deref())?);
         }
+        #[cfg(test)]
+        {
+            self.launched = args.clone();
+        }
         let rx = launch::start(&exe, &args, path).map_err(|e| e.to_string())?;
         self.running = Some((fruit.name.clone(), rx));
         self.selected = Some(path.to_path_buf());
@@ -327,10 +339,10 @@ impl Shelf {
         let fruit = feed.and_then(|f| f.fruit(&r.game.fruit));
         let (dump, _) = self.dump_state(r.game, fruit);
         let dirs = fruit.map(|f| library::save_dirs(basket, f)).unwrap_or_default();
-        let play = match self.running() {
-            Some(name) => PlayState::Running(name.to_string()),
-            None if r.last.is_some() => PlayState::Continue,
-            None => PlayState::Play,
+        let play = match (self.running(), fruit.and_then(|f| self.resume(&r.game.path, basket, f))) {
+            (Some(name), _) => PlayState::Running(name.to_string()),
+            (None, Some(s)) => PlayState::Continue { slot: s.n, saved: s.saved },
+            (None, None) => PlayState::Play,
         };
         GameDetail { row: r.clone(), dump, play, saves: library::saves(&r.game.path, &dirs).len(), file: crate::platform::tilde(&r.game.path) }
     }

@@ -31,6 +31,8 @@ pub struct CouchView<'a> {
     pub saves: usize,
     /// The fruit a game is running in.
     pub playing: Option<&'a str>,
+    /// The slot A loads from the buttons (the newest save), if any.
+    pub resume: Option<u8>,
     /// The picked save's picture, shown in the cover's place.
     pub hero: Option<&'a Pixmap>,
     pub hints: Vec<(&'static str, &'static str)>,
@@ -185,7 +187,11 @@ fn buttons(ui: &mut Ui, v: &CouchView, k: &Scale, x: f32, y: f32) {
     let bh = k.v(60.0);
     let st = Style::interface_bold(k.v(21.0));
     let saves = format!("Saves · {}", v.saves);
-    let items: [(&str, &str, Cmd, bool); 3] = [("A", "Continue", Cmd::CouchContinue, true), ("X", &saves, Cmd::CouchSaves, false), ("Y", "Details", Cmd::CouchDetails, false)];
+    let go = match v.resume {
+        Some(n) => format!("Continue · Slot {n}"),
+        None => "Play".to_string(),
+    };
+    let items: [(&str, &str, Cmd, bool); 3] = [("A", &go, Cmd::CouchContinue, true), ("X", &saves, Cmd::CouchSaves, false), ("Y", "Details", Cmd::CouchDetails, false)];
     let mut bx = x;
     for (key, label, cmd, primary) in items {
         let bw = ui.cv.measure(label, &st) + k.v(98.0);
