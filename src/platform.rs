@@ -48,7 +48,7 @@ fn existing(path: &Path) -> Option<&Path> {
 pub fn free_space(path: &Path) -> Option<u64> {
     use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
-    extern "system" {
+    unsafe extern "system" {
         fn GetDiskFreeSpaceExW(dir: *const u16, avail: *mut u64, total: *mut u64, free: *mut u64) -> i32;
     }
     let wide: Vec<u16> = existing(path)?.as_os_str().encode_wide().chain(Some(0)).collect();
@@ -71,7 +71,7 @@ pub fn free_space(path: &Path) -> Option<u64> {
 #[cfg(windows)]
 pub fn screen_size() -> Option<(usize, usize)> {
     #[link(name = "user32")]
-    extern "system" {
+    unsafe extern "system" {
         fn GetSystemMetrics(index: i32) -> i32;
     }
     // SAFETY: plain queries with no pointers. 0 and 1 are SM_CXSCREEN and SM_CYSCREEN.
@@ -83,7 +83,7 @@ pub fn screen_size() -> Option<(usize, usize)> {
 #[cfg(target_os = "macos")]
 pub fn screen_size() -> Option<(usize, usize)> {
     #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" {
+    unsafe extern "C" {
         fn CGMainDisplayID() -> u32;
         fn CGDisplayPixelsWide(display: u32) -> usize;
         fn CGDisplayPixelsHigh(display: u32) -> usize;
