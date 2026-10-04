@@ -79,7 +79,7 @@ impl Shelf {
         self.slots.borrow_mut().clear();
         self.stale_covers = false;
         let cache = dirs::cache_dir();
-        let jobs: Vec<(PathBuf, Vec<PathBuf>, Vec<PathBuf>)> = self
+        let jobs: Vec<(PathBuf, Vec<PathBuf>, Vec<PathBuf>, Vec<u8>)> = self
             .games
             .iter()
             .filter_map(|g| {
@@ -87,15 +87,16 @@ impl Shelf {
                 let data = f.uses_data().then(|| basket.data_dir(&f.id));
                 let place = launch::Place { rom: &g.path, data: data.as_deref(), code: g.code.as_deref(), cache: cache.as_deref() };
                 let art = f.art.iter().filter_map(|t| launch::path(t, &place)).collect();
-                Some((g.path.clone(), library::save_dirs(basket, f), art))
+                let listed: Vec<u8> = (0..=u8::MAX).filter(|n| f.lists_slot(*n)).collect();
+                Some((g.path.clone(), library::save_dirs(basket, f), art, listed))
             })
             .collect();
         let (tx, rx) = channel();
         thread::spawn(move || {
             let found = jobs
                 .into_iter()
-                .filter_map(|(game, dirs, art)| {
-                    let slot = library::slots(&game, &dirs).iter().find_map(|s| s.picture().map(Path::to_path_buf));
+                .filter_map(|(game, dirs, art, listed)| {
+                    let slot = library::slots(&game, &dirs).iter().filter(|s| listed.contains(&s.n)).find_map(|s| s.picture().map(Path::to_path_buf));
                     slot.or_else(|| art.into_iter().find(|p| p.is_file())).map(|p| (game, p))
                 })
                 .collect();
@@ -110,7 +111,7 @@ impl Shelf {
         self.slots
             .borrow_mut()
             .entry(game.to_path_buf())
-            .or_insert_with(|| library::slots(game, &library::save_dirs(basket, fruit)))
+            .or_insert_with(|| library::slots(game, &library::save_dirs(basket, fruit)).into_iter().filter(|s| fruit.lists_slot(s.n)).collect())
             .clone()
     }
 
@@ -353,7 +354,7 @@ impl Shelf {
             row: r.clone(),
             dump,
             play,
-            saves: library::saves(&r.game.path, &dirs).len(),
+            saves: library::saves(&r.game.path, &dirs).iter().filter(|p| library::slot_number(p).is_none_or(|n| fruit.is_none_or(|f| f.lists_slot(n)))).count(),
             file: crate::platform::tilde(&r.game.path),
             sessions: sessions.len(),
             average: if sessions.is_empty() { 0 } else { sessions.iter().map(|s| s.1).sum::<u64>() / sessions.len() as u64 },

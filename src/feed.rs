@@ -61,6 +61,10 @@ pub struct Fruit {
     /// Only ever read as a PNG.
     #[serde(default)]
     pub art: Vec<String>,
+    /// The save slots the emulator loads, lowest and highest (`["1", "8"]`).
+    /// Others (Crabapple's resume state, `.s9`) aren't listed. Empty: all.
+    #[serde(default)]
+    pub slots: Vec<String>,
     pub url: String,
     pub readme_url: String,
     pub compat: Option<FileRef>,
@@ -171,6 +175,15 @@ impl Fruit {
     /// saves and settings in `<root>/<fruit>/data/`, not beside its exe.
     pub fn uses_data(&self) -> bool {
         self.launch.iter().chain(self.load_slot.iter().flatten()).chain(&self.open).chain(&self.couch).any(|a| a.contains("{data}"))
+    }
+
+    /// Whether the launcher lists slot `n`: inside the feed's `slots`, or
+    /// any slot when the fruit doesn't say.
+    pub fn lists_slot(&self, n: u8) -> bool {
+        match self.slots.iter().map(|s| s.parse::<u8>()).collect::<Result<Vec<_>, _>>().as_deref() {
+            Ok([lo, hi]) => (*lo..=*hi).contains(&n),
+            _ => true,
+        }
     }
 
     /// The emulator can start a game from a save slot.

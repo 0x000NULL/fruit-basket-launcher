@@ -2617,6 +2617,43 @@ mod tests {
         library::Game { path: path.to_path_buf(), fruit: "strawberry".into(), title: "Golden Sun".into(), size: 1, mtime: 0, code: None }
     }
 
+    /// The feed's `slots` hides a save the emulator can't load (Crabapple's
+    /// resume state, `.s9`): not listed, not counted, not the cover, and
+    /// never what Continue passes, even when it is the newest.
+    #[test]
+    fn slots_outside_the_feeds_range_are_hidden() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (b, mut feed, rom) = couch_basket(tmp.path());
+        feed.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap().slots = vec!["1".into(), "8".into()];
+        let games = b.games_dir("strawberry");
+        std::fs::remove_file(games.join("homebrew.s5.state")).unwrap();
+        std::fs::write(games.join("homebrew.s9.state"), "resume").unwrap();
+        std::fs::write(games.join("homebrew.s9.png"), crate::pics::png_bytes(4, 4, [9, 9, 9])).unwrap();
+        std::fs::write(games.join("homebrew.s2.png"), crate::pics::png_bytes(4, 4, [2, 2, 2])).unwrap();
+        let newer = std::time::SystemTime::now() + Duration::from_secs(60);
+        std::fs::File::options().write(true).open(games.join("homebrew.s9.state")).unwrap().set_modified(newer).unwrap();
+        let mut app = App::with(Settings::default(), b, Some(feed.clone()));
+        app.shelf.settle();
+        assert_eq!(app.game_slots(&rom).iter().map(|s| s.n).collect::<Vec<_>>(), [2]);
+        let row = app.shelf.couch_rows(app.feed.as_ref(), None).into_iter().find(|r| r.game.path == rom).unwrap();
+        assert_eq!(app.shelf.detail(&row, &app.basket, app.feed.as_ref()).saves, 1);
+        assert_eq!(app.shelf.cover(&rom).map(|pm| pm.pixel(0, 0).unwrap().red()), Some(2), "not the resume picture");
+        app.apply(Cmd::Continue(rom.clone()));
+        assert_eq!(app.shelf.launched, ["--list", rom.to_str().unwrap(), "--slot", "2"]);
+        let start = Instant::now();
+        while app.shelf.running().is_some() {
+            assert!(start.elapsed() < Duration::from_secs(30), "the stand-in never exited");
+            app.poll();
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        // Without the key, every slot shows, as before.
+        let mut all = feed;
+        all.fruits.iter_mut().find(|f| f.id == "strawberry").unwrap().slots = Vec::new();
+        let app = App::with(Settings::default(), Basket::new(tmp.path()), Some(all));
+        assert_eq!(app.game_slots(&rom).iter().map(|s| s.n).collect::<Vec<_>>(), [9, 2]);
+    }
+
     /// Continue loads the newest save; Start fresh (Play) doesn't; a fruit
     /// that can't load saves, or a game with none, just plays.
     #[test]

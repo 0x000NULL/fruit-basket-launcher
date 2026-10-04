@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.1
+
+- **A fruit can say which save slots it loads.** The feed's new `slots` key (lowest and highest, e.g. `1 8`) hides any other save from the saves lists, the Saves count, covers and Continue. Without it, every slot shows, as before.
+  - This is for Crabapple. Its resume state on quit, `.s9`, would otherwise show as Slot 9. Being the newest save, Continue would then start Crabapple with `--slot 9`, which it refuses.
+
 ## v1.1.0
 
 Pictures, Continue, favorites and play stats.

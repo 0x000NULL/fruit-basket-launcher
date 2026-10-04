@@ -119,7 +119,7 @@ Pomegranate would otherwise copy back).
 | `focus.rs` | the controller's focus: `Spot`s the frame drew, `next` (nearest in a direction, level ones first), `cycle` (Tab) |
 | `app.rs` | `App`: state, the frame loop (poll → draw → apply `Cmd`s), `Ctx` (read-only view of the state shared by views and commands), the render and e2e tests |
 | `key.rs` | embedded public key, key ID, feed URL (`FRUITBASKET_FEED` overrides) |
-| `feed.rs` | feed types, `verify` / `fetch` / `load_cached` / `save_cached`, platform keys |
+| `feed.rs` | feed types, `verify` / `fetch` / `load_cached` / `save_cached`, platform keys, `lists_slot` (the feed's `slots`) |
 | `basket.rs` | the on-disk basket: install (extract to `.tmp`, flatten, rename, switch), switch, prune, uninstall, `migrate_data`, `exe`, `move_path` / `copy_tree` |
 | `jobs.rs` | the download worker thread: a free-space check, then Download 0–70 %, Verify 70–85 %, Install 85–100 % |
 | `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `job_for_build`, `update_for`, `updates`, `rollback_options` |

@@ -22,7 +22,7 @@ bumped in the same commit, and the release notes come from a
 
 ## Verified
 
-- `cargo test`: 71 pass. Covers:
+- `cargo test`: 72 pass. Covers:
   - feed signature: a real signed feed passes; a tampered feed, the wrong key or an older feed is refused
   - install, switch, prune, uninstall; a bad archive leaves the current build running
   - a wrong hash deletes the download; a network failure changes nothing
@@ -37,6 +37,7 @@ bumped in the same commit, and the release notes come from a
   - Map buttons: listen, bind with a swap, Done saves `[gamepad]`, Reset; the settings round trip keeps unknown keys
   - self-update: version order; staging refuses a wrong hash or a build that doesn't name itself, leaving nothing behind; the swap, the undo and the clean-up; an unwritable folder
   - `couch` arguments only for builds the feed lists
+  - v1.1.1: with `slots 1 8`, an `.s9` resume state is not listed, counted, used as the cover or passed by Continue, even when it is the newest; without the key, every slot shows
   - v1.1.0: pictures decode on a thread and shrink; `art` paths fill, and an unfilled one gives none; a save's picture beats `art`, which beats the stripes; Continue passes the newest slot, Start fresh doesn't, and a fruit without `load_slot` plays fresh; favorites filter, sort first in couch mode and follow a move; weekly buckets and totals from the session log, read back on a new run; shots of the pictures, favorites and Stats (three sizes, both themes)
   - v1.0.1: Map buttons in two columns at 1024×680 (Left/Right jump); sort and view round-trip through settings; Later holds for that build only; the folders' signature changes with a file added, grown or removed; Rescan finds a new file, an unchanged feed doesn't rescan and a newer one does
   - renders of every tab state, the dialogs, the ripe banner, the space failure, couch mode at 1280×720 and 1920×1080, the focus ring and the Map dialog
@@ -90,7 +91,7 @@ As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writ
 - **Save pictures and covers for Strawberry and Crabapple** are in progress (asked 2026-10-04).
   - The Crabapple session is adding them once, to fruit-basket's `basket-app`, as an additive v0.3.0: `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
   - Done in code: fruit-basket v0.3.0 (`64fc2b1`), Crabapple main `bc38085`, Strawberry main `7f41e18` (after v1.6.1). Neither is in a tagged release yet; players get the pictures from each one's next release.
-  - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Settle this before Crabapple goes in the feed: the proposal is a feed key naming the loadable slots. Strawberry writes no resume state.
+  - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple's LAUNCHER needs `slots	1 8`, and feedgen needs to emit the key, before Crabapple goes in the feed. Strawberry writes no resume state.
   - Then the site's Strawberry LAUNCHER gets `art	{cache}/strawberry/covers/{stem}.png`, and Crabapple's gets the same with `crabapple` when it goes in the feed. No launcher change is needed.
 - **fruit-basket** (the shared crates) is at v0.2.0 (`4416212`). It adds `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.

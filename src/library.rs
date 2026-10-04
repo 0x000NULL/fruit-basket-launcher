@@ -224,6 +224,14 @@ pub fn slots(game: &Path, dirs: &[PathBuf]) -> Vec<Slot> {
     out
 }
 
+/// The N of a `<stem>.s<N>.state` file name; `None` for any other file.
+pub fn slot_number(path: &Path) -> Option<u8> {
+    let name = path.file_name()?.to_string_lossy().to_lowercase();
+    let rest = name.strip_suffix(".state")?;
+    let (_, n) = rest.rsplit_once(".s")?;
+    n.parse().ok()
+}
+
 /// `saved_at = <unix secs>` from a slot's notes.
 fn saved_at(toml: &Path) -> Option<SystemTime> {
     let text = fs::read_to_string(toml).ok()?;
@@ -439,6 +447,7 @@ mod tests {
             couch: vec![],
             carry: vec![],
             art: vec![],
+            slots: vec![],
             url: String::new(),
             readme_url: String::new(),
             compat: None,
