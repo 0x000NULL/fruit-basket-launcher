@@ -63,7 +63,7 @@ bumped in the same commit, and the release notes come from a
 As of 2026-10-04, the launcher waits on one thing: Strawberry and Crabapple writing save pictures and covers (below).
 
 - **The site** is deployed at `55e08e4`.
-  - The live feed was generated 2026-10-04T02:49:00Z. It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
+  - The live feed was generated 2026-10-04T03:07:03Z (a docs redeploy, `d1a3989`; `55e08e4` shipped v1.1.0). It verifies with key `9A7C56F99E6460E9`; this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open` and `couch` may use `{rom}`, `{slot}` and `{data}`.
