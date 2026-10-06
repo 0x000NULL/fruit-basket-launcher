@@ -8,7 +8,7 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `2e677f2` (2026-10-06), with five released fruits | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `ac0fce4` (2026-10-06), with five released fruits | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
@@ -65,7 +65,7 @@ bumped in the same commit, and the release notes come from a
 
 As of 2026-10-06, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. Strawberry v1.7.1, Crabapple v0.12.1, Mulberry v0.3.1 and Olive v0.3.0 are on fruit-basket v0.5.0 (site `2e677f2`); the launcher is still v1.2.0 on v0.4.0.
 
-- **The site** is at `2e677f2`.
+- **The site** is at `ac0fce4`.
   - Launcher v1.2.0 went in at `2020f90`; its live feed was generated 2026-10-04T16:37:52Z. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
@@ -109,6 +109,7 @@ As of 2026-10-06, the launcher waits on nothing. The feed serves five released f
   - Crabapple has shipped them since v0.11.0, Strawberry since v1.7.0. Both feed entries have `art` and `slots`.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
 - **fruit-basket** (the shared crates): the fruits are on v0.5.0 (`f0b3a22`: `Gamepads::set_rumble`, `Platform::probe_system` and system tags). It is additive, so the launcher needs no change for it. **At the next launcher release, bump `basket-ui`, `basket-app` and `basket-build` to v0.5.0.** Launcher v1.2.0 pins v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+- **Fruit Basket for Android** stays out of the feed. `site/fruit-basket/android/` has no `LAUNCHER` file, so feedgen skips it (a site test checks that `feed.json` gets nothing from it), and the feed still has 9 fruits. The app updates itself from its own `android/update.json`, signed with the feed's key. Its APKs (v0.2.1 at `ac0fce4`) are not launcher builds; the launcher needs no change.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
 ## Releasing from here
