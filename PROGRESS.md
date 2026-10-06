@@ -8,7 +8,7 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `2020f90` (2026-10-04), and the live feed is verified | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `2e677f2` (2026-10-06), with five released fruits | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
@@ -63,10 +63,10 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-04, the launcher waits on nothing. Strawberry v1.7.0, Crabapple v0.12.0, Pomegranate v0.5.0 and launcher v1.2.0 went into the feed together (site `2020f90`).
+As of 2026-10-06, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. Strawberry v1.7.1, Crabapple v0.12.1, Mulberry v0.3.1 and Olive v0.3.0 are on fruit-basket v0.5.0 (site `2e677f2`); the launcher is still v1.2.0 on v0.4.0.
 
-- **The site** is deployed at `2020f90`.
-  - The live feed was generated 2026-10-04T16:37:52Z. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
+- **The site** is at `2e677f2`.
+  - Launcher v1.2.0 went in at `2020f90`; its live feed was generated 2026-10-04T16:37:52Z. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open`, `couch` and `fresh` may use `{rom}`, `{slot}` and `{data}`. `fresh` (from launcher v1.1.2) replaces `launch` for Start fresh.
@@ -79,33 +79,41 @@ As of 2026-10-04, the launcher waits on nothing. Strawberry v1.7.0, Crabapple v0
   - **`slots`**: feedgen emits it from site `67899bc`, two whole numbers, lowest first, `[]` when absent. Crabapple declares `1 8`. feedgen emits `fresh` from `1808778`.
   - **`art`**: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`; Strawberry's and Crabapple's are `{cache}/<fruit>/covers/{stem}.png`. Older launchers ignore it.
   - **`archives`** (launcher v1.2.0): Strawberry and Crabapple declare `.zip`. Older launchers ignore it and don't list zips.
-- **Strawberry** is stable v1.7.0, with nightly `6ea5f27`.
-  - The feed lists v1.5.0 to v1.7.0 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
+- **Strawberry** is stable v1.7.1, with nightly `6ea5f27`.
+  - The feed lists v1.5.0 to v1.7.1 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, `slots 1 8`, `archives .zip`, `art {cache}/strawberry/covers/{stem}.png`.
   - Its slots are 1–8, beside the ROM. `--fullscreen` covers the primary display. Its pad route to pause is Guide, or Select+Start held 1 s.
-  - Strawberry pins fruit-basket v0.3.0.
+  - Strawberry pins fruit-basket v0.5.0 from v1.7.1.
 - **Pomegranate** (ps2emu) is stable v0.5.0, with nightly `ede45ad`.
   - The feed lists v0.4.0 and v0.5.0 (`oldest v0.4.0`). Its `ext` is now `.chd .iso .cue`.
   - `launch play {rom} --data {data}`, `load_slot play {rom} --data {data} --slot {slot}`, `open --data {data}`, `couch --fullscreen --exit-on-quit`.
   - `carry` is `ps2emu.toml cards states`; they move into `data/` once (cache/ rebuilds itself).
   - Its slots are 0–9 in `data/states/`, each with a `.png` and a `.toml` (`saved_at`). Deleting slot 0 also deletes a pre-slots `<stem>.state`. ps2emu asked that the launcher never write `ps2emu.toml`.
   - Launcher v0.5.1+ passes `couch` only to builds the feed lists, so an installed or kept v0.3.0 runs from couch mode in a window.
-- **Crabapple** is released: stable v0.12.0, with nightly `0d1cf1d`, windows-x64 and linux-x64 only.
-  - The feed lists v0.11.0 and v0.12.0 (`oldest v0.11.0`).
+- **Crabapple** is released: stable v0.12.1 (fruit-basket v0.5.0, now with macOS), with nightly `489e702`.
+  - The feed lists v0.11.0 to v0.12.1 (`oldest v0.11.0`).
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `fresh {rom} --no-resume`, `couch --fullscreen --exit-on-quit`.
   - `slots 1 8`, `archives .zip`, `art {cache}/crabapple/covers/{stem}.png`, bios "not needed".
   - It writes slot pictures and covers (fruit-basket v0.3.0), and a resume state `.s9` on quit, which `slots` hides. A plain Play resumes from it; Start fresh passes `--no-resume`.
   - Its slots are 1–8, beside the ROM. Its pad route to pause is Guide, or SELECT+START held 1 s.
-- **Save pictures and covers** now come from all three released fruits.
+- **Mulberry** (No. 8, SNES) is released: stable v0.3.1, no nightly, Windows, macOS and Linux.
+  - The feed lists v0.1.0 to v0.3.1. Its `ext` is `.sfc .smc`.
+  - `launch {rom}`, `load_slot {rom} --slot {slot}`, `fresh {rom} --no-resume`, `couch --fullscreen --exit-on-quit`.
+  - `slots 1 8`, `archives .zip`, `art {cache}/mulberry/covers/{stem}.png`, bios "not needed".
+- **Olive** (No. 9, GB and GBC) is released: stable v0.3.0, no nightly, Windows, macOS and Linux.
+  - The feed lists v0.1.0 to v0.3.0. Its `ext` is `.gb .gbc`.
+  - The same templates as Mulberry: `launch {rom}`, `load_slot {rom} --slot {slot}`, `fresh {rom} --no-resume`, `couch --fullscreen --exit-on-quit`.
+  - `slots 1 8`, `archives .zip`, `art {cache}/olive/covers/{stem}.png`, bios "not needed".
+- **Save pictures and covers** now come from all five released fruits.
   - Strawberry and Crabapple get them from fruit-basket's `basket-app` v0.3.0 (`64fc2b1`): `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
   - Crabapple has shipped them since v0.11.0, Strawberry since v1.7.0. Both feed entries have `art` and `slots`.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
-- **fruit-basket** (the shared crates): launcher v1.2.0 pins v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+- **fruit-basket** (the shared crates): the fruits are on v0.5.0 (`f0b3a22`: `Gamepads::set_rumble`, `Platform::probe_system` and system tags). It is additive, so the launcher needs no change for it. **At the next launcher release, bump `basket-ui`, `basket-app` and `basket-build` to v0.5.0.** Launcher v1.2.0 pins v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
 ## Releasing from here
 
-- **Every launcher release the site mirrors updates every v1.0.0+ install.** Mirror one only when it's meant to ship:
+- **Every launcher release the site mirrors updates every v1.0.0+ install**, so it needs Ethan's OK. Mirror one only when it's meant to ship:
   1. Tag it.
   2. With Ethan's OK, the site session runs `./fetch-release.sh fruit-basket/launcher 0x000NULL/fruit-basket-launcher vX`.
   3. It writes the notes line in the site's CHANGELOG.txt by hand, from this CHANGELOG: `fetch-release.sh` writes only "Release vX: builds in…", which would leave the update prompt with no notes.

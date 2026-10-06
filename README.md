@@ -5,6 +5,10 @@ installed fruit, installing and updating the fruits themselves, a downloads
 queue, and settings. Paper and night themes, three window sizes, and a couch
 mode for controllers.
 
+Five fruits are released today: Pomegranate (PS2), Strawberry (GBA),
+Crabapple (NES), Mulberry (SNES) and Olive (Game Boy and Game Boy Color).
+The rest show in the Basket as still growing.
+
 It is built on the same crates as the emulators
 ([fruit-basket](https://github.com/0x000NULL/fruit-basket): `basket-ui`,
 `basket-app`, `basket-build`), so it looks and handles input exactly like them.
@@ -32,7 +36,7 @@ See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) 
   - A failure says what happened on disk (usually: nothing changed), with Try again.
 - **Library.**
   - Everything the installed fruits can play, from each fruit's `games/` folder and any folders added with **Add folder…**.
-  - Zipped games too, for fruits that open zips themselves (Strawberry and Crabapple today): a zip goes to the fruit whose game is inside it.
+  - Zipped games too, for fruits that open zips themselves (Strawberry, Crabapple, Mulberry and Olive today): a zip goes to the fruit whose game is inside it.
   - **Play** or **Continue** starts the game in its fruit. The launcher keeps last played and play time.
   - Compat squares come from each fruit's compatibility list on the site. Where the site has a No-Intro or Redump list, each game is checked against it.
   - **Remove** hides a game and never deletes the file.
@@ -61,7 +65,8 @@ See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) 
 
 It needs Rust 1.89 or newer (edition 2024). Linux needs `libasound2-dev libudev-dev libxkbcommon-dev libwayland-dev`.
 Releases for Windows x64, Linux x64, macOS arm64 and macOS x64 are built
-from tags by GitHub Actions, and mirrored to the site.
+from tags by GitHub Actions. Mirroring one to the site ships it to every
+v1.0.0+ install as a self-update, so a tag goes there only with Ethan's OK.
 
 ## Updates
 
