@@ -331,7 +331,7 @@ impl Shelf {
         let (_, serial) = self.dump_state(g, fruit);
         Row {
             game: g,
-            system: fruit.map_or("", |f| f.system.as_str()),
+            system: g.system.unwrap_or(fruit.map_or("", |f| f.system.as_str())),
             fruit_name: fruit.map_or(g.fruit.as_str(), |f| f.name.as_str()),
             level: self.compat.get(&g.fruit).and_then(|c| c.level(g, serial)),
             last: self.played.last(&g.path),

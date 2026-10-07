@@ -83,7 +83,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn game(title: &str, code: Option<&str>) -> Game {
-        Game { path: PathBuf::from("x"), fruit: "f".into(), title: title.into(), size: 0, mtime: 0, code: code.map(Into::into) }
+        Game { path: PathBuf::from("x"), fruit: "f".into(), title: title.into(), size: 0, mtime: 0, code: code.map(Into::into), system: None }
     }
 
     #[test]

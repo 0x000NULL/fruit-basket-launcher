@@ -2594,6 +2594,51 @@ mod tests {
         app.canvas.save_png(&dir.join("library-stats-scrolled-regular-paper.png")).unwrap();
     }
 
+    /// Olive's games say GB or GBC, from the cartridge header, on the
+    /// cover, the list row and the details, and FIND matches it.
+    #[test]
+    fn game_boy_games_say_gb_or_gbc() {
+        let tmp = tempfile::tempdir().unwrap();
+        let b = stocked(tmp.path());
+        std::fs::create_dir_all(b.build_dir("olive", "v0.3.0")).unwrap();
+        std::fs::write(b.build_dir("olive", "v0.3.0").join(".installed"), "").unwrap();
+        std::fs::write(b.fruit_dir("olive").join("current"), "v0.3.0	stable
+").unwrap();
+        std::fs::create_dir_all(b.games_dir("olive")).unwrap();
+        for (file, title, cgb) in [
+            ("Tetris (World).gb", "TETRIS", 0x00),
+            ("Pokemon - Gold Version (USA).gbc", "POKEMON_GLD", 0x80),
+            ("Shantae (USA).gbc", "SHANTAE", 0xC0),
+            ("Kirby's Dream Land (USA).gb", "KIRBY DREAM LAND", 0x00),
+        ] {
+            std::fs::write(b.games_dir("olive").join(file), library::tests::gb_rom(title, cgb)).unwrap();
+        }
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let mut app = App::with(Settings { theme: ThemePref::Paper, ..Settings::default() }, b, Some(feed));
+        let systems = |app: &App, find: &str| -> Vec<(String, String)> {
+            let mut v: Vec<_> = app.shelf.rows(app.feed.as_ref(), find).iter().map(|r| (r.game.title.clone(), r.system.to_string())).collect();
+            v.sort();
+            v
+        };
+        let s = |a: &str, b: &str| (a.to_string(), b.to_string());
+        assert_eq!(
+            systems(&app, ""),
+            [s("Kirby's Dream Land", "GB"), s("Pokemon: Gold Version", "GBC"), s("Shantae", "GBC"), s("Tetris", "GB"), s("homebrew", "GBA")]
+        );
+        assert_eq!(systems(&app, "gbc"), [s("Pokemon: Gold Version", "GBC"), s("Shantae", "GBC")]);
+
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        let shantae = app.basket.games_dir("olive").join("Shantae (USA).gbc");
+        app.tab = Tab::Library;
+        app.shelf.selected = Some(shantae);
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-olive-regular-paper.png")).unwrap();
+        app.shelf.view = LibView::List;
+        app.draw(&UiInput::default(), 1280, 900);
+        app.canvas.save_png(&dir.join("library-olive-list-regular-paper.png")).unwrap();
+    }
+
     /// Favourites: kept across runs, filtered by the chip, first in couch
     /// mode, and following the games when the basket moves.
     #[test]
@@ -2641,7 +2686,7 @@ mod tests {
     }
 
     fn app_game(path: &Path) -> library::Game {
-        library::Game { path: path.to_path_buf(), fruit: "strawberry".into(), title: "Golden Sun".into(), size: 1, mtime: 0, code: None }
+        library::Game { path: path.to_path_buf(), fruit: "strawberry".into(), title: "Golden Sun".into(), size: 1, mtime: 0, code: None, system: None }
     }
 
     /// Start fresh uses the feed's `fresh` when the fruit has it (Crabapple

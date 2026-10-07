@@ -37,6 +37,7 @@ See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) 
 - **Library.**
   - Everything the installed fruits can play, from each fruit's `games/` folder and any folders added with **Add folder…**.
   - Zipped games too, for fruits that open zips themselves (Strawberry, Crabapple, Mulberry and Olive today): a zip goes to the fruit whose game is inside it.
+  - Game Boy games say GB or GBC, from the cartridge header, and FIND matches it.
   - **Play** or **Continue** starts the game in its fruit. The launcher keeps last played and play time.
   - Compat squares come from each fruit's compatibility list on the site. Where the site has a No-Intro or Redump list, each game is checked against it.
   - **Remove** hides a game and never deletes the file.

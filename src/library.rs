@@ -25,6 +25,9 @@ pub struct Game {
     /// A serial or product code, when one can be read cheaply: the GBA
     /// header's game code, or a disc serial in the file name.
     pub code: Option<String>,
+    /// "GB" or "GBC" for a Game Boy cartridge, read from its header; shown
+    /// in place of the fruit's own system ("GB · GBC").
+    pub system: Option<&'static str>,
 }
 
 /// Scan for games. `fruits` are the installed ones, in feed order; a file
@@ -100,7 +103,8 @@ fn game(path: &Path, fruit: &Fruit) -> Option<Game> {
     let file_name = path.file_name()?.to_string_lossy().to_string();
     let title = display_title(&file_name);
     let code = serial_in_name(&file_name).or_else(|| gba_code(path));
-    Some(Game { path: path.to_path_buf(), fruit: fruit.id.clone(), title, size: meta.len(), mtime, code })
+    let system = gb_system(path);
+    Some(Game { path: path.to_path_buf(), fruit: fruit.id.clone(), title, size: meta.len(), mtime, code, system })
 }
 
 /// A file name as a title: extension and `(USA)` / `[!]` tags dropped,
@@ -167,6 +171,30 @@ fn gba_code(path: &Path) -> Option<String> {
     f.read_exact(&mut head).ok()?;
     let code = &head[0xAC..0xB0];
     code.iter().all(u8::is_ascii_alphanumeric).then(|| String::from_utf8_lossy(code).to_string())
+}
+
+/// "GBC" or "GB" from the CGB flag at 0x143 of a Game Boy cartridge
+/// header (0x80 runs on both, 0xC0 on Color only), for a .gb or .gbc file
+/// or the first one inside a zip. None unless the header checksum at 0x14D
+/// matches, so a file that only has the extension isn't labelled.
+fn gb_system(path: &Path) -> Option<&'static str> {
+    let is_gb = |name: &str| {
+        let n = name.to_ascii_lowercase();
+        n.ends_with(".gb") || n.ends_with(".gbc")
+    };
+    let name = path.file_name()?.to_str()?;
+    let mut head = [0u8; 0x150];
+    if is_gb(name) {
+        fs::File::open(path).ok()?.read_exact(&mut head).ok()?;
+    } else if name.to_ascii_lowercase().ends_with(".zip") {
+        let mut z = zip::ZipArchive::new(io::BufReader::new(fs::File::open(path).ok()?)).ok()?;
+        let inner = z.file_names().find(|n| is_gb(n))?.to_string();
+        z.by_name(&inner).ok()?.read_exact(&mut head).ok()?;
+    } else {
+        return None;
+    }
+    let sum = head[0x134..0x14D].iter().fold(0u8, |x, b| x.wrapping_sub(*b).wrapping_sub(1));
+    (sum == head[0x14D]).then_some(if matches!(head[0x143], 0x80 | 0xC0) { "GBC" } else { "GB" })
 }
 
 /// Where `fruit` keeps save states besides the game's own folder: its data
@@ -447,7 +475,7 @@ pub fn norm_title(title: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::feed::Status;
 
@@ -515,6 +543,67 @@ mod tests {
         w.start_file(inner, zip::write::SimpleFileOptions::default()).unwrap();
         std::io::Write::write_all(&mut w, b"rom").unwrap();
         w.finish().unwrap();
+    }
+
+    /// A Game Boy cartridge header with the CGB flag `cgb` and a valid
+    /// header checksum.
+    pub(crate) fn gb_rom(title: &str, cgb: u8) -> Vec<u8> {
+        let mut rom = vec![0u8; 0x8000];
+        rom[0x134..0x134 + title.len()].copy_from_slice(title.as_bytes());
+        rom[0x143] = cgb;
+        rom[0x14D] = rom[0x134..0x14D].iter().fold(0u8, |x, b| x.wrapping_sub(*b).wrapping_sub(1));
+        rom
+    }
+
+    #[test]
+    fn game_boy_header_says_gb_or_gbc() {
+        let t = tempfile::tempdir().unwrap();
+        let p = |n: &str| t.path().join(n);
+        fs::write(p("Tetris (World).gb"), gb_rom("TETRIS", 0x00)).unwrap();
+        fs::write(p("Pokemon Gold (USA).gbc"), gb_rom("POKEMON_GLD", 0x80)).unwrap();
+        fs::write(p("Shantae (USA).gbc"), gb_rom("SHANTAE", 0xC0)).unwrap();
+        // PGB values have bit 7 set but aren't Color games.
+        fs::write(p("Odd.gb"), gb_rom("ODD", 0x84)).unwrap();
+        let mut bad = gb_rom("BAD", 0x80);
+        bad[0x14D] ^= 0xFF;
+        fs::write(p("Bad checksum.gbc"), bad).unwrap();
+        fs::write(p("Short.gb"), b"rom").unwrap();
+        fs::write(p("Golden Sun.gba"), gb_rom("GOLDEN", 0x80)).unwrap();
+        let mut w = zip::ZipWriter::new(fs::File::create(p("Link's Awakening DX.zip")).unwrap());
+        w.start_file("readme.txt", zip::write::SimpleFileOptions::default()).unwrap();
+        w.start_file("ZELDA DX.GBC", zip::write::SimpleFileOptions::default()).unwrap();
+        std::io::Write::write_all(&mut w, &gb_rom("ZELDA", 0x80)).unwrap();
+        w.finish().unwrap();
+        zip_with(&p("Golden Sun.zip"), "Golden Sun.gba");
+
+        assert_eq!(gb_system(&p("Tetris (World).gb")), Some("GB"));
+        assert_eq!(gb_system(&p("Pokemon Gold (USA).gbc")), Some("GBC"));
+        assert_eq!(gb_system(&p("Shantae (USA).gbc")), Some("GBC"));
+        assert_eq!(gb_system(&p("Odd.gb")), Some("GB"));
+        assert_eq!(gb_system(&p("Bad checksum.gbc")), None);
+        assert_eq!(gb_system(&p("Short.gb")), None);
+        assert_eq!(gb_system(&p("Golden Sun.gba")), None, "only Game Boy files");
+        assert_eq!(gb_system(&p("Link's Awakening DX.zip")), Some("GBC"));
+        assert_eq!(gb_system(&p("Golden Sun.zip")), None);
+
+        let mut olive = fruit("olive", &[".gb", ".gbc"]);
+        olive.archives = vec![".zip".into()];
+        let b = Basket::new(t.path().join("basket"));
+        let got = scan(&b, &[&olive], &[t.path().to_path_buf()], &[]);
+        let mut by: Vec<(&str, Option<&str>)> = got.iter().map(|g| (g.title.as_str(), g.system)).collect();
+        by.sort();
+        assert_eq!(
+            by,
+            [
+                ("Bad checksum", None),
+                ("Link's Awakening DX", Some("GBC")),
+                ("Odd", Some("GB")),
+                ("Pokemon Gold", Some("GBC")),
+                ("Shantae", Some("GBC")),
+                ("Short", None),
+                ("Tetris", Some("GB")),
+            ]
+        );
     }
 
     #[test]

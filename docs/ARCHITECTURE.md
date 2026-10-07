@@ -125,7 +125,7 @@ Pomegranate would otherwise copy back).
 | `jobs.rs` | the download worker thread: a free-space check, then Download 0–70 %, Verify 70–85 %, Install 85–100 % |
 | `queue.rs` | the UI side of the worker: one job at a time, no duplicates, failures kept until retried, `job_for`, `job_for_build`, `update_for`, `updates`, `rollback_options` |
 | `history.rs` | `history.log` append and read |
-| `library.rs` | game scan and `plays` (an `ext`, or a zip from `archives` holding one), titles, serials (GBA header code, disc serial in the name), save files and `save_dirs`, `slots` / `delete_slot` / `Slot::picture`, `Played`, `Sessions`, `Favorites`, `rebase` (paths after a move) |
+| `library.rs` | game scan and `plays` (an `ext`, or a zip from `archives` holding one), titles, serials (GBA header code, disc serial in the name), `gb_system` (GB or GBC from the header's CGB flag), save files and `save_dirs`, `slots` / `delete_slot` / `Slot::picture`, `Played`, `Sessions`, `Favorites`, `rebase` (paths after a move) |
 | `lists.rs` | fetches and caches compat and dump lists, checked against the feed |
 | `compat.rs` | `compat.txt` parse; level by serial, then title |
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
