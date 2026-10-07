@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.0
+
+- **Game Boy games say GB or GBC.** Olive's games used to show "GB · GBC" on every cover, list row and game panel. Each one now shows GB or GBC, read from the cartridge's header, including games inside a zip. Searching FIND for "gbc" finds just the Color games.
+  - A file without a valid Game Boy header keeps Olive's "GB · GBC".
+- Built on fruit-basket v0.5.0. Nothing else should look or work differently.
+
 ## v1.2.0
 
 - **Games inside .zip files.** A fruit can list `.zip` under the feed's new `archives` key. A zip in a games folder or an extra folder then goes to the fruit whose game is inside it, so a GBA zip and an NES zip in the same folder each find their emulator. The emulator is handed the zip itself. Covers and saves go by the zip's name.
