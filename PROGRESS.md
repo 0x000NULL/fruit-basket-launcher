@@ -14,7 +14,7 @@ map: `docs/ARCHITECTURE.md`.
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.2.0 is live in the feed (2026-10-04) | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.2.0 is live in the feed (2026-10-04); v1.3.0 tagged 2026-10-06, NOT live until the site mirrors it | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -63,7 +63,7 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-06, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. Strawberry v1.7.1, Crabapple v0.12.1, Mulberry v0.3.1 and Olive v0.3.0 are on fruit-basket v0.5.0 (site `2e677f2`); the launcher is still v1.2.0 on v0.4.0.
+As of 2026-10-06, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. Strawberry v1.7.1, Crabapple v0.12.1, Mulberry v0.3.1 and Olive v0.3.0 are on fruit-basket v0.5.0 (site `2e677f2`); the launcher is too from v1.3.0 (tagged 2026-10-06 at `4b85d1e`: GB/GBC labels for Game Boy games, the clippy 0.1.99 lints cleared). **v1.3.0 is NOT live:** the feed still serves v1.2.0 until Website mirrors it and Ethan deploys the site.
 
 - **The site** is at `ac0fce4`.
   - Launcher v1.2.0 went in at `2020f90`; its live feed was generated 2026-10-04T16:37:52Z. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
@@ -108,7 +108,7 @@ As of 2026-10-06, the launcher waits on nothing. The feed serves five released f
   - Strawberry and Crabapple get them from fruit-basket's `basket-app` v0.3.0 (`64fc2b1`): `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
   - Crabapple has shipped them since v0.11.0, Strawberry since v1.7.0. Both feed entries have `art` and `slots`.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
-- **fruit-basket** (the shared crates): the fruits are on v0.5.0 (`f0b3a22`: `Gamepads::set_rumble`, `Platform::probe_system` and system tags). It is additive, so the launcher needs no change for it. **At the next launcher release, bump `basket-ui`, `basket-app` and `basket-build` to v0.5.0.** Launcher v1.2.0 pins v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+- **fruit-basket** (the shared crates): the fruits are on v0.5.0 (`f0b3a22`: `Gamepads::set_rumble`, `Platform::probe_system` and system tags). It is additive, so the launcher needs no change for it. Launcher v1.3.0 pins v0.5.0 and uses none of the new API: the launcher has its own library scan, so its GB/GBC label reads the cartridge header itself (`library::gb_system`) rather than `probe_system`, and rumble has no use without a core. Launcher v1.2.0 pinned v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Fruit Basket for Android** stays out of the feed. `site/fruit-basket/android/` has no `LAUNCHER` file, so feedgen skips it (a site test checks that `feed.json` gets nothing from it), and the feed still has 9 fruits. The app updates itself from its own `android/update.json`, signed with the feed's key. Its APKs (v0.2.1 at `ac0fce4`) are not launcher builds; the launcher needs no change.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
