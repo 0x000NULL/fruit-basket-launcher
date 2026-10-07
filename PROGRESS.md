@@ -14,7 +14,7 @@ map: `docs/ARCHITECTURE.md`.
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.2.0 is live in the feed (2026-10-04); v1.3.0 tagged 2026-10-06, NOT live until the site mirrors it | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.3.0 is live in the feed (2026-10-07) | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -63,19 +63,19 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-06, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. Strawberry v1.7.1, Crabapple v0.12.1, Mulberry v0.3.1 and Olive v0.3.0 are on fruit-basket v0.5.0 (site `2e677f2`); the launcher is too from v1.3.0 (tagged 2026-10-06 at `4b85d1e`: GB/GBC labels for Game Boy games, the clippy 0.1.99 lints cleared). **v1.3.0 is NOT live:** the feed still serves v1.2.0 until Website mirrors it and Ethan deploys the site.
+As of 2026-10-07, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. The feed serves Strawberry v1.7.1, Crabapple v1.0.0, Mulberry v0.3.1 and Olive v0.3.0. Launcher v1.3.0 (`4b85d1e`: GB/GBC labels for Game Boy games, fruit-basket v0.5.0, the clippy 0.1.99 lints cleared) is live, deployed with Crabapple v1.0.0.
 
-- **The site** is at `ac0fce4`.
-  - Launcher v1.2.0 went in at `2020f90`; its live feed was generated 2026-10-04T16:37:52Z. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
+- **The site** is at `0883677`, deployed 2026-10-07.
+  - Launcher v1.3.0 went in at `0883677`; its live feed was generated 2026-10-07T04:16:47Z. v1.2.0 went in at `2020f90`. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open`, `couch` and `fresh` may use `{rom}`, `{slot}` and `{data}`. `fresh` (from launcher v1.1.2) replaces `launch` for Start fresh.
     - `couch` goes after `launch` or `load_slot` in couch mode, never after `open`.
     - Also `carry`, and `oldest`, which feedgen uses and the feed doesn't carry.
-  - **The launcher entry** is v1.2.0 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 3 notes.
+  - **The launcher entry** is v1.3.0 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 2 notes.
     - The Windows zip's SHA-256 (`d67f06fb…`) matches GitHub's `.sha256` and the feed.
     - The e2e test passed against this feed (it installs Strawberry v1.7.0).
-    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update; v1.1.1, v1.1.2 and v1.2.0 followed. v1.0.1 and v0.5.x were never mirrored.
+    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update; v1.1.1, v1.1.2, v1.2.0 and v1.3.0 followed. v1.0.1 and v0.5.x were never mirrored.
   - **`slots`**: feedgen emits it from site `67899bc`, two whole numbers, lowest first, `[]` when absent. Crabapple declares `1 8`. feedgen emits `fresh` from `1808778`.
   - **`art`**: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`; Strawberry's and Crabapple's are `{cache}/<fruit>/covers/{stem}.png`. Older launchers ignore it.
   - **`archives`** (launcher v1.2.0): Strawberry and Crabapple declare `.zip`. Older launchers ignore it and don't list zips.
@@ -90,8 +90,8 @@ As of 2026-10-06, the launcher waits on nothing. The feed serves five released f
   - `carry` is `ps2emu.toml cards states`; they move into `data/` once (cache/ rebuilds itself).
   - Its slots are 0–9 in `data/states/`, each with a `.png` and a `.toml` (`saved_at`). Deleting slot 0 also deletes a pre-slots `<stem>.state`. ps2emu asked that the launcher never write `ps2emu.toml`.
   - Launcher v0.5.1+ passes `couch` only to builds the feed lists, so an installed or kept v0.3.0 runs from couch mode in a window.
-- **Crabapple** is released: stable v0.12.1 (fruit-basket v0.5.0, now with macOS), with nightly `489e702`.
-  - The feed lists v0.11.0 to v0.12.1 (`oldest v0.11.0`).
+- **Crabapple** is released: stable v1.0.0 (2026-10-07; no emulation changes since v0.12.1), with nightly `a1e3fab`.
+  - The feed lists v0.11.0 to v1.0.0.
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `fresh {rom} --no-resume`, `couch --fullscreen --exit-on-quit`.
   - `slots 1 8`, `archives .zip`, `art {cache}/crabapple/covers/{stem}.png`, bios "not needed".
   - It writes slot pictures and covers (fruit-basket v0.3.0), and a resume state `.s9` on quit, which `slots` hides. A plain Play resumes from it; Start fresh passes `--no-resume`.
@@ -120,7 +120,7 @@ As of 2026-10-06, the launcher waits on nothing. The feed serves five released f
   3. It writes the notes line in the site's CHANGELOG.txt by hand, from this CHANGELOG: `fetch-release.sh` writes only "Release vX: builds in…", which would leave the update prompt with no notes.
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
-- **The first real self-update**: a v1.0.0 install now goes straight to v1.2.0 (mirrored 2026-10-04); v1.1.x installs go there too. Not yet seen happen. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **The first real self-update**: v1.0.0, v1.1.x and v1.2.0 installs now go straight to v1.3.0 (live 2026-10-07). No self-update has been seen happen yet, v1.2.0 → v1.3.0 included. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
 - **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps
