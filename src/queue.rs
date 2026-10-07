@@ -75,9 +75,8 @@ impl Queue {
             _ => return (None, None),
         };
         self.active = None;
-        let next = self.waiting.pop_front().map(|job| {
+        let next = self.waiting.pop_front().inspect(|job| {
             self.active = Some(Active { job: job.clone(), step: Step::Download, pct: 0 });
-            job
         });
         (Some(finished), next)
     }

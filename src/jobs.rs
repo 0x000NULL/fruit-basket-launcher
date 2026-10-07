@@ -63,6 +63,8 @@ pub enum FailKind {
 #[derive(Debug, Clone)]
 pub enum Event {
     Progress { fruit: String, step: Step, pct: u8 },
+    // `build` and `channel` are read only by tests.
+    #[allow(dead_code)]
     Done { fruit: String, build: String, channel: Channel },
     Failed { fruit: String, kind: FailKind, message: String },
 }

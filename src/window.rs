@@ -7,16 +7,15 @@ use std::time::Instant;
 use basket_app::pads::PadPoll;
 use basket_ui::input::{actions, KeyMap, PadRepeat, UiInput};
 use basket_ui::Canvas;
-use minifb::{InputCallback, Key, KeyRepeat, MouseButton, MouseMode, Scale, ScaleMode, Window, WindowOptions};
+use minifb::{InputCallback, KeyRepeat, MouseButton, MouseMode, Scale, ScaleMode, Window, WindowOptions};
 
 struct CharSink(Arc<Mutex<Vec<char>>>);
 
 impl InputCallback for CharSink {
     fn add_char(&mut self, uni_char: u32) {
-        if let Some(c) = char::from_u32(uni_char) {
-            if !c.is_control() {
-                self.0.lock().unwrap().push(c);
-            }
+        if let Some(c) = char::from_u32(uni_char)
+            && !c.is_control() {
+            self.0.lock().unwrap().push(c);
         }
     }
 }
@@ -100,10 +99,6 @@ impl Video {
     /// The windowed size, also while in couch mode: what to save on exit.
     pub fn windowed_size(&self) -> (usize, usize) {
         self.couch.unwrap_or_else(|| self.size())
-    }
-
-    pub fn ctrl(&self) -> bool {
-        self.window.is_key_down(Key::LeftCtrl) || self.window.is_key_down(Key::RightCtrl)
     }
 }
 

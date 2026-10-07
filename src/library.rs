@@ -385,7 +385,7 @@ impl Sessions {
     /// One game's sessions, newest first.
     pub fn of(&self, game: &Path) -> Vec<(i64, u64)> {
         let mut out: Vec<(i64, u64)> = self.list.iter().filter(|s| s.2 == game).map(|s| (s.0, s.1)).collect();
-        out.sort_by(|a, b| b.0.cmp(&a.0));
+        out.sort_by_key(|s| std::cmp::Reverse(s.0));
         out
     }
 }
@@ -502,7 +502,7 @@ mod tests {
         fs::write(extra.join("disc.iso"), b"x").unwrap();
 
         let berry = fruit("strawberry", &[".gba"]);
-        let got = scan(&b, &[&berry], &[extra.clone()], &[games.join("sub/Hidden.gba")]);
+        let got = scan(&b, &[&berry], std::slice::from_ref(&extra), &[games.join("sub/Hidden.gba")]);
         let mut titles: Vec<_> = got.iter().map(|g| g.title.as_str()).collect();
         titles.sort();
         assert_eq!(titles, ["Final Fantasy IV Advance", "The Legend of Zelda"]);
@@ -536,7 +536,7 @@ mod tests {
         let mut berry = fruit("strawberry", &[".gba"]);
         berry.archives = vec![".ZIP".into()];
         let pom = fruit("pomegranate", &[".iso"]);
-        let got = scan(&b, &[&apple, &berry, &pom], &[extra.clone()], &[]);
+        let got = scan(&b, &[&apple, &berry, &pom], std::slice::from_ref(&extra), &[]);
         let mut by: Vec<(&str, &str)> = got.iter().map(|g| (g.fruit.as_str(), g.title.as_str())).collect();
         by.sort();
         assert_eq!(by, [("crabapple", "Super Mario Bros."), ("strawberry", "Golden Sun")]);

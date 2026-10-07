@@ -141,10 +141,9 @@ impl Basket {
         if !new_dir.is_dir() {
             return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} is not on disk", to.build)));
         }
-        if let Some(old) = self.current(fruit) {
-            if old.build != to.build {
-                carry_over(&self.build_dir(fruit, &old.build), &new_dir, carry)?;
-            }
+        if let Some(old) = self.current(fruit)
+            && old.build != to.build {
+            carry_over(&self.build_dir(fruit, &old.build), &new_dir, carry)?;
         }
         self.set_current(fruit, &to)
     }

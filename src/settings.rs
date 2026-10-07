@@ -112,10 +112,9 @@ impl Settings {
         }
         // Debug builds: a settings file elsewhere, so a manual test (a local
         // site, a self-update) never touches the real one.
-        if cfg!(debug_assertions) {
-            if let Some(p) = std::env::var_os("FRUITBASKET_CONFIG") {
-                return Some(PathBuf::from(p));
-            }
+        if cfg!(debug_assertions)
+            && let Some(p) = std::env::var_os("FRUITBASKET_CONFIG") {
+            return Some(PathBuf::from(p));
         }
         prefs::config_path(APP_DIR)
     }
@@ -141,10 +140,9 @@ impl Settings {
     }
 
     pub fn save(&self) {
-        if let Some(path) = Settings::path() {
-            if let Err(e) = prefs::write(&path, APP_NAME, &self.extra.0, &KNOWN_KEYS, self) {
-                eprintln!("fruitbasket: saving {}: {e:#}", path.display());
-            }
+        if let Some(path) = Settings::path()
+            && let Err(e) = prefs::write(&path, APP_NAME, &self.extra.0, &KNOWN_KEYS, self) {
+            eprintln!("fruitbasket: saving {}: {e:#}", path.display());
         }
     }
 

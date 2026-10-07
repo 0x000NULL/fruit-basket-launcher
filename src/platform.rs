@@ -137,11 +137,10 @@ pub fn reveal(path: &Path) {
 
 /// `C:\Users\me\FruitBasket` → `~\FruitBasket`, for paths shown in the UI.
 pub fn tilde(path: &Path) -> String {
-    if let Some(home) = dirs::home_dir() {
-        if let Ok(rest) = path.strip_prefix(&home) {
-            let sep = std::path::MAIN_SEPARATOR;
-            return if rest.as_os_str().is_empty() { "~".into() } else { format!("~{sep}{}", rest.display()) };
-        }
+    if let Some(home) = dirs::home_dir()
+        && let Ok(rest) = path.strip_prefix(&home) {
+        let sep = std::path::MAIN_SEPARATOR;
+        return if rest.as_os_str().is_empty() { "~".into() } else { format!("~{sep}{}", rest.display()) };
     }
     path.display().to_string()
 }

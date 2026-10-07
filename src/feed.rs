@@ -287,10 +287,9 @@ pub fn verify(bytes: &[u8], sig: &str, key: &str, newest: Option<&str>) -> Resul
     if feed.schema != SCHEMA {
         return Err(FeedError::Parse(format!("schema {} (this launcher reads {SCHEMA})", feed.schema)));
     }
-    if let Some(have) = newest {
-        if feed.generated.as_str() < have {
-            return Err(FeedError::Stale { got: feed.generated, have: have.to_string() });
-        }
+    if let Some(have) = newest
+        && feed.generated.as_str() < have {
+        return Err(FeedError::Stale { got: feed.generated, have: have.to_string() });
     }
     Ok(feed)
 }

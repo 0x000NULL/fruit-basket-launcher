@@ -383,33 +383,32 @@ impl App {
     }
 
     fn poll(&mut self) {
-        if let Some(rx) = &self.feed_rx {
-            if let Ok(result) = rx.try_recv() {
-                self.feed_rx = None;
-                match result {
-                    Ok(fetched) => {
-                        self.feed_error = None;
-                        // The same feed again (a recheck with nothing new):
-                        // no rescan, no lists, no updates to start.
-                        if self.feed.as_ref().is_some_and(|f| f.generated == fetched.feed.generated) {
-                            self.check_launcher_update();
-                            return self.poll_rest();
-                        }
-                        if let Err(e) = feed::save_cached(&self.basket.launcher_dir(), &fetched) {
-                            eprintln!("fruitbasket: caching feed: {e}");
-                        }
-                        self.feed = Some(fetched.feed);
-                        self.refresh_installed();
-                        if let Some(feed) = &self.feed {
-                            self.shelf.lists(&self.basket.launcher_dir(), feed);
-                        }
-                        if self.settings.install_without_asking {
-                            self.apply(Cmd::UpdateAll);
-                        }
+        if let Some(rx) = &self.feed_rx
+            && let Ok(result) = rx.try_recv() {
+            self.feed_rx = None;
+            match result {
+                Ok(fetched) => {
+                    self.feed_error = None;
+                    // The same feed again (a recheck with nothing new):
+                    // no rescan, no lists, no updates to start.
+                    if self.feed.as_ref().is_some_and(|f| f.generated == fetched.feed.generated) {
                         self.check_launcher_update();
+                        return self.poll_rest();
                     }
-                    Err(e) => self.feed_error = Some(e.to_string()),
+                    if let Err(e) = feed::save_cached(&self.basket.launcher_dir(), &fetched) {
+                        eprintln!("fruitbasket: caching feed: {e}");
+                    }
+                    self.feed = Some(fetched.feed);
+                    self.refresh_installed();
+                    if let Some(feed) = &self.feed {
+                        self.shelf.lists(&self.basket.launcher_dir(), feed);
+                    }
+                    if self.settings.install_without_asking {
+                        self.apply(Cmd::UpdateAll);
+                    }
+                    self.check_launcher_update();
                 }
+                Err(e) => self.feed_error = Some(e.to_string()),
             }
         }
         self.poll_rest();
@@ -435,13 +434,12 @@ impl App {
             self.refresh_installed();
         }
         self.poll_move();
-        if let Some(rx) = &self.update_rx {
-            if let Ok(r) = rx.try_recv() {
-                self.update_rx = None;
-                match r {
-                    Upd::Staged(build) => self.launcher_update = Some(build),
-                    Upd::Failed(e) => self.notice = Some(format!("the launcher update didn't download: {e}")),
-                }
+        if let Some(rx) = &self.update_rx
+            && let Ok(r) = rx.try_recv() {
+            self.update_rx = None;
+            match r {
+                Upd::Staged(build) => self.launcher_update = Some(build),
+                Upd::Failed(e) => self.notice = Some(format!("the launcher update didn't download: {e}")),
             }
         }
         if self.shelf.poll(&self.basket.launcher_dir(), self.feed.as_ref()) && self.shelf.running().is_none() {
@@ -761,10 +759,9 @@ impl App {
                 let i = at.map_or(0, |i| (i as i32 + step).clamp(0, rows.len() as i32 - 1) as usize);
                 out.push(Cmd::SelectGame(rows[i].game.path.clone()));
             }
-            if input.action(Action::Confirm) {
-                if let Some(p) = self.shelf.selected_in(&rows) {
-                    out.push(Cmd::Continue(p.to_path_buf()));
-                }
+            if input.action(Action::Confirm)
+                && let Some(p) = self.shelf.selected_in(&rows) {
+                out.push(Cmd::Continue(p.to_path_buf()));
             }
         }
         if self.tab == Tab::Basket && self.focus.is_none() {
@@ -782,10 +779,9 @@ impl App {
                 let i = at.map_or(0, |i| (i as i32 + step).clamp(0, order.len() as i32 - 1) as usize);
                 out.push(Cmd::Select(order[i].id.clone()));
             }
-            if input.action(Action::Confirm) {
-                if let Some(cmd) = ctx.selected_fruit().and_then(|f| ctx.primary_cmd(f)) {
-                    out.push(cmd);
-                }
+            if input.action(Action::Confirm)
+                && let Some(cmd) = ctx.selected_fruit().and_then(|f| ctx.primary_cmd(f)) {
+                out.push(cmd);
             }
         }
         if input.pressed(Key::Slash) {
@@ -1203,13 +1199,12 @@ impl App {
                     *map = padmap();
                     *listening = false;
                 }
-                if let Some(Modal::Saves { game, title, slots, pick }) = &self.modal {
-                    if let Some(slot) = slots.get(*pick) {
-                        if self.shelf.running().is_some() {
-                            self.notice = Some("close the game before deleting a save".into());
-                        } else {
-                            self.modal = Some(Modal::DeleteSave { game: game.clone(), title: title.clone(), slot: slot.clone(), back: true });
-                        }
+                if let Some(Modal::Saves { game, title, slots, pick }) = &self.modal
+                    && let Some(slot) = slots.get(*pick) {
+                    if self.shelf.running().is_some() {
+                        self.notice = Some("close the game before deleting a save".into());
+                    } else {
+                        self.modal = Some(Modal::DeleteSave { game: game.clone(), title: title.clone(), slot: slot.clone(), back: true });
                     }
                 }
             }
@@ -1276,21 +1271,19 @@ impl App {
                     // The buttons' Continue: the newest save.
                     _ => (self.resume(&game).map(|s| s.n), false),
                 };
-                if self.play_from(&game, slot, fresh) {
-                    if let Some(c) = &mut self.couch {
-                        c.panel = CouchPanel::Buttons;
-                    }
+                if self.play_from(&game, slot, fresh)
+                    && let Some(c) = &mut self.couch {
+                    c.panel = CouchPanel::Buttons;
                 }
             }
             Cmd::CouchSaves => {
                 let Some(game) = self.couch_game() else { return };
                 match self.couch.as_ref().map(|c| c.panel) {
                     Some(CouchPanel::Saves(i)) => {
-                        if let Some(slot) = self.couch_slots().get(i).cloned() {
-                            if self.shelf.running().is_none() {
-                                let title = self.game_title(&game);
-                                self.modal = Some(Modal::DeleteSave { game, title, slot, back: false });
-                            }
+                        if let Some(slot) = self.couch_slots().get(i).cloned()
+                            && self.shelf.running().is_none() {
+                            let title = self.game_title(&game);
+                            self.modal = Some(Modal::DeleteSave { game, title, slot, back: false });
                         }
                     }
                     Some(_) => {
@@ -1712,7 +1705,7 @@ impl<'a> Ctx<'a> {
                 games: d.games,
                 program: d.program,
                 games_size: d.games_size,
-                watching: self.settings.watch.iter().any(|w| *w == f.id),
+                watching: self.settings.watch.contains(&f.id),
                 key_id: key::KEY_ID,
                 can_roll_back: idle && current.is_some_and(|c| !queue::rollback_options(f, c, &d.builds).is_empty()),
                 can_uninstall: self.can_uninstall(&f.id),
@@ -1727,7 +1720,7 @@ impl<'a> Ctx<'a> {
         BasketView {
             installed: inst.iter().map(card).collect(),
             ready: ready.iter().map(card).collect(),
-            growing: growing.iter().map(|f| (*f, self.settings.watch.iter().any(|w| *w == f.id))).collect(),
+            growing: growing.iter().map(|f| (*f, self.settings.watch.contains(&f.id))).collect(),
             selected,
             detail,
             sheet,
@@ -2074,6 +2067,32 @@ fn dir_size(path: &Path) -> u64 {
             Err(_) => 0,
         })
         .sum()
+}
+
+pub fn run(updated: Option<String>) -> Result<(), String> {
+    let mut app = App::new();
+    if let Some(from) = updated {
+        app.notice = Some(format!("updated from {from} to {VERSION}"));
+    }
+    let (w, h) = app.window_size();
+    let mut video = Video::new("Fruit Basket", w, h, &app.keymap)?;
+    let mut pads = Gamepads::new(Ports::Shared);
+    app.controllers = pads.connected();
+    if !app.controllers.is_empty() && app.settings.couch_on_controller {
+        app.apply(Cmd::Couch);
+    }
+    while video.is_open() && !app.quit {
+        let input = app.gather(&mut video, &mut pads);
+        app.frame(&mut video, &input);
+        if let Err(e) = video.set_couch(app.couch.is_some()) {
+            app.notice = Some(e);
+            app.couch = None;
+        }
+        thread::sleep(Duration::from_millis(12));
+    }
+    let size = video.windowed_size();
+    app.shutdown(size);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -2965,30 +2984,4 @@ mod tests {
             }
         }
     }
-}
-
-pub fn run(updated: Option<String>) -> Result<(), String> {
-    let mut app = App::new();
-    if let Some(from) = updated {
-        app.notice = Some(format!("updated from {from} to {VERSION}"));
-    }
-    let (w, h) = app.window_size();
-    let mut video = Video::new("Fruit Basket", w, h, &app.keymap)?;
-    let mut pads = Gamepads::new(Ports::Shared);
-    app.controllers = pads.connected();
-    if !app.controllers.is_empty() && app.settings.couch_on_controller {
-        app.apply(Cmd::Couch);
-    }
-    while video.is_open() && !app.quit {
-        let input = app.gather(&mut video, &mut pads);
-        app.frame(&mut video, &input);
-        if let Err(e) = video.set_couch(app.couch.is_some()) {
-            app.notice = Some(e);
-            app.couch = None;
-        }
-        thread::sleep(Duration::from_millis(12));
-    }
-    let size = video.windowed_size();
-    app.shutdown(size);
-    Ok(())
 }

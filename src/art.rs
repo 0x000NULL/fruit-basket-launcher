@@ -54,13 +54,14 @@ impl Art {
 
     /// Draw a fruit's icon at `ICON_L` or `ICON_S`, faded to `alpha`
     /// (still-growing fruits are drawn at 45 %).
+    #[allow(clippy::too_many_arguments)]
     pub fn icon(&self, cv: &mut Canvas, id: &str, night: bool, size: u32, x: f32, y: f32, alpha: f32) {
         let Some(pm) = self.icons.get(&(id.to_string(), night, size)) else { return };
         if alpha >= 1.0 {
             cv.draw_pixmap(pm, x.round(), y.round(), Transform::identity());
         } else {
             let mut faded = pm.clone();
-            for px in faded.data_mut().chunks_exact_mut(4) {
+            for px in faded.data_mut().as_chunks_mut::<4>().0 {
                 for c in px {
                     *c = (*c as f32 * alpha).round() as u8;
                 }
@@ -108,13 +109,13 @@ pub(crate) fn decode_png(bytes: &[u8]) -> Option<Pixmap> {
     let (w, h) = (info.width, info.height);
     let rgba: Vec<u8> = match info.color_type {
         png::ColorType::Rgba => buf[..(w * h * 4) as usize].to_vec(),
-        png::ColorType::Rgb => buf[..(w * h * 3) as usize].chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
-        png::ColorType::GrayscaleAlpha => buf[..(w * h * 2) as usize].chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
+        png::ColorType::Rgb => buf[..(w * h * 3) as usize].as_chunks::<3>().0.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::GrayscaleAlpha => buf[..(w * h * 2) as usize].as_chunks::<2>().0.iter().flat_map(|p| [p[0], p[0], p[0], p[1]]).collect(),
         png::ColorType::Grayscale => buf[..(w * h) as usize].iter().flat_map(|&g| [g, g, g, 255]).collect(),
         png::ColorType::Indexed => return None,
     };
     let premul: Vec<u8> = rgba
-        .chunks_exact(4)
+        .as_chunks::<4>().0.iter()
         .flat_map(|p| {
             let a = p[3] as u16;
             [(p[0] as u16 * a / 255) as u8, (p[1] as u16 * a / 255) as u8, (p[2] as u16 * a / 255) as u8, p[3]]
@@ -131,7 +132,7 @@ pub(crate) fn shrink(src: &Pixmap, f: u32) -> Pixmap {
     let mut out = Pixmap::new(w, h).expect("icon size");
     let s = src.data();
     let d = out.data_mut();
-    let n = (f * f) as u32;
+    let n = f * f;
     for y in 0..h {
         for x in 0..w {
             let mut acc = [0u32; 4];

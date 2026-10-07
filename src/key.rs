@@ -21,10 +21,9 @@ pub fn feed_url() -> String {
 /// `FRUITBASKET_KEY` swaps the key, so tests and a local site can sign
 /// with a throwaway one. Release builds ignore it.
 pub fn public_key() -> String {
-    if cfg!(debug_assertions) {
-        if let Ok(key) = std::env::var("FRUITBASKET_KEY") {
-            return key;
-        }
+    if cfg!(debug_assertions)
+        && let Ok(key) = std::env::var("FRUITBASKET_KEY") {
+        return key;
     }
     PUBLIC_KEY.to_string()
 }

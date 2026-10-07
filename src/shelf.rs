@@ -79,7 +79,9 @@ impl Shelf {
         self.slots.borrow_mut().clear();
         self.stale_covers = false;
         let cache = dirs::cache_dir();
-        let jobs: Vec<(PathBuf, Vec<PathBuf>, Vec<PathBuf>, Vec<u8>)> = self
+        // Per game: its path, save folders, `art` paths and listed slots.
+        type Job = (PathBuf, Vec<PathBuf>, Vec<PathBuf>, Vec<u8>);
+        let jobs: Vec<Job> = self
             .games
             .iter()
             .filter_map(|g| {
@@ -124,13 +126,12 @@ impl Shelf {
     /// what's loaded.
     #[cfg(test)]
     pub fn settle(&mut self) {
-        if let Some(rx) = self.covers_rx.take() {
-            if let Ok(found) = rx.recv_timeout(std::time::Duration::from_secs(10)) {
-                for p in found.values() {
-                    self.pics.want(p);
-                }
-                self.covers = found;
+        if let Some(rx) = self.covers_rx.take()
+            && let Ok(found) = rx.recv_timeout(std::time::Duration::from_secs(10)) {
+            for p in found.values() {
+                self.pics.want(p);
             }
+            self.covers = found;
         }
         self.pics.settle();
     }
@@ -180,15 +181,14 @@ impl Shelf {
     /// Pick up lists, hashes and finished games. True if the view changed.
     pub fn poll(&mut self, launcher_dir: &Path, feed: Option<&Feed>) -> bool {
         let mut changed = self.pics.poll();
-        if let Some(rx) = &self.covers_rx {
-            if let Ok(found) = rx.try_recv() {
-                self.covers_rx = None;
-                for p in found.values() {
-                    self.pics.want(p);
-                }
-                self.covers = found;
-                changed = true;
+        if let Some(rx) = &self.covers_rx
+            && let Ok(found) = rx.try_recv() {
+            self.covers_rx = None;
+            for p in found.values() {
+                self.pics.want(p);
             }
+            self.covers = found;
+            changed = true;
         }
         if let Some(rx) = &self.lists_rx {
             let mut got = false;
@@ -236,19 +236,18 @@ impl Shelf {
                 self.start_hashing();
             }
         }
-        if let Some((_, rx)) = &self.running {
-            if let Ok(s) = rx.try_recv() {
-                self.played.record(&s.game, s.started, s.secs);
-                if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.sessions.append(launcher_dir, &s.game, s.started, s.secs)) {
-                    eprintln!("fruitbasket: saving play time: {e}");
-                }
-                self.running = None;
-                // The game may have saved: new slots, new pictures.
-                self.slots.borrow_mut().clear();
-                self.stale_covers = true;
-                self.pics.reload();
-                changed = true;
+        if let Some((_, rx)) = &self.running
+            && let Ok(s) = rx.try_recv() {
+            self.played.record(&s.game, s.started, s.secs);
+            if let Err(e) = self.played.save(launcher_dir).and_then(|_| self.sessions.append(launcher_dir, &s.game, s.started, s.secs)) {
+                eprintln!("fruitbasket: saving play time: {e}");
             }
+            self.running = None;
+            // The game may have saved: new slots, new pictures.
+            self.slots.borrow_mut().clear();
+            self.stale_covers = true;
+            self.pics.reload();
+            changed = true;
         }
         changed
     }
@@ -395,9 +394,9 @@ impl Shelf {
                 fruits.push((f.name.as_str(), secs));
             }
         }
-        fruits.sort_by(|a, b| b.1.cmp(&a.1));
+        fruits.sort_by_key(|f| std::cmp::Reverse(f.1));
         let mut top: Vec<Row<'a>> = rows.iter().filter(|r| r.secs > 0).cloned().collect();
-        top.sort_by(|a, b| b.secs.cmp(&a.secs));
+        top.sort_by_key(|r| std::cmp::Reverse(r.secs));
         top.truncate(10);
         let title = |p: &Path| rows.iter().find(|r| r.game.path == p).map(|r| r.game.title.clone()).unwrap_or_default();
         StatsView {
@@ -452,7 +451,7 @@ impl Shelf {
     pub fn view<'a>(&'a self, basket: &Basket, feed: Option<&'a Feed>, find: &str, sheet: bool, scroll: f32, aside_scroll: f32) -> LibraryView<'a> {
         let rows = self.rows(feed, find);
         let mut continue_rows: Vec<Row> = rows.iter().filter(|r| r.last.is_some()).cloned().collect();
-        continue_rows.sort_by(|a, b| b.last.cmp(&a.last));
+        continue_rows.sort_by_key(|r| std::cmp::Reverse(r.last));
         continue_rows.truncate(3);
         let selected = self.selected_in(&rows);
 

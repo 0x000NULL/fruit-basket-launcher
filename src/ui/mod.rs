@@ -323,10 +323,6 @@ impl<'a> Ui<'a> {
         Style::data(13.0).color(self.muted())
     }
 
-    pub fn reading(&self) -> Style {
-        Style::reading(15.0).color(self.pal.fg)
-    }
-
     // --- controls ---------------------------------------------------------------
 
     /// A section heading with its note at the right and a rule under both;

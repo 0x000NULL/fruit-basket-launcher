@@ -313,10 +313,9 @@ fn aside(ui: &mut Ui, d: &Detail, x: f32, top: f32, w: f32, bottom: f32, scroll:
     y = primary(ui, d, x, y, w);
 
     // What's new: for an update, or a retry of one.
-    if let (Some(build), Some(_)) = (d.target, d.current) {
-        if matches!(d.primary, Primary::Update | Primary::TryAgain) && !build.notes.is_empty() {
-            y = whats_new(ui, build, x, y + 10.0, w);
-        }
+    if let (Some(build), Some(_)) = (d.target, d.current)
+        && matches!(d.primary, Primary::Update | Primary::TryAgain) && !build.notes.is_empty() {
+        y = whats_new(ui, build, x, y + 10.0, w);
     }
 
     // Open games/ · Roll back… · Uninstall.
@@ -510,7 +509,7 @@ fn setup(ui: &mut Ui, d: &Detail, x: f32, mut y: f32, w: f32) -> f32 {
     let installed = d.current.is_some();
     let ext = f.ext.join(" ");
     let bios = f.bios.clone().unwrap_or_else(|| "not needed".to_string());
-    let bios_ok = f.bios.as_deref().map_or(true, |b| b == "built in" || b == "not needed");
+    let bios_ok = f.bios.as_deref().is_none_or(|b| b == "built in" || b == "not needed");
     let rows: Vec<(&str, String, bool)> = match d.current {
         Some(c) => vec![
             ("Program", format!("{} {}", c.channel.name(), c.build), true),
