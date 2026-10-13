@@ -63,7 +63,8 @@ pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[Pat
 
 /// True if `fruit` plays the file at `path`: it has one of the fruit's
 /// `ext`, or it is one of the fruit's `archives` with a file inside that
-/// has. `names` caches the archive's file names across fruits.
+/// has one of `ext` or `members`. `names` caches the archive's file names
+/// across fruits.
 pub fn plays(fruit: &Fruit, path: &Path, names: &mut Option<Vec<String>>) -> bool {
     if fruit.reads(path) {
         return true;
@@ -71,7 +72,17 @@ pub fn plays(fruit: &Fruit, path: &Path, names: &mut Option<Vec<String>>) -> boo
     if !fruit.takes_archive(path) {
         return false;
     }
-    names.get_or_insert_with(|| zip_names(path)).iter().any(|n| fruit.reads(Path::new(n)))
+    names.get_or_insert_with(|| zip_names(path)).iter().any(|n| fruit.reads(Path::new(n)) || fruit.claims_member(n))
+}
+
+/// True if `fruit` takes the archive at `path` only through `members`: a
+/// set of chips (a MAME Neo Geo zip) rather than a zipped game file.
+fn set_of_members(fruit: &Fruit, path: &Path) -> bool {
+    if fruit.members.is_empty() || fruit.reads(path) || !fruit.takes_archive(path) {
+        return false;
+    }
+    let names = zip_names(path);
+    !names.iter().any(|n| fruit.reads(Path::new(n))) && names.iter().any(|n| fruit.claims_member(n))
 }
 
 /// The file names inside a zip, from its central directory; none if it
@@ -102,7 +113,12 @@ fn game(path: &Path, fruit: &Fruit) -> Option<Game> {
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs() as i64);
     let file_name = path.file_name()?.to_string_lossy().to_string();
     let title = display_title(&file_name);
-    let code = serial_in_name(&file_name).or_else(|| gba_code(path));
+    // A set's serial is its name: compat.txt lists Durian's by set name.
+    let code = if set_of_members(fruit, path) {
+        path.file_stem().map(|s| s.to_string_lossy().to_lowercase())
+    } else {
+        serial_in_name(&file_name).or_else(|| gba_code(path))
+    };
     let system = gb_system(path);
     Some(Game { path: path.to_path_buf(), fruit: fruit.id.clone(), title, size: meta.len(), mtime, code, system })
 }
@@ -488,6 +504,7 @@ pub(crate) mod tests {
             pixel: true,
             ext: ext.iter().map(|s| s.to_string()).collect(),
             archives: vec![],
+            members: vec![],
             status: Status::Released,
             summary: String::new(),
             blurb: String::new(),
@@ -539,9 +556,15 @@ pub(crate) mod tests {
     }
 
     fn zip_with(path: &Path, inner: &str) {
+        zip_of(path, &[inner]);
+    }
+
+    fn zip_of(path: &Path, inner: &[&str]) {
         let mut w = zip::ZipWriter::new(fs::File::create(path).unwrap());
-        w.start_file(inner, zip::write::SimpleFileOptions::default()).unwrap();
-        std::io::Write::write_all(&mut w, b"rom").unwrap();
+        for name in inner {
+            w.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            std::io::Write::write_all(&mut w, b"rom").unwrap();
+        }
         w.finish().unwrap();
     }
 
@@ -639,6 +662,56 @@ pub(crate) mod tests {
         let got = scan(&b, &[&berry], &[], &[]);
         assert_eq!(got.len(), 1);
         assert!(!plays(&berry, &extra.join("Broken.zip"), &mut None));
+    }
+
+    #[test]
+    fn neo_geo_sets_are_claimed_by_their_members() {
+        let t = tempfile::tempdir().unwrap();
+        let b = Basket::new(t.path().join("basket"));
+        let extra = t.path().join("extra");
+        fs::create_dir_all(&extra).unwrap();
+        // Full MAME sets, old and modern chip names, a split clone, the BIOS.
+        zip_of(&extra.join("MSLUG.zip"), &["201-p1.p1", "201-s1.s1", "201-m1.m1", "201-c1.c1", "201-v1.v1"]);
+        zip_of(&extra.join("gladmort.zip"), &["gladmort-p1.bin", "gladmort-m1.bin", "gladmort-c1.bin"]);
+        zip_of(&extra.join("kof95a.zip"), &["084-epr.ep1"]);
+        zip_of(&extra.join("neogeo.zip"), &["sp-s2.sp1", "sfix.sfix", "sm1.sm1", "000-lo.lo"]);
+        zip_of(&extra.join("hello.zip"), &["Hello.NEO"]);
+        // Loose chips are not games.
+        fs::write(extra.join("201-p1.p1"), b"rom").unwrap();
+        fs::write(extra.join("gladmort-p1.bin"), b"rom").unwrap();
+        // Other fruits' zips still go where they did.
+        zip_with(&extra.join("Golden Sun (USA).zip"), "Golden Sun (USA).gba");
+        zip_with(&extra.join("Super Mario Bros. (World).zip"), "smb.nes");
+
+        let mut apple = fruit("crabapple", &[".nes"]);
+        apple.archives = vec![".zip".into()];
+        let mut berry = fruit("strawberry", &[".gba"]);
+        berry.archives = vec![".zip".into()];
+        let mut durian = fruit("durian", &[".neo"]);
+        durian.archives = vec![".zip".into()];
+        durian.members = [".p1", ".m1", ".s1", ".c1", "-p1.bin", "-m1.bin", "-c1.bin", ".ep1", ".sp2"].map(String::from).to_vec();
+        // Durian first in feed order: it must not take the others' zips.
+        let got = scan(&b, &[&durian, &apple, &berry], std::slice::from_ref(&extra), &[]);
+        let mut by: Vec<(&str, &str, Option<&str>)> =
+            got.iter().map(|g| (g.fruit.as_str(), g.title.as_str(), g.code.as_deref())).collect();
+        by.sort();
+        assert_eq!(
+            by,
+            [
+                ("crabapple", "Super Mario Bros.", None),
+                ("durian", "MSLUG", Some("mslug")),
+                ("durian", "gladmort", Some("gladmort")),
+                ("durian", "hello", None),
+                ("durian", "kof95a", Some("kof95a")),
+                ("strawberry", "Golden Sun", None),
+            ]
+        );
+        assert!(!plays(&durian, &extra.join("neogeo.zip"), &mut None), "the BIOS is not a game");
+        assert!(!plays(&durian, &extra.join("201-p1.p1"), &mut None));
+
+        // Without `members`, a fruit claims no sets (an older feed entry).
+        durian.members.clear();
+        assert!(!plays(&durian, &extra.join("MSLUG.zip"), &mut None));
     }
 
     #[test]

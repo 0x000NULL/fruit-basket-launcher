@@ -42,6 +42,11 @@ pub struct Fruit {
     /// fruits can list `.zip`.
     #[serde(default)]
     pub archives: Vec<String>,
+    /// More name endings that claim an archive, read only inside one, never
+    /// for loose files: Durian's Neo Geo sets are chips (`.p1`, `-c1.bin`)
+    /// with no single game extension.
+    #[serde(default)]
+    pub members: Vec<String>,
     pub status: Status,
     pub summary: String,
     pub blurb: String,
@@ -216,6 +221,13 @@ impl Fruit {
     pub fn reads(&self, path: &Path) -> bool {
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("").to_ascii_lowercase();
         self.ext.iter().any(|e| name.ends_with(&e.to_ascii_lowercase()))
+    }
+
+    /// True if `name`, a file inside one of this fruit's archives, ends
+    /// with one of its `members` (case-insensitive).
+    pub fn claims_member(&self, name: &str) -> bool {
+        let name = name.to_ascii_lowercase();
+        self.members.iter().any(|e| name.ends_with(&e.to_ascii_lowercase()))
     }
 
     /// True if `path` has one of this fruit's `archives` extensions; whether
@@ -406,6 +418,16 @@ pub(crate) mod tests {
         assert_eq!(feed.fruits[0].archives, [".zip"]);
         assert!(feed.fruits[0].takes_archive(Path::new("Game (USA).Zip")));
         assert!(feed.fruits[1].archives.is_empty(), "absent: no archives");
+        assert!(feed.fruits[0].members.is_empty() && feed.fruits[1].members.is_empty(), "absent: no members");
+
+        // v1.4's `members`, read only inside archives.
+        let mut v: serde_json::Value = serde_json::from_slice(FEED).unwrap();
+        v["fruits"][0]["members"] = serde_json::json!([".p1", "-P1.bin"]);
+        let feed: Feed = serde_json::from_value(v).unwrap();
+        assert!(feed.fruits[0].claims_member("mslug/201-p1.P1"));
+        assert!(feed.fruits[0].claims_member("gladmort-p1.bin"));
+        assert!(!feed.fruits[0].claims_member("sp-s2.sp1"));
+        assert!(!feed.fruits[0].reads(Path::new("201-p1.p1")), "members never claim loose files");
     }
 
     #[test]

@@ -79,6 +79,7 @@ As of 2026-10-07, the launcher waits on nothing. The feed serves five released f
   - **`slots`**: feedgen emits it from site `67899bc`, two whole numbers, lowest first, `[]` when absent. Crabapple declares `1 8`. feedgen emits `fresh` from `1808778`.
   - **`art`**: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`; Strawberry's and Crabapple's are `{cache}/<fruit>/covers/{stem}.png`. Older launchers ignore it.
   - **`archives`** (launcher v1.2.0): Strawberry and Crabapple declare `.zip`. Older launchers ignore it and don't list zips.
+  - **`members`** (launcher v1.4.0): name endings that claim a zip from `archives`, never a loose file. Durian's entry is to be `ext .neo`, `archives .zip`, `members .p1 .m1 .s1 .c1 -p1.bin -m1.bin -c1.bin .ep1 .sp2` (durian `docs/ROM-FORMAT.md`). A set claimed only by `members` gets its lowercase zip stem as its code, which Durian's compat.txt uses. feedgen has to emit it (site, not yet).
 - **Strawberry** is stable v1.7.1, with nightly `6ea5f27`.
   - The feed lists v1.5.0 to v1.7.1 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, `slots 1 8`, `archives .zip`, `art {cache}/strawberry/covers/{stem}.png`.

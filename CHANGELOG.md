@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.4.0
+
+- **Icons for Plum, Cherry, Kiwi, Durian and Coconut**, paper and night, so the five new fruits show their own pixel fruit everywhere the others do.
+- **Neo Geo sets in .zip files.** A fruit can list chip-name endings under the feed's new `members` key. A zip from the fruit's `archives` is then its game when a file inside it ends with one of `ext` or one of `members`. This is for Durian, whose MAME sets (`mslug.zip`) hold chips like `201-p1.p1` and `gladmort-p1.bin` rather than one game file.
+  - `members` is read only inside zips: loose chips are never listed as games, and the Neo Geo BIOS (`neogeo.zip`) isn't one either.
+  - A set's code is its name in lower case, so Durian's compatibility list, which goes by set name, finds it.
+  - Other fruits' zips go where they did. Launchers before this one ignore the key.
+
 ## v1.3.0
 
 - **Game Boy games say GB or GBC.** Olive's games used to show "GB · GBC" on every cover, list row and game panel. Each one now shows GB or GBC, read from the cartridge's header, including games inside a zip. Searching FIND for "gbc" finds just the Color games.

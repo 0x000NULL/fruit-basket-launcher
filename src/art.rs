@@ -21,7 +21,8 @@ macro_rules! icons {
 }
 
 const ICONS: &[(&str, &[u8], &[u8])] =
-    icons!("pomegranate", "strawberry", "fig", "starfruit", "mangosteen", "crabapple", "mulberry", "olive", "pear");
+    icons!("pomegranate", "strawberry", "fig", "starfruit", "mangosteen", "crabapple", "mulberry", "olive", "pear",
+        "plum", "cherry", "kiwi", "durian", "coconut");
 
 const MARK: &str = include_str!("../assets/fruit-basket-mark.svg");
 const MARK_NIGHT: &str = include_str!("../assets/fruit-basket-mark-night.svg");
