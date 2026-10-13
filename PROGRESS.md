@@ -8,13 +8,13 @@ map: `docs/ARCHITECTURE.md`.
 
 | | Milestone | State | Tag |
 |---|---|---|---|
-| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `ac0fce4` (2026-10-06), with five released fruits | — |
+| M0 | Site: signed `feed.json`, `LAUNCHER` / `NIGHTLY` files, `make sign`, dump-list tool | done; site main is at `e56bf7c` (2026-10-12), with twelve released fruits | — |
 | M1 | Skeleton: window, frame, tabs, themes, three layouts, Settings | done | v0.1.0 |
 | M2 | Basket tab, install pipeline in the UI, Downloads tab, history | done | v0.2.0 |
 | M3 | Library: scan, covers / list, play, play time, compat, dump check | done | v0.3.0 |
 | M4 | Lifecycle: rollback, uninstall, Move basket, keep-N in the UI, watch alerts, free space, `{data}` | done; the site's Pomegranate `{data}` feed is live | v0.4.0 |
 | M5 | Controller: pad navigation, couch mode, saves view, Map buttons | done (v0.5.1: couch arguments only for listed builds) | v0.5.0 |
-| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.3.0 is live in the feed (2026-10-07) | v1.0.0 |
+| M6 | Self-update, launcher builds hosted under `/fruit-basket/launcher/`, macos-x64 | done; v1.0.0 shipped it; v1.4.0 is live in the feed (2026-10-13) | v1.0.0 |
 
 Each finished milestone gets an annotated tag. `Cargo.toml`'s version is
 bumped in the same commit, and the release notes come from a
@@ -63,23 +63,23 @@ bumped in the same commit, and the release notes come from a
 
 ## The site and the other repos
 
-As of 2026-10-07, the launcher waits on nothing. The feed serves five released fruits: Pomegranate (No. 1), Strawberry (No. 2), Crabapple (No. 7), Mulberry (No. 8) and Olive (No. 9). Olive and Mulberry went live with no launcher change: their feed entries use only keys v1.2.0 already reads. The feed serves Strawberry v1.7.1, Crabapple v1.0.0, Mulberry v0.3.1 and Olive v0.3.0. Launcher v1.3.0 (`4b85d1e`: GB/GBC labels for Game Boy games, fruit-basket v0.5.0, the clippy 0.1.99 lints cleared) is live, deployed with Crabapple v1.0.0.
+As of 2026-10-13, the launcher waits on nothing. The feed serves twelve released fruits: Pomegranate (No. 1, v0.5.0), Strawberry (No. 2, v1.7.1), Fig (No. 4, v1.0.0), Crabapple (No. 7, v1.0.0), Mulberry (No. 8, v0.3.1), Olive (No. 9, v0.3.0), Pear (No. 10, v1.0.0), and the classic five at v1.0.0: Plum (No. 11), Cherry (No. 17), Kiwi (No. 18), Durian (No. 21) and Coconut (No. 22). Starfruit and Mangosteen are still growing. Launcher v1.4.0 (`224c2b2`: icons for the classic five, Neo Geo sets through the feed's `members`) is live, mirrored with the classic five.
 
-- **The site** is at `0883677`, deployed 2026-10-07.
-  - Launcher v1.3.0 went in at `0883677`; its live feed was generated 2026-10-07T04:16:47Z. v1.2.0 went in at `2020f90`. It verifies with the launcher's embedded key (`9A7C56F99E6460E9`); this was checked here with minisign.
+- **The site** is at `e56bf7c` (Android v0.6.0), deployed 2026-10-12 (Pacific).
+  - Launcher v1.4.0 went in at `e34659a`; its feed was generated 2026-10-13T03:22:56Z. The live feed was regenerated at 04:28:01Z for Android v0.6.0, with the launcher entry unchanged. v1.3.0 went in at `0883677`, v1.2.0 at `2020f90`. The live feed verifies with the launcher's embedded key (`9A7C56F99E6460E9`); checked here with minisign on 2026-10-13.
   - nginx serves the feed as `application/json` and the signature as text, both no-cache. Release files are cached for a year.
   - Feed keys per fruit, from its `LAUNCHER` file:
     - `launch`, `load_slot`, `open`, `couch` and `fresh` may use `{rom}`, `{slot}` and `{data}`. `fresh` (from launcher v1.1.2) replaces `launch` for Start fresh.
     - `couch` goes after `launch` or `load_slot` in couch mode, never after `open`.
     - Also `carry`, and `oldest`, which feedgen uses and the feed doesn't carry.
-  - **The launcher entry** is v1.3.0 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 2 notes.
-    - The Windows zip's SHA-256 (`d67f06fb…`) matches GitHub's `.sha256` and the feed.
-    - The e2e test passed against this feed (it installs Strawberry v1.7.0).
-    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update; v1.1.1, v1.1.2, v1.2.0 and v1.3.0 followed. v1.0.1 and v0.5.x were never mirrored.
+  - **The launcher entry** is v1.4.0 for windows-x64, linux-x64, macos-arm64 and macos-x64, with 4 notes.
+    - The Windows zip's SHA-256 (`1721ac8b…`) matches GitHub's `.sha256` and the feed.
+    - The site session re-gated with the v1.4.0 entry: e2e passed at v1.3.0 and v1.4.0, and the Windows build reports `--version` v1.4.0.
+    - v1.1.0 shipped at `55e08e4`, the first mirrored self-update; v1.1.1, v1.1.2, v1.2.0, v1.3.0 and v1.4.0 followed. v1.0.1 and v0.5.x were never mirrored.
   - **`slots`**: feedgen emits it from site `67899bc`, two whole numbers, lowest first, `[]` when absent. Crabapple declares `1 8`. feedgen emits `fresh` from `1808778`.
   - **`art`**: Pomegranate's is `{data}/cache/covers/{code}.png {data}/cache/covers/{stem}.png`; Strawberry's and Crabapple's are `{cache}/<fruit>/covers/{stem}.png`. Older launchers ignore it.
-  - **`archives`** (launcher v1.2.0): Strawberry and Crabapple declare `.zip`. Older launchers ignore it and don't list zips.
-  - **`members`** (launcher v1.4.0): name endings that claim a zip from `archives`, never a loose file. Durian's entry is to be `ext .neo`, `archives .zip`, `members .p1 .m1 .s1 .c1 -p1.bin -m1.bin -c1.bin .ep1 .sp2` (durian `docs/ROM-FORMAT.md`). A set claimed only by `members` gets its lowercase zip stem as its code, which Durian's compat.txt uses. feedgen has to emit it (site, not yet).
+  - **`archives`** (launcher v1.2.0): every released fruit but Pomegranate and Fig declares `.zip`. Older launchers ignore it and don't list zips.
+  - **`members`** (launcher v1.4.0): name endings that claim a zip from `archives`, never a loose file. Durian's live entry is `ext .neo`, `archives .zip`, `members .p1 .m1 .s1 .c1 -p1.bin -m1.bin -c1.bin .ep1 .sp2` (durian `docs/ROM-FORMAT.md`). A set claimed only by `members` gets its lowercase zip stem as its code, which Durian's compat.txt uses. Only Durian declares it.
 - **Strawberry** is stable v1.7.1, with nightly `6ea5f27`.
   - The feed lists v1.5.0 to v1.7.1 (`oldest v1.5.0`). v1.4.0 and earlier stay on the site, out of the feed.
   - `launch {rom}`, `load_slot {rom} --slot {slot}`, `couch --fullscreen --exit-on-quit`, `slots 1 8`, `archives .zip`, `art {cache}/strawberry/covers/{stem}.png`.
@@ -109,7 +109,7 @@ As of 2026-10-07, the launcher waits on nothing. The feed serves five released f
   - Strawberry and Crabapple get them from fruit-basket's `basket-app` v0.3.0 (`64fc2b1`): `<stem>.sN.png` beside each state, and title captures as `<cache>/<app>/covers/<stem>.png`.
   - Crabapple has shipped them since v0.11.0, Strawberry since v1.7.0. Both feed entries have `art` and `slots`.
   - Crabapple also writes a resume state, `<stem>.s9.state` (with `.s9.png`), on quit. The launcher would list it as Slot 9 and Continue would pass `--slot 9`, which Crabapple refuses (it takes 1–8). Launcher v1.1.1 settles it with the feed key `slots` (lowest and highest). Crabapple is in the feed with `slots 1 8` (above). Strawberry writes no resume state.
-- **fruit-basket** (the shared crates): the fruits are on v0.5.0 (`f0b3a22`: `Gamepads::set_rumble`, `Platform::probe_system` and system tags). It is additive, so the launcher needs no change for it. Launcher v1.3.0 pins v0.5.0 and uses none of the new API: the launcher has its own library scan, so its GB/GBC label reads the cartridge header itself (`library::gb_system`) rather than `probe_system`, and rumble has no use without a core. Launcher v1.2.0 pinned v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
+- **fruit-basket** (the shared crates): the fruits are on v0.5.0 (`f0b3a22`: `Gamepads::set_rumble`, `Platform::probe_system` and system tags). It is additive, so the launcher needs no change for it. Launchers v1.3.0 and v1.4.0 pin v0.5.0 and use none of the new API: the launcher has its own library scan, so its GB/GBC label reads the cartridge header itself (`library::gb_system`) rather than `probe_system`, and rumble has no use without a core. Launcher v1.2.0 pinned v0.4.0 (`3aff869`: edition 2024, rust 1.89, minifb 0.29, tiny-skia 0.12, png 0.18, cpal 0.18, toml 1, dirs 7). v0.2.0 added `Gamepads::connected()` and connect/disconnect events. No session owns that repo, and a change there should stay additive so the emulators can stay pinned where they are.
 - **Fruit Basket for Android** stays out of the feed. `site/fruit-basket/android/` has no `LAUNCHER` file, so feedgen skips it (a site test checks that `feed.json` gets nothing from it), and the feed still has 9 fruits. The app updates itself from its own `android/update.json`, signed with the feed's key. Its APKs (v0.2.1 at `ac0fce4`) are not launcher builds; the launcher needs no change.
 - **Dump lists:** none yet, because Ethan has no No-Intro or Redump DATs. The feed's `dumps` is null, so the Library says "No dump list for this fruit yet". With DATs: run `tools/make-dumps.py` in the site repo, then rebuild, re-sign and deploy.
 
@@ -121,7 +121,7 @@ As of 2026-10-07, the launcher waits on nothing. The feed serves five released f
   3. It writes the notes line in the site's CHANGELOG.txt by hand, from this CHANGELOG: `fetch-release.sh` writes only "Release vX: builds in…", which would leave the update prompt with no notes.
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
-- **The first real self-update**: v1.0.0, v1.1.x and v1.2.0 installs now go straight to v1.3.0 (live 2026-10-07). No self-update has been seen happen yet, v1.2.0 → v1.3.0 included. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **The first real self-update**: v1.0.0 to v1.3.0 installs now go straight to v1.4.0 (live 2026-10-13). No self-update has been seen happen yet, v1.3.0 → v1.4.0 included. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
 - **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps

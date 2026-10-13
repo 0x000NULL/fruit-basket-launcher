@@ -5,9 +5,11 @@ installed fruit, installing and updating the fruits themselves, a downloads
 queue, and settings. Paper and night themes, three window sizes, and a couch
 mode for controllers.
 
-Five fruits are released today: Pomegranate (PS2), Strawberry (GBA),
-Crabapple (NES), Mulberry (SNES) and Olive (Game Boy and Game Boy Color).
-The rest show in the Basket as still growing.
+Twelve fruits are released today: Pomegranate (PS2), Strawberry (GBA),
+Fig (PS1), Crabapple (NES), Mulberry (SNES), Olive (Game Boy and Game Boy
+Color), Pear (DS), Plum (Genesis and Mega Drive), Cherry (Master System and
+Game Gear), Kiwi (PC Engine and TurboGrafx-16), Durian (Neo Geo) and Coconut
+(Atari 2600). The rest show in the Basket as still growing.
 
 It is built on the same crates as the emulators
 ([fruit-basket](https://github.com/0x000NULL/fruit-basket): `basket-ui`,
@@ -36,7 +38,8 @@ See [PROGRESS.md](PROGRESS.md) for what's left and [CHANGELOG.md](CHANGELOG.md) 
   - A failure says what happened on disk (usually: nothing changed), with Try again.
 - **Library.**
   - Everything the installed fruits can play, from each fruit's `games/` folder and any folders added with **Add folder…**.
-  - Zipped games too, for fruits that open zips themselves (Strawberry, Crabapple, Mulberry and Olive today): a zip goes to the fruit whose game is inside it.
+  - Zipped games too, for fruits that open zips themselves (every released fruit but Pomegranate and Fig today): a zip goes to the fruit whose game is inside it.
+  - Neo Geo sets (`mslug.zip`) go to Durian by the chips inside them. Loose chips and the Neo Geo BIOS are never listed.
   - Game Boy games say GB or GBC, from the cartridge header, and FIND matches it.
   - **Play** or **Continue** starts the game in its fruit. The launcher keeps last played and play time.
   - Compat squares come from each fruit's compatibility list on the site. Where the site has a No-Intro or Redump list, each game is checked against it.
