@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.5.0
+
+- **An icon for Kumquat**, the PSP fruit (No. 14), paper and night, so it shows its own fruit everywhere the others do.
+
 ## v1.4.0
 
 - **Icons for Plum, Cherry, Kiwi, Durian and Coconut**, paper and night, so the five new fruits show their own pixel fruit everywhere the others do.
