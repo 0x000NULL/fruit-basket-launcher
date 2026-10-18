@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Saturn and Dreamcast discs are told apart from the others** in an extra folder, ready for Peach (Saturn) and Orange (Dreamcast). A Saturn disc is recognised by `SEGA SEGASATURN ` at the start of its first sector (`.iso`, or the first file of a `.cue`). A Dreamcast disc is recognised by `SEGA SEGAKATANA ` at the start of track 3, its high-density data track, through a `.gdi` or a `.cue`. It goes to the fruit whose `system` is `Saturn` or `Dreamcast`. As before, a `.chd`, or a disc the launcher cannot tell, goes to the lowest-numbered fruit.
 - **Installs and launcher updates ride out a virus scan.** On Windows, a virus scanner can still be reading a newly unpacked emulator for a moment. Moving its folder into place then failed with "Access is denied", about once in a thousand installs. The launcher now waits and tries again for up to about 2 seconds, but only for that error and the matching sharing error. Any other problem fails at once, as before.
 
 ## v1.6.0 — 2026-10-18

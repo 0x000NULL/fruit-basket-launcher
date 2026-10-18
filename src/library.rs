@@ -753,7 +753,9 @@ pub(crate) mod tests {
         let fig = sys("fig", "PS1", &[".cue", ".chd", ".iso", ".m3u"]);
         let mango = sys("mango", "GameCube", &[".iso", ".gcm", ".ciso"]);
         let kumquat = sys("kumquat", "PSP", &[".iso", ".cso", ".chd", ".pbp"]);
-        let got = scan(&b, &[&pom, &fig, &mango, &kumquat], std::slice::from_ref(&extra), &[]);
+        put("Nights.iso", &crate::probe::tests::sega_sector(b"SEGA SEGASATURN ", 0));
+        let peach = sys("peach", "Saturn", &[".cue", ".chd", ".iso", ".m3u"]);
+        let got = scan(&b, &[&pom, &fig, &mango, &peach, &kumquat], std::slice::from_ref(&extra), &[]);
         let mut by: Vec<(&str, &str)> = got.iter().map(|g| (g.title.as_str(), g.fruit.as_str())).collect();
         by.sort();
         assert_eq!(
@@ -766,6 +768,7 @@ pub(crate) mod tests {
                 ("Lumines", "kumquat"),
                 ("Melee", "mango"),
                 ("Mystery", "pomegranate"),
+                ("Nights", "peach"),
                 ("Wind Waker", "mango"),
             ]
         );

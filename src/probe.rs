@@ -8,8 +8,12 @@
 //! - PSP: the ISO9660 volume's system identifier, `PSP GAME`.
 //! - PS2 / PS1: SYSTEM.CNF in the root directory says `BOOT2` or `BOOT`.
 //!   Cooked (2048) and raw (2352, mode 1 or 2) sectors are both read.
-//! - `.cue`: the first `FILE` it names. `.zip`: its first disc-like entry,
-//!   read in place when stored, inflated only as far as needed otherwise.
+//! - Saturn: `SEGA SEGASATURN ` at the start of sector 0. Dreamcast:
+//!   `SEGA SEGAKATANA ` at the start of IP.BIN, the first sector of track 3
+//!   (the high-density data track). Cooked or raw (16-byte header) sectors.
+//! - `.cue`: the first `FILE` it names, then (for a Dreamcast) track 3's.
+//!   `.gdi`: track 3's file. `.zip`: its first disc-like entry, read in
+//!   place when stored, inflated only as far as needed otherwise.
 //! - `.chd`: nothing cheap tells PS1 from PS2 without decompressing a
 //!   hunk, so it stays unknown.
 //!
@@ -35,6 +39,8 @@ pub enum Kind {
     Ps2,
     Ps1,
     Psp,
+    Saturn,
+    Dreamcast,
 }
 
 impl Kind {
@@ -45,6 +51,8 @@ impl Kind {
             Kind::Ps2 => "PS2",
             Kind::Ps1 => "PS1",
             Kind::Psp => "PSP",
+            Kind::Saturn => "Saturn",
+            Kind::Dreamcast => "Dreamcast",
         }
     }
 }
@@ -125,10 +133,12 @@ pub fn probe(path: &Path) -> Option<Kind> {
         zip(path)
     } else if name.ends_with(".cue") {
         cue(path)
+    } else if name.ends_with(".gdi") {
+        gdi(path)
     } else if name.ends_with(".chd") {
         None
     } else {
-        image(&mut Seekable { f: File::open(path).ok()?, base: 0 })
+        image(&mut open(path)?)
     }
 }
 
@@ -172,7 +182,26 @@ impl<R: Read> At for Stream<R> {
 }
 
 fn image(src: &mut impl At) -> Option<Kind> {
-    gamecube(src).or_else(|| iso(src))
+    gamecube(src).or_else(|| sega(src)).or_else(|| iso(src))
+}
+
+/// A Saturn or Dreamcast boot sector at the start of `src`, cooked or raw.
+fn sega(src: &mut impl At) -> Option<Kind> {
+    [0, 16].into_iter().find_map(|head| {
+        let mut id = [0u8; 16];
+        if !src.at(head, &mut id) {
+            return None;
+        }
+        match &id {
+            b"SEGA SEGASATURN " => Some(Kind::Saturn),
+            b"SEGA SEGAKATANA " => Some(Kind::Dreamcast),
+            _ => None,
+        }
+    })
+}
+
+fn open(path: &Path) -> Option<Seekable> {
+    Some(Seekable { f: File::open(path).ok()?, base: 0 })
 }
 
 fn gamecube(src: &mut impl At) -> Option<Kind> {
@@ -244,18 +273,52 @@ fn u32le(b: &[u8]) -> u32 {
     u32::from_le_bytes(b[..4].try_into().unwrap())
 }
 
-/// A cue sheet: probe the first file it names, beside it.
+/// A cue sheet: probe the first file it names, beside it; failing that,
+/// look for a Dreamcast's IP.BIN in track 3's file.
 fn cue(path: &Path) -> Option<Kind> {
+    let text = small_text(path)?;
+    // (file, first track in it), in order.
+    let mut files: Vec<(&str, u32)> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        let (key, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
+        let rest = rest.trim();
+        if key.eq_ignore_ascii_case("FILE") {
+            let name = match rest.strip_prefix('"') {
+                Some(q) => q.split('"').next(),
+                None => rest.split_whitespace().next(),
+            };
+            files.extend(name.map(|n| (n, 0)));
+        } else if key.eq_ignore_ascii_case("TRACK")
+            && let Some(last) = files.last_mut().filter(|f| f.1 == 0)
+        {
+            last.1 = rest.split_whitespace().next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        }
+    }
+    let dir = path.parent()?;
+    if let Some(k) = image(&mut open(&dir.join(files.first()?.0))?) {
+        return Some(k);
+    }
+    let (three, _) = files.iter().find(|f| f.1 == 3)?;
+    sega(&mut open(&dir.join(three))?).filter(|k| *k == Kind::Dreamcast)
+}
+
+/// A GD-ROM sheet (`count`, then `track lba type sector_size file offset`
+/// a line): IP.BIN starts track 3's file.
+fn gdi(path: &Path) -> Option<Kind> {
+    let text = small_text(path)?;
+    let line = text.lines().skip(1).map(str::trim).find(|l| l.split_whitespace().next() == Some("3"))?;
+    let name = match line.split_once('"') {
+        Some((_, q)) => q.split('"').next()?,
+        None => line.split_whitespace().nth(4)?,
+    };
+    sega(&mut open(&path.parent()?.join(name))?).filter(|k| *k == Kind::Dreamcast)
+}
+
+/// A cue or gdi sheet's text, never more than 64 KB of it.
+fn small_text(path: &Path) -> Option<String> {
     let mut text = String::new();
     File::open(path).ok()?.take(64 << 10).read_to_string(&mut text).ok()?;
-    let line = text.lines().map(str::trim).find(|l| l.len() > 5 && l[..5].eq_ignore_ascii_case("FILE "))?;
-    let rest = line[5..].trim();
-    let name = match rest.strip_prefix('"') {
-        Some(q) => q.split('"').next()?,
-        None => rest.split_whitespace().next()?,
-    };
-    let bin = path.parent()?.join(name);
-    image(&mut Seekable { f: File::open(bin).ok()?, base: 0 })
+    Some(text)
 }
 
 /// A zip: probe its first disc-like entry.
@@ -393,6 +456,50 @@ pub(crate) mod tests {
         assert_eq!(probe(&t.path().join("dq8.cue")), Some(Kind::Ps2));
         fs::write(t.path().join("lost.cue"), "FILE \"gone.bin\" BINARY\n").unwrap();
         assert_eq!(probe(&t.path().join("lost.cue")), None);
+    }
+
+    /// A Saturn or Dreamcast boot sector, `head` bytes into sector 0.
+    pub(crate) fn sega_sector(id: &[u8; 16], head: usize) -> Vec<u8> {
+        let size = if head == 0 { 2048 } else { 2352 };
+        let mut img = vec![0u8; size * 16];
+        img[head..head + 16].copy_from_slice(id);
+        img
+    }
+
+    #[test]
+    fn probes_saturn_and_dreamcast() {
+        let t = tempfile::tempdir().unwrap();
+        let p = |n: &str| t.path().join(n);
+        let put = |n: &str, d: &[u8]| fs::write(p(n), d).unwrap();
+        put("Nights.iso", &sega_sector(b"SEGA SEGASATURN ", 0));
+        assert_eq!(probe(&p("Nights.iso")), Some(Kind::Saturn));
+        put("Nights (Track 1).bin", &sega_sector(b"SEGA SEGASATURN ", 16));
+        put("Nights (Track 2).bin", &[0u8; 4704]);
+        put("Nights.cue", b"FILE \"Nights (Track 1).bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\nFILE \"Nights (Track 2).bin\" BINARY\n  TRACK 02 AUDIO\n");
+        assert_eq!(probe(&p("Nights.cue")), Some(Kind::Saturn));
+
+        // Redump's Dreamcast cue: a low-density data track, audio, then
+        // the high-density track whose first sector is IP.BIN.
+        put("SA (Track 1).bin", &iso_image("", None));
+        put("SA (Track 2).bin", &[0u8; 4704]);
+        put("SA (Track 3).bin", &sega_sector(b"SEGA SEGAKATANA ", 16));
+        put(
+            "SA.cue",
+            b"FILE \"SA (Track 1).bin\" BINARY\n  TRACK 01 MODE1/2352\nFILE \"SA (Track 2).bin\" BINARY\n  TRACK 02 AUDIO\nFILE \"SA (Track 3).bin\" BINARY\n  TRACK 03 MODE1/2352\n",
+        );
+        assert_eq!(probe(&p("SA.cue")), Some(Kind::Dreamcast));
+        put("SA.gdi", b"3\r\n1 0 4 2352 \"SA (Track 1).bin\" 0\r\n2 756 0 2352 \"SA (Track 2).bin\" 0\r\n3 45000 4 2352 \"SA (Track 3).bin\" 0\r\n");
+        assert_eq!(probe(&p("SA.gdi")), Some(Kind::Dreamcast));
+        put("track03.iso", &sega_sector(b"SEGA SEGAKATANA ", 0));
+        put("cooked.gdi", b"3\n1 0 4 2048 track01.iso 0\n2 600 0 2352 track02.raw 0\n3 45000 4 2048 track03.iso 0\n");
+        assert_eq!(probe(&p("cooked.gdi")), Some(Kind::Dreamcast));
+
+        // Track 3 of something else is not a Dreamcast; a gdi with no track 3.
+        put("Other (Track 3).bin", &sega_sector(b"SEGA SEGASATURN ", 16));
+        put("Other.cue", b"FILE \"SA (Track 2).bin\" BINARY\n  TRACK 01 AUDIO\nFILE \"Other (Track 3).bin\" BINARY\n  TRACK 03 MODE1/2352\n");
+        assert_eq!(probe(&p("Other.cue")), None);
+        put("short.gdi", b"1\n1 0 4 2352 \"SA (Track 3).bin\" 0\n");
+        assert_eq!(probe(&p("short.gdi")), None);
     }
 
     #[test]
