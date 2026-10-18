@@ -13,7 +13,7 @@ use std::process::Command;
 use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 
-use crate::basket::{extract, find_exe, write_atomic};
+use crate::basket::{extract, find_exe, rename_fresh, write_atomic};
 use crate::feed::Asset;
 
 pub const BIN: &str = "fruitbasket";
@@ -121,7 +121,8 @@ fn stage(build: &str, asset: &Asset, dir: &Path, fetch: &mut Fetch, check: &Chec
         check(&exe, build)?;
         let at = dir.join(build);
         let _ = fs::remove_dir_all(&at);
-        fs::rename(&tmp, &at).map_err(|e| err("staging", e))?;
+        // Just extracted and just run: a scanner may still hold the exe.
+        rename_fresh(&tmp, &at).map_err(|e| err("staging", e))?;
         let exe = find_exe(&at, BIN).ok_or_else(|| format!("no {BIN} in {}", asset.name))?;
         write_atomic(&dir.join("staged"), format!("{build}\t{}\n", exe.display()).as_bytes()).map_err(|e| err("staging", e))?;
         Ok(exe)

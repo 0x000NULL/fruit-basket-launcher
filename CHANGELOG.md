@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Installs and launcher updates ride out a virus scan.** On Windows, a virus scanner can still be reading a newly unpacked emulator for a moment. Moving its folder into place then failed with "Access is denied", about once in a thousand installs. The launcher now waits and tries again for up to about 2 seconds, but only for that error and the matching sharing error. Any other problem fails at once, as before.
+
 ## v1.6.0 — 2026-10-18
 
 - **PSP games in an extra folder now open in Kumquat.** A PSP `.iso` in one of your folders used to open in Pomegranate, the PS2 emulator, because both list `.iso`. The launcher now sees that it is a PSP disc.

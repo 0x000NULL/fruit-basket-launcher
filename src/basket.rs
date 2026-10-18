@@ -16,6 +16,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use crate::feed::Channel;
 
@@ -128,7 +129,7 @@ impl Basket {
         if dest.exists() {
             fs::remove_dir_all(&dest)?;
         }
-        fs::rename(&tmp, &dest)?;
+        rename_fresh(&tmp, &dest)?;
         // `builds()` orders by this marker's mtime.
         touch(&dest)?;
         self.switch(fruit, Current { build: build.to_string(), channel }, carry)?;
@@ -252,11 +253,38 @@ fn flatten(dir: &Path) -> io::Result<PathBuf> {
         if lifted.exists() {
             fs::remove_dir_all(&lifted)?;
         }
-        fs::rename(&inner, &lifted)?;
+        rename_fresh(&inner, &lifted)?;
         fs::remove_dir(dir)?;
-        fs::rename(&lifted, dir)?;
+        rename_fresh(&lifted, dir)?;
     }
     Ok(dir.to_path_buf())
+}
+
+/// Tries of `rename_fresh`, and the longest wait between two.
+const RENAME_TRIES: u32 = 9;
+const RENAME_WAIT_MAX: Duration = Duration::from_millis(500);
+
+/// Rename a folder that was just extracted. On Windows a virus scanner
+/// (Defender) may still have a new exe inside it open, and while it does,
+/// renaming the folder fails with ERROR_ACCESS_DENIED (os error 5), or a
+/// file with ERROR_SHARING_VIOLATION (32). Measured: about 1 install in
+/// 1000 here, at the `.tmp` to build-folder rename. Only those two errors
+/// are retried, on Windows only, with waits from 20 ms doubling to 500 ms
+/// (about 2 s over 9 tries); any other error returns at once, and the
+/// last try's error is returned as it is, so a real permission problem
+/// still fails.
+pub fn rename_fresh(from: &Path, to: &Path) -> io::Result<()> {
+    let mut wait = Duration::from_millis(20);
+    for _ in 1..RENAME_TRIES {
+        match fs::rename(from, to) {
+            Err(e) if cfg!(windows) && matches!(e.raw_os_error(), Some(5 | 32)) => {
+                std::thread::sleep(wait);
+                wait = (wait * 2).min(RENAME_WAIT_MAX);
+            }
+            done => return done,
+        }
+    }
+    fs::rename(from, to)
 }
 
 /// One path component: no separators, no `..`.
@@ -389,6 +417,43 @@ mod tests {
     fn hex_matches_the_feeds_sums() {
         use sha2::{Digest, Sha256};
         assert_eq!(hex(&Sha256::digest(b"abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    }
+
+    /// A folder with a file held open, no sharing, the way a scanner holds
+    /// a new exe: renaming the folder fails with os error 5 until it lets go.
+    #[cfg(windows)]
+    fn held(dir: &Path) -> fs::File {
+        use std::os::windows::fs::OpenOptionsExt;
+        fs::create_dir_all(dir).unwrap();
+        fs::write(dir.join("berry.exe"), b"MZ").unwrap();
+        fs::OpenOptions::new().read(true).share_mode(0).open(dir.join("berry.exe")).unwrap()
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn renames_wait_for_a_scanner_to_let_go() {
+        use std::time::Instant;
+        let t = tempfile::tempdir().unwrap();
+        let (from, to) = (t.path().join("v1.tmp"), t.path().join("v1"));
+        let file = held(&from);
+        assert_eq!(fs::rename(&from, &to).unwrap_err().raw_os_error(), Some(5), "the case being retried");
+        let letgo = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(150));
+            drop(file);
+        });
+        rename_fresh(&from, &to).unwrap();
+        letgo.join().unwrap();
+        assert!(to.join("berry.exe").is_file());
+
+        // Held for good: the same error, after a bounded wait.
+        let (from, to) = (t.path().join("v2.tmp"), t.path().join("v2"));
+        let _file = held(&from);
+        let start = Instant::now();
+        assert_eq!(rename_fresh(&from, &to).unwrap_err().raw_os_error(), Some(5));
+        assert!(start.elapsed() < Duration::from_secs(4));
+
+        // Any other error comes back as it is.
+        assert_eq!(rename_fresh(&t.path().join("missing"), &to).unwrap_err().kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
