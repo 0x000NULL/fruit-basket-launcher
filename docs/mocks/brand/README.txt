@@ -6,13 +6,13 @@ Emulators and recompilers, one fruit for each console. The red is the seeds.
   No. 3   Grenadine     PS2 recomp pipeline (Pomegranate, pressed)
   No. 4   Fig           PS1 emulator
   No. 5   Starfruit     N64 emulator
-  No. 6   Mangosteen    GameCube emulator
+  No. 6   Mango         GameCube emulator
   No. 7   Crabapple     NES emulator
   No. 8   Mulberry      SNES emulator
   No. 9   Olive         Game Boy and Game Boy Color emulator
   No. 10  Pear          DS and DSi emulator
 
-  Sharp marks:  Pomegranate, Grenadine, Fig, Starfruit, Mangosteen
+  Sharp marks:  Pomegranate, Grenadine, Fig, Starfruit, Mango
   Pixel marks:  Strawberry, Crabapple, Mulberry, Olive, Pear (16 x 16 sprites)
 
 FOLDERS

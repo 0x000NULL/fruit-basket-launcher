@@ -72,6 +72,8 @@ downloaded. The banner offers the asset's URL instead.
 <config dir>/fruitbasket/settings.toml   (settings.rs, via basket_app::prefs)
 ```
 
+Everything installed is keyed by the fruit's feed id: `<fruit>/` above, `watch` in settings.toml, and the path-keyed files under `launcher/` (played, sessions, favorites, hashes, `hidden`), whose games paths include `<fruit>/`. **Renaming a released fruit's feed id needs a basket migration**: move `<old>/` to `<new>/`, then rewrite `watch` and the paths, as `rebase` does for a basket move. Without one, installs see nothing installed, and their games and saves are orphaned, not deleted. A fruit that was never released (Mango, once Mangosteen) can be renamed freely. Its old id needs only an icon alias (`art.rs` `ALIASES`) until the feed changes.
+
 ### Saves: `carry` and `{data}`
 
 An emulator that keeps saves and settings beside its exe names them in the
@@ -137,7 +139,7 @@ Pomegranate would otherwise copy back).
 | `shelf.rs` | the Library's state: games, lists, hashing, the running game (from a slot, with couch arguments), `view()`, `couch_rows()` |
 | `settings.rs` | `Settings` (with `[gamepad]`, the launcher's controller map), unknown keys kept |
 | `platform.rs` | OS dark mode, free space, screen size, open / reveal, `~` paths |
-| `art.rs` | fruit icons (128 px, drawn at 64 and 32) and the basket mark |
+| `art.rs` | fruit icons (128 px, drawn at 64 and 32) and the basket mark; `ALIASES` draws an old feed id with a renamed fruit's icon (`mangosteen` → `mango`) |
 | `window.rs` | the `minifb` window and input gathering; couch mode remakes it borderless at the screen's size |
 | `ui/mod.rs` | `Tab`, `Size` (regular ≥ 1180, compact ≥ 820, narrow), `Cmd`, the `Ui` drawing context and shared controls |
 | `ui/frame.rs` | header (tabs, FIND, Update all, couch button), the banner (launcher update, ripe fruit), footer |
