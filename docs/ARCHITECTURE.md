@@ -72,6 +72,8 @@ downloaded. The banner offers the asset's URL instead.
 <config dir>/fruitbasket/settings.toml   (settings.rs, via basket_app::prefs)
 ```
 
+Everything installed is keyed by the fruit's feed id: `<fruit>/` above, `watch` in settings.toml, and the path-keyed files under `launcher/` (played, sessions, favorites, hashes, `hidden`), whose games paths include `<fruit>/`. **Renaming a released fruit's feed id needs a basket migration**: move `<old>/` to `<new>/`, then rewrite `watch` and the paths, as `rebase` does for a basket move. Without one, installs see nothing installed, and their games and saves are orphaned, not deleted. A fruit that was never released (Mango, once Mangosteen) can be renamed freely. Its old id needs only an icon alias (`art.rs` `ALIASES`) until the feed changes.
+
 ### Saves: `carry` and `{data}`
 
 An emulator that keeps saves and settings beside its exe names them in the

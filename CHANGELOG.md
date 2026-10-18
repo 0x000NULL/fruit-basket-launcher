@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Icons for Mango, Orange and Peach**, paper and night. Mango (No. 6, GameCube) was Mangosteen: its new mark is a mango served cubed. It is drawn for the feed id `mango`, and for `mangosteen` until the feed renames it. Orange (No. 12, Dreamcast) and Peach (No. 13, Saturn) get their icons ahead of their releases.
+- **Icons for Mango, Orange and Peach**, paper and night. Mango (No. 6, GameCube) was Mangosteen: its new mark is a mango served cubed. It is drawn for the feed id `mango`, and for `mangosteen` until the feed renames it. This launcher must be live before the site renames the id. Orange (No. 12, Dreamcast) and Peach (No. 13, Saturn) get their icons ahead of their releases.
 - **Installs and launcher updates ride out a virus scan.** On Windows, a virus scanner can still be reading a newly unpacked emulator for a moment. Moving its folder into place then failed with "Access is denied", about once in a thousand installs. The launcher now waits and tries again for up to about 2 seconds, but only for that error and the matching sharing error. Any other problem fails at once, as before.
 
 ## v1.6.0 — 2026-10-18

@@ -122,6 +122,7 @@ As of 2026-10-13, the launcher waits on nothing. The feed serves twelve released
   4. It deploys.
 - **Check what ships first.** `gh workflow run release.yml` builds all four targets without releasing.
 - **The first real self-update**: v1.0.0 to v1.3.0 installs now go straight to v1.4.0 (live 2026-10-13). No self-update has been seen happen yet, v1.3.0 → v1.4.0 included. Only that proves the live path: the site URL, the year-long cache on release files, macOS and Linux.
+- **Mango's release, in this order.** First, the launcher with the mango icon and the `mangosteen` → `mango` alias (`art.rs` `ALIASES`, branch fruit-art) is released and mirrored. Only after that does the site rename the feed id from `mangosteen` to `mango`. Done the other way round, live launchers would show Mango with no icon. Drop the alias in a later release, once no live feed lists `mangosteen`. No basket migration is needed: Mango was never released, so no install has a `mangosteen` folder.
 - **A new couch-ready emulator release** needs only site work: set its `couch` key and raise `oldest` to the first build with the flags. No launcher change is needed.
 
 ## Known gaps
