@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Saturn and Dreamcast discs are told apart from the others** in an extra folder, ready for Peach (Saturn) and Orange (Dreamcast). A Saturn disc is recognised by `SEGA SEGASATURN ` at the start of its first sector (`.iso`, or the first file of a `.cue`). A Dreamcast disc is recognised by `SEGA SEGAKATANA ` at the start of track 3, its high-density data track, through a `.gdi` or a `.cue`. It goes to the fruit whose `system` is `Saturn` or `Dreamcast`. As before, a disc the launcher cannot tell goes to the lowest-numbered fruit.
+- **`.chd` discs are probed too.** Fig, Kumquat, Pomegranate, Peach and Orange all read CHDs. The launcher now opens one, reads the few hunks that hold the markers above, and decompresses only those. A GD-ROM CHD is a Dreamcast from its track list alone.
+  - Opening a CHD means reading its whole hunk map. This is about 50–100 KB for a CD, and up to a few MB for a dual-layer DVD. A CHD whose map is over 16 MB, or whose header is corrupt, stays unknown and goes by the old rule.
+  - CHDs are read with the [chd](https://crates.io/crates/chd) crate (BSD-3-Clause), the one Fig and Kumquat use. Its licence is in NOTICE.
 - **Saturn and Dreamcast discs are told apart from the others** in an extra folder, ready for Peach (Saturn) and Orange (Dreamcast). A Saturn disc is recognised by `SEGA SEGASATURN ` at the start of its first sector (`.iso`, or the first file of a `.cue`). A Dreamcast disc is recognised by `SEGA SEGAKATANA ` at the start of track 3, its high-density data track, through a `.gdi` or a `.cue`. It goes to the fruit whose `system` is `Saturn` or `Dreamcast`. As before, a `.chd`, or a disc the launcher cannot tell, goes to the lowest-numbered fruit.
 - **Installs and launcher updates ride out a virus scan.** On Windows, a virus scanner can still be reading a newly unpacked emulator for a moment. Moving its folder into place then failed with "Access is denied", about once in a thousand installs. The launcher now waits and tries again for up to about 2 seconds, but only for that error and the matching sharing error. Any other problem fails at once, as before.
 

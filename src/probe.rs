@@ -14,8 +14,10 @@
 //! - `.cue`: the first `FILE` it names, then (for a Dreamcast) track 3's.
 //!   `.gdi`: track 3's file. `.zip`: its first disc-like entry, read in
 //!   place when stored, inflated only as far as needed otherwise.
-//! - `.chd`: nothing cheap tells PS1 from PS2 without decompressing a
-//!   hunk, so it stays unknown.
+//! - `.chd`: a GD-ROM's track metadata says Dreamcast outright. A CD or
+//!   DVD is read through the hunks the markers above need (the chd crate
+//!   decompresses them; the last one is kept). Opening a CHD reads its
+//!   whole hunk map, so one whose map is over `MAP_LIMIT` stays unknown.
 //!
 //! Probes run on a thread and the scan waits at most `WAIT` for them, so a
 //! slow network share can't hang the window: what hasn't answered falls
@@ -66,6 +68,19 @@ const ROOT_SECTORS: u32 = 4;
 const GC_MAGIC: [u8; 4] = [0xC2, 0x33, 0x9F, 0x3D];
 /// Entries in a zip that may be a disc image.
 const DISC_EXT: [&str; 5] = [".iso", ".gcm", ".ciso", ".bin", ".img"];
+/// The largest CHD hunk map read. A dual-layer DVD (8.5 GB) in 2048-byte
+/// hunks has 4.15 M of them, and compressed maps run 1.7 to 2.2 bytes a
+/// hunk (measured on PSP CHDs), so about 9 MB: 16 MB holds every real disc
+/// with room to spare, and a 2 s wait still covers reading it from a share.
+const MAP_LIMIT: u64 = 16 << 20;
+/// The most hunks a CHD may have. The chd crate expands the map to 12 bytes
+/// a hunk before reading it, so a corrupt count must not get that far:
+/// 4.5 M covers the dual-layer DVD above (54 MB, briefly).
+const HUNK_COUNT_LIMIT: u64 = 4_500_000;
+/// The largest hunk (CD hunks are 19584 bytes, DVD ones 2048 or 4096).
+const HUNK_LIMIT: u32 = 1 << 20;
+/// Hunks one probe may decompress.
+const HUNK_READS: u32 = 32;
 
 type Key = (PathBuf, u64, i64);
 static CACHE: LazyLock<Mutex<HashMap<Key, Option<Kind>>>> = LazyLock::new(Mutex::default);
@@ -136,7 +151,7 @@ pub fn probe(path: &Path) -> Option<Kind> {
     } else if name.ends_with(".gdi") {
         gdi(path)
     } else if name.ends_with(".chd") {
-        None
+        chd(path)
     } else {
         image(&mut open(path)?)
     }
@@ -321,6 +336,149 @@ fn small_text(path: &Path) -> Option<String> {
     Some(text)
 }
 
+/// A CHD: GD-ROM metadata is a Dreamcast; a CD or DVD is read through its
+/// hunks like any other image. Unknown when the map is too big, and on any
+/// error or panic inside the chd crate.
+fn chd(path: &Path) -> Option<Kind> {
+    let mut f = File::open(path).ok()?;
+    let mut head = [0u8; 124];
+    let n = f.read(&mut head).ok()?;
+    let (map, hunks, hunk) = chd_sizes(&head[..n], &mut f)?;
+    if map > MAP_LIMIT || hunks > HUNK_COUNT_LIMIT || hunk == 0 || hunk > HUNK_LIMIT {
+        return None;
+    }
+    f.seek(SeekFrom::Start(0)).ok()?;
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| chd_kind(f))).ok().flatten()
+}
+
+fn be32(b: &[u8], at: usize) -> u32 {
+    u32::from_be_bytes(b[at..at + 4].try_into().unwrap())
+}
+
+fn be64(b: &[u8], at: usize) -> u64 {
+    u64::from_be_bytes(b[at..at + 8].try_into().unwrap())
+}
+
+/// From a CHD header: the bytes its map takes, its hunk count and hunk size.
+fn chd_sizes(head: &[u8], f: &mut File) -> Option<(u64, u64, u32)> {
+    if head.len() < 64 || &head[..8] != b"MComprHD" {
+        return None;
+    }
+    match be32(head, 12) {
+        5 if head.len() >= 124 => {
+            let hunk = be32(head, 56);
+            let hunks = be64(head, 32).div_ceil(hunk.max(1) as u64);
+            // No compressors: 4 bytes a hunk. Otherwise the compressed
+            // map's own header says how long it is.
+            let map = if be32(head, 16) == 0 {
+                hunks * 4
+            } else {
+                let mut len = [0u8; 4];
+                f.seek(SeekFrom::Start(be64(head, 40))).ok()?;
+                f.read_exact(&mut len).ok()?;
+                16 + u32::from_be_bytes(len) as u64
+            };
+            Some((map, hunks, hunk))
+        }
+        3 | 4 => {
+            let hunks = be32(head, 24) as u64;
+            let hunk = be32(head, if be32(head, 12) == 3 { 76 } else { 44 });
+            Some((hunks * 16, hunks, hunk))
+        }
+        _ => None,
+    }
+}
+
+const fn tag(t: &[u8; 4]) -> u32 {
+    u32::from_be_bytes(*t)
+}
+
+fn chd_kind(f: File) -> Option<Kind> {
+    let mut chd = chd::Chd::open(io::BufReader::new(f), None).ok()?;
+    let refs: Vec<_> = chd.metadata_refs().collect();
+    // (virtual sector, bytes per stored frame).
+    let mut layout = None;
+    for r in &refs {
+        use chd::metadata::MetadataTag;
+        match r.metatag() {
+            t if t == tag(b"CHGD") || t == tag(b"CHGT") => return Some(Kind::Dreamcast),
+            t if t == tag(b"DVD ") => layout = layout.or(Some((2048, 2048))),
+            t if t == tag(b"CHT2") || t == tag(b"CHTR") => {
+                if layout.is_none() {
+                    // The first track: a cooked one keeps 2048 bytes a frame.
+                    let text = r.read(chd.inner()).ok()?.value;
+                    let text = String::from_utf8_lossy(&text);
+                    let kind = text.split_whitespace().find_map(|w| w.strip_prefix("TYPE:")).unwrap_or("");
+                    let cooked = kind == "MODE1" || kind == "MODE2_FORM1";
+                    layout = Some((if cooked { 2048 } else { 2352 }, 2448));
+                }
+            }
+            t if t == tag(b"CHCD") => layout = layout.or(Some((2352, 2448))),
+            _ => {}
+        }
+    }
+    let (sector, frame) = layout?;
+    let buf = chd.get_hunksized_buffer();
+    image(&mut ChdAt { chd, sector, frame, hunk: None, buf, cmp: Vec::new(), reads: 0 })
+}
+
+/// A CHD's data as a plain image: `sector`-byte sectors, each stored at the
+/// start of a `frame`-byte frame (a CD frame carries 96 subcode bytes).
+struct ChdAt<F: Read + Seek> {
+    chd: chd::Chd<F>,
+    sector: u64,
+    frame: u64,
+    hunk: Option<u32>,
+    buf: Vec<u8>,
+    cmp: Vec<u8>,
+    reads: u32,
+}
+
+impl<F: Read + Seek> ChdAt<F> {
+    /// Fill `out` from byte `off` of the CHD's logical data.
+    fn raw(&mut self, mut off: u64, out: &mut [u8]) -> bool {
+        let size = self.buf.len() as u64;
+        let mut done = 0;
+        while done < out.len() {
+            let h = u32::try_from(off / size).unwrap_or(u32::MAX);
+            if self.hunk != Some(h) {
+                self.hunk = None;
+                if self.reads >= HUNK_READS {
+                    return false;
+                }
+                self.reads += 1;
+                let Ok(mut hunk) = self.chd.hunk(h) else { return false };
+                if hunk.read_hunk_in(&mut self.cmp, &mut self.buf).is_err() {
+                    return false;
+                }
+                self.hunk = Some(h);
+            }
+            let at = (off % size) as usize;
+            let n = (out.len() - done).min(self.buf.len() - at);
+            out[done..done + n].copy_from_slice(&self.buf[at..at + n]);
+            done += n;
+            off += n as u64;
+        }
+        true
+    }
+}
+
+impl<F: Read + Seek> At for ChdAt<F> {
+    fn at(&mut self, off: u64, buf: &mut [u8]) -> bool {
+        let mut done = 0;
+        while done < buf.len() {
+            let pos = off + done as u64;
+            let (s, within) = (pos / self.sector, pos % self.sector);
+            let n = (buf.len() - done).min((self.sector - within) as usize);
+            if !self.raw(s * self.frame + within, &mut buf[done..done + n]) {
+                return false;
+            }
+            done += n;
+        }
+        true
+    }
+}
+
 /// A zip: probe its first disc-like entry.
 fn zip(path: &Path) -> Option<Kind> {
     let mut z = zip::ZipArchive::new(io::BufReader::new(File::open(path).ok()?)).ok()?;
@@ -441,7 +599,6 @@ pub(crate) mod tests {
         assert_eq!(put("cnf-no-boot.iso", &iso_image("PLAYSTATION", Some("VMODE = PAL\r\n"))), None);
         assert_eq!(put("short.iso", b"CD001"), None);
         assert_eq!(put("empty.iso", b""), None);
-        assert_eq!(put("game.chd", b"MComprHD"), None);
         assert_eq!(probe(&t.path().join("missing.iso")), None);
     }
 
@@ -500,6 +657,114 @@ pub(crate) mod tests {
         assert_eq!(probe(&p("Other.cue")), None);
         put("short.gdi", b"1\n1 0 4 2352 \"SA (Track 3).bin\" 0\n");
         assert_eq!(probe(&p("short.gdi")), None);
+    }
+
+    /// A CHD v5 with no compressors (an uncompressed map) holding `data`
+    /// in `hunk`-byte hunks, and one metadata entry `meta` tagged `tag`.
+    pub(crate) fn chd_image(data: &[u8], hunk: u32, unit: u32, meta_tag: &[u8; 4], meta: &[u8]) -> Vec<u8> {
+        let hunks = (data.len() as u64).div_ceil(hunk as u64) as usize;
+        let map_at = 124u64;
+        let meta_at = map_at + 4 * hunks as u64;
+        let data_at = (meta_at + 16 + meta.len() as u64).div_ceil(hunk as u64) * hunk as u64;
+        let mut f = vec![0u8; 124];
+        f[..8].copy_from_slice(b"MComprHD");
+        f[8..12].copy_from_slice(&124u32.to_be_bytes());
+        f[12..16].copy_from_slice(&5u32.to_be_bytes());
+        f[32..40].copy_from_slice(&(data.len() as u64).to_be_bytes());
+        f[40..48].copy_from_slice(&map_at.to_be_bytes());
+        f[48..56].copy_from_slice(&meta_at.to_be_bytes());
+        f[56..60].copy_from_slice(&hunk.to_be_bytes());
+        f[60..64].copy_from_slice(&unit.to_be_bytes());
+        for i in 0..hunks {
+            f.extend_from_slice(&((data_at / hunk as u64) as u32 + i as u32).to_be_bytes());
+        }
+        f.extend_from_slice(meta_tag);
+        f.extend_from_slice(&(meta.len() as u32).to_be_bytes());
+        f.extend_from_slice(&0u64.to_be_bytes());
+        f.extend_from_slice(meta);
+        f.resize(data_at as usize, 0);
+        f.extend_from_slice(data);
+        f.resize(data_at as usize + hunks * hunk as usize, 0);
+        f
+    }
+
+    /// Raw 2352-byte sectors as CD frames: 96 subcode bytes after each.
+    fn frames(raw: &[u8]) -> Vec<u8> {
+        raw.chunks(2352).flat_map(|s| s.iter().copied().chain([0u8; 96])).collect()
+    }
+
+    const CHT2: &[u8] = b"TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:24 PREGAP:0 PGTYPE:MODE1 PGSUB:RW POSTGAP:0\0";
+
+    #[test]
+    fn probes_chds() {
+        let t = tempfile::tempdir().unwrap();
+        let p = |n: &str| t.path().join(n);
+        let put = |n: &str, d: &[u8]| {
+            fs::write(p(n), d).unwrap();
+            probe(&p(n))
+        };
+        let cd = |raw: &[u8], meta: &[u8]| chd_image(&frames(raw), 2448 * 8, 2448, b"CHT2", meta);
+        assert_eq!(put("ff7.chd", &cd(&raw_image(24, "PLAYSTATION", Some(PS1_CNF)), CHT2)), Some(Kind::Ps1));
+        assert_eq!(put("ico-cd.chd", &cd(&raw_image(24, "PLAYSTATION", Some(PS2_CNF)), CHT2)), Some(Kind::Ps2));
+        let mode1 = String::from_utf8(CHT2.to_vec()).unwrap().replace("MODE2_RAW", "MODE1_RAW");
+        assert_eq!(put("nights.chd", &cd(&sega_sector(b"SEGA SEGASATURN ", 16), mode1.as_bytes())), Some(Kind::Saturn));
+        // A cooked track keeps 2048 bytes at the start of each frame.
+        let cooked: Vec<u8> = iso_image("PLAYSTATION", Some(PS1_CNF)).chunks(2048).flat_map(|s| s.iter().copied().chain([0u8; 400])).collect();
+        let cooked_meta = String::from_utf8(CHT2.to_vec()).unwrap().replace("MODE2_RAW", "MODE1");
+        assert_eq!(put("cooked.chd", &chd_image(&cooked, 2448 * 8, 2448, b"CHT2", cooked_meta.as_bytes())), Some(Kind::Ps1));
+        let dvd = |img: &[u8]| chd_image(img, 4096, 2048, b"DVD ", b"\0");
+        assert_eq!(put("ffx.chd", &dvd(&iso_image("PLAYSTATION", Some(PS2_CNF)))), Some(Kind::Ps2));
+        assert_eq!(put("lumines.chd", &dvd(&iso_image("PSP GAME", None))), Some(Kind::Psp));
+        // GD-ROM metadata alone: no hunk is read (these hunks hold nothing).
+        let gd = b"TRACK:1 TYPE:MODE1 SUBTYPE:NONE FRAMES:300 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0";
+        assert_eq!(put("sa.chd", &chd_image(&[0u8; 2448 * 8], 2448 * 8, 2448, b"CHGD", gd)), Some(Kind::Dreamcast));
+        // A hard disk image, a disc that says nothing.
+        assert_eq!(put("hdd.chd", &chd_image(&[0u8; 4096], 4096, 512, b"GDDD", b"CYLS:1,HEADS:1,SECS:8,BPS:512\0")), None);
+        assert_eq!(put("blank.chd", &dvd(&[0u8; 40960])), None);
+    }
+
+    #[test]
+    fn corrupt_chds_are_unknown() {
+        let t = tempfile::tempdir().unwrap();
+        let p = |n: &str| t.path().join(n);
+        let put = |n: &str, d: &[u8]| {
+            fs::write(p(n), d).unwrap();
+            probe(&p(n))
+        };
+        let good = chd_image(&iso_image("PSP GAME", None), 4096, 2048, b"DVD ", b"\0");
+        assert_eq!(put("good.chd", &good), Some(Kind::Psp));
+        assert_eq!(put("magic.chd", b"MComprHD"), None);
+        assert_eq!(put("empty.chd", b""), None);
+        assert_eq!(put("header.chd", &good[..100]), None);
+        // Cut off in the map, in the metadata, and in the data.
+        assert_eq!(put("map.chd", &good[..130]), None);
+        assert_eq!(put("meta.chd", &good[..124 + 4 * 10 + 8]), None);
+        assert_eq!(put("data.chd", &good[..good.len() - 30000]), None);
+        // Garbage everywhere after a valid header.
+        let mut junk = good.clone();
+        for (i, b) in junk.iter_mut().enumerate().skip(124) {
+            *b = (i * 7919 % 251) as u8;
+        }
+        assert_eq!(put("junk.chd", &junk), None);
+        // A compressed map with a garbage header and table.
+        let mut comp = good.clone();
+        comp[16..20].copy_from_slice(b"zlib");
+        assert_eq!(put("comp.chd", &comp), None);
+        // Sizes past the limits are refused before the crate sees them.
+        let mut big = good.clone();
+        big[32..40].copy_from_slice(&(1u64 << 40).to_be_bytes());
+        assert_eq!(put("hunks.chd", &big), None);
+        let mut huge = good.clone();
+        huge[56..60].copy_from_slice(&(64u32 << 20).to_be_bytes());
+        assert_eq!(put("hunk.chd", &huge), None);
+        let mut map = good.clone();
+        map[16..20].copy_from_slice(b"zlib");
+        let at = be64(&map, 40) as usize;
+        map[at..at + 4].copy_from_slice(&(MAP_LIMIT as u32).to_be_bytes());
+        assert_eq!(put("bigmap.chd", &map), None);
+        let mut v9 = good;
+        v9[12..16].copy_from_slice(&9u32.to_be_bytes());
+        assert_eq!(put("v9.chd", &v9), None);
     }
 
     #[test]
