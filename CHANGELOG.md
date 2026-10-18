@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## v1.6.0 — 2026-10-18
 
+- **PSP games in an extra folder now open in Kumquat.** A PSP `.iso` in one of your folders used to open in Pomegranate, the PS2 emulator, because both list `.iso`. The launcher now sees that it is a PSP disc.
 - **Discs in an extra folder find the right emulator.** `.iso`, `.cue`, `.chd` and `.zip` are shared between fruits: Pomegranate (PS2), Fig (PS1), Kumquat (PSP) and soon Mango (GameCube). Until now such a file went to the lowest-numbered fruit that lists the extension, so a PS1 or PSP disc opened in Pomegranate. Now, when more than one installed fruit claims a file in an extra folder, the launcher reads a few KB of it:
   - a GameCube disc by its header (`.iso`, `.gcm`, and `.ciso`);
   - a PSP disc by its volume's system name;
