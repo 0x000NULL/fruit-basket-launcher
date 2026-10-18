@@ -35,6 +35,12 @@ pub struct Game {
 /// in an extra folder goes to the fruit that plays it (`plays`); when
 /// several do, to the one `probe` names, else the first.
 pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[PathBuf]) -> Vec<Game> {
+    scan_late(basket, fruits, extra, hidden).0
+}
+
+/// `scan`, plus the disc probes it stopped waiting for: a file they cover
+/// went by feed order this time.
+pub fn scan_late(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[PathBuf]) -> (Vec<Game>, Option<probe::Late>) {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut add = |path: PathBuf, fruit: &Fruit, out: &mut Vec<Game>| {
@@ -64,12 +70,12 @@ pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[Pat
             }
         }
     }
-    let kinds = probe::kinds(found.iter().filter(|(_, c)| c.len() > 1).map(|(p, _)| p.clone()).collect());
+    let (kinds, late) = probe::kinds(found.iter().filter(|(_, c)| c.len() > 1).map(|(p, _)| p.clone()).collect());
     for (path, claims) in found {
         let f = probe::pick(&claims, kinds.get(&path).copied().flatten());
         add(path, f, &mut out);
     }
-    out
+    (out, late)
 }
 
 /// True if `fruit` plays the file at `path`: it has one of the fruit's

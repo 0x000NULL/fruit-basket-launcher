@@ -22,13 +22,14 @@
 //! Probes run on a thread and the scan waits at most `WAIT` for them, so a
 //! slow network share can't hang the window: what hasn't answered falls
 //! back to feed order, and the answer, when it comes, is cached by path,
-//! size and mtime for the next scan.
+//! size and mtime. The scan then hands back a `Late`, and the Library scans
+//! once more when it drains.
 
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use std::sync::{LazyLock, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -73,14 +74,47 @@ const DISC_EXT: [&str; 5] = [".iso", ".gcm", ".ciso", ".bin", ".img"];
 /// hunk (measured on PSP CHDs), so about 9 MB: 16 MB holds every real disc
 /// with room to spare, and a 2 s wait still covers reading it from a share.
 const MAP_LIMIT: u64 = 16 << 20;
-/// The most hunks a CHD may have. The chd crate expands the map to 12 bytes
-/// a hunk before reading it, so a corrupt count must not get that far:
-/// 4.5 M covers the dual-layer DVD above (54 MB, briefly).
+/// The most hunks a CHD may have. `Chd::open` allocates the expanded map,
+/// 12 bytes a hunk, from the header's count before it reads a byte of the
+/// map, so a corrupt count (say 2^40 hunks) would fail that allocation,
+/// and a failed allocation aborts the process: `catch_unwind` can't catch
+/// it. So the count is checked here first. 4.5 M covers the dual-layer DVD
+/// above (54 MB, briefly).
 const HUNK_COUNT_LIMIT: u64 = 4_500_000;
 /// The largest hunk (CD hunks are 19584 bytes, DVD ones 2048 or 4096).
 const HUNK_LIMIT: u32 = 1 << 20;
 /// Hunks one probe may decompress.
 const HUNK_READS: u32 = 32;
+
+#[cfg(test)]
+thread_local! {
+    /// A test's own `WAIT`, for this thread's scans.
+    pub static TEST_WAIT: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
+}
+
+fn wait() -> Duration {
+    #[cfg(test)]
+    if let Some(w) = TEST_WAIT.with(std::cell::Cell::get) {
+        return w;
+    }
+    WAIT
+}
+
+/// The probes a scan stopped waiting for, still running on their thread.
+pub struct Late(Receiver<(PathBuf, Option<Kind>)>);
+
+impl Late {
+    /// True once the thread is done (its answers are in the cache).
+    pub fn drained(&self) -> bool {
+        loop {
+            match self.0.try_recv() {
+                Ok(_) => {}
+                Err(TryRecvError::Empty) => return false,
+                Err(TryRecvError::Disconnected) => return true,
+            }
+        }
+    }
+}
 
 type Key = (PathBuf, u64, i64);
 static CACHE: LazyLock<Mutex<HashMap<Key, Option<Kind>>>> = LazyLock::new(Mutex::default);
@@ -95,11 +129,12 @@ pub fn pick<'a>(claims: &[&'a Fruit], kind: Option<Kind>) -> &'a Fruit {
 }
 
 /// The kind of each of `paths`, from the cache or a probe thread; a path
-/// missing from the result is unknown (or still being read).
-pub fn kinds(paths: Vec<PathBuf>) -> HashMap<PathBuf, Option<Kind>> {
+/// missing from the result is unknown, or still being read: then the
+/// `Late` says when the thread is done.
+pub fn kinds(paths: Vec<PathBuf>) -> (HashMap<PathBuf, Option<Kind>>, Option<Late>) {
     let n = paths.len();
     if n == 0 {
-        return HashMap::new();
+        return (HashMap::new(), None);
     }
     let (tx, rx) = channel();
     thread::spawn(move || {
@@ -115,7 +150,7 @@ pub fn kinds(paths: Vec<PathBuf>) -> HashMap<PathBuf, Option<Kind>> {
             }
         }
     });
-    let deadline = Instant::now() + WAIT;
+    let deadline = Instant::now() + wait();
     let mut out = HashMap::new();
     while out.len() < n {
         let Some(left) = deadline.checked_duration_since(Instant::now()) else { break };
@@ -126,7 +161,8 @@ pub fn kinds(paths: Vec<PathBuf>) -> HashMap<PathBuf, Option<Kind>> {
             Err(_) => break,
         }
     }
-    out
+    let late = (out.len() < n).then(|| Late(rx));
+    (out, late)
 }
 
 fn cached(path: &Path) -> Option<Kind> {
@@ -804,7 +840,8 @@ pub(crate) mod tests {
         let t = tempfile::tempdir().unwrap();
         let p = t.path().join("disc.iso");
         fs::write(&p, gc_image()).unwrap();
-        let got = kinds(vec![p.clone(), t.path().join("none.iso")]);
+        let (got, late) = kinds(vec![p.clone(), t.path().join("none.iso")]);
+        assert!(late.is_none(), "all answered in time");
         assert_eq!(got[&p], Some(Kind::GameCube));
         assert_eq!(got[&t.path().join("none.iso")], None);
         // Same size and mtime: the cached answer, even though the bytes changed.
@@ -813,9 +850,30 @@ pub(crate) mod tests {
         ps1[0x1C] = 0;
         fs::write(&p, &ps1).unwrap();
         fs::File::options().write(true).open(&p).unwrap().set_modified(mtime).unwrap();
-        assert_eq!(kinds(vec![p.clone()])[&p], Some(Kind::GameCube));
+        assert_eq!(kinds(vec![p.clone()]).0[&p], Some(Kind::GameCube));
         // A different size: probed again.
         fs::write(&p, iso_image("PLAYSTATION", Some(PS1_CNF))).unwrap();
-        assert_eq!(kinds(vec![p.clone()])[&p], Some(Kind::Ps1));
+        assert_eq!(kinds(vec![p.clone()]).0[&p], Some(Kind::Ps1));
+    }
+
+    #[test]
+    fn a_scan_that_stops_waiting_gets_a_late() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join("late.iso");
+        fs::write(&p, gc_image()).unwrap();
+        TEST_WAIT.with(|w| w.set(Some(Duration::ZERO)));
+        let (got, late) = kinds(vec![p.clone()]);
+        TEST_WAIT.with(|w| w.set(None));
+        assert!(got.is_empty());
+        let late = late.expect("a late for the unanswered path");
+        let start = Instant::now();
+        while !late.drained() {
+            assert!(start.elapsed() < Duration::from_secs(10), "never drained");
+            thread::sleep(Duration::from_millis(5));
+        }
+        // The thread filled the cache: the next scan has the answer at once.
+        let (got, late) = kinds(vec![p.clone()]);
+        assert_eq!(got[&p], Some(Kind::GameCube));
+        assert!(late.is_none());
     }
 }
