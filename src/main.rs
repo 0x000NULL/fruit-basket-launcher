@@ -18,6 +18,7 @@ mod lists;
 mod mover;
 mod pics;
 mod platform;
+mod probe;
 mod queue;
 mod settings;
 mod shelf;

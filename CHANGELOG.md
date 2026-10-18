@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Discs in an extra folder find the right emulator.** `.iso`, `.cue`, `.chd` and `.zip` are shared between fruits: Pomegranate (PS2), Fig (PS1), Kumquat (PSP) and soon Mango (GameCube). Until now such a file went to the lowest-numbered fruit that lists the extension, so a PS1 or PSP disc opened in Pomegranate. Now, when more than one installed fruit claims a file in an extra folder, the launcher reads a few KB of it:
+  - a GameCube disc by its header (`.iso`, `.gcm`, and `.ciso`);
+  - a PSP disc by its volume's system name;
+  - PS2 and PS1 discs by `SYSTEM.CNF` (`BOOT2` or `BOOT`), from 2048- or 2352-byte sectors;
+  - a `.cue` by the first file it names, and a `.zip` by its first disc image inside (read in place if stored; if compressed, inflated only up to the first 4 MB).
+  - It goes to the fruit whose `system` matches. If the probe can't tell (a `.chd`, an unknown disc) or that fruit isn't installed, the lowest-numbered fruit gets it, as before. Files in a fruit's own `games/` folder are not probed.
+  - Probes are cached by path, size and modified time, and a scan waits at most 2 seconds for them, so a slow network share can't freeze the window; a file still being read then goes by the old rule until the next scan.
+
 ## v1.5.0
 
 - **An icon for Kumquat**, the PSP fruit (No. 14), paper and night, so it shows its own fruit everywhere the others do.

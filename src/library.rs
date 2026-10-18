@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::basket::{write_atomic, Basket};
 use crate::feed::Fruit;
+use crate::probe;
 
 /// Folders below a games folder that are still searched.
 pub(crate) const DEPTH: u32 = 3;
@@ -31,7 +32,8 @@ pub struct Game {
 }
 
 /// Scan for games. `fruits` are the installed ones, in feed order; a file
-/// in an extra folder goes to the first fruit that plays it (`plays`).
+/// in an extra folder goes to the fruit that plays it (`plays`); when
+/// several do, to the one `probe` names, else the first.
 pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[PathBuf]) -> Vec<Game> {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -50,13 +52,22 @@ pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[Pat
             }
         }
     }
+    // In an extra folder, a file more than one fruit plays (an .iso) goes
+    // to the one the disc probe names, else the first in feed order.
+    let mut found = Vec::new();
     for folder in extra {
         for path in files(folder, DEPTH) {
             let mut names = None;
-            if let Some(f) = fruits.iter().find(|f| plays(f, &path, &mut names)) {
-                add(path, f, &mut out);
+            let claims: Vec<&Fruit> = fruits.iter().copied().filter(|f| plays(f, &path, &mut names)).collect();
+            if !claims.is_empty() {
+                found.push((path, claims));
             }
         }
+    }
+    let kinds = probe::kinds(found.iter().filter(|(_, c)| c.len() > 1).map(|(p, _)| p.clone()).collect());
+    for (path, claims) in found {
+        let f = probe::pick(&claims, kinds.get(&path).copied().flatten());
+        add(path, f, &mut out);
     }
     out
 }
@@ -712,6 +723,64 @@ pub(crate) mod tests {
         // Without `members`, a fruit claims no sets (an older feed entry).
         durian.members.clear();
         assert!(!plays(&durian, &extra.join("MSLUG.zip"), &mut None));
+    }
+
+    #[test]
+    fn shared_extensions_go_where_the_disc_probe_says() {
+        use crate::probe::tests::{gc_image, iso_image, raw_image, PS1_CNF, PS2_CNF};
+        let t = tempfile::tempdir().unwrap();
+        let b = Basket::new(t.path().join("basket"));
+        let extra = t.path().join("extra");
+        fs::create_dir_all(&extra).unwrap();
+        let put = |n: &str, d: &[u8]| fs::write(extra.join(n), d).unwrap();
+        put("Final Fantasy X.iso", &iso_image("PLAYSTATION", Some(PS2_CNF)));
+        put("Final Fantasy VII.iso", &iso_image("PLAYSTATION", Some(PS1_CNF)));
+        put("Melee.iso", &gc_image());
+        put("Wind Waker.gcm", &gc_image());
+        put("Lumines.iso", &iso_image("PSP GAME", None));
+        put("Mystery.iso", b"not a disc we know");
+        put("Gran Turismo.chd", b"MComprHD");
+        put("Crash (Track 1).bin", &raw_image(24, "PLAYSTATION", Some(PS1_CNF)));
+        put("Crash.cue", b"FILE \"Crash (Track 1).bin\" BINARY
+");
+
+        let sys = |id: &str, system: &str, ext: &[&str]| {
+            let mut f = fruit(id, ext);
+            f.system = system.into();
+            f
+        };
+        let pom = sys("pomegranate", "PS2", &[".chd", ".iso", ".cue"]);
+        let fig = sys("fig", "PS1", &[".cue", ".chd", ".iso", ".m3u"]);
+        let mango = sys("mango", "GameCube", &[".iso", ".gcm", ".ciso"]);
+        let kumquat = sys("kumquat", "PSP", &[".iso", ".cso", ".chd", ".pbp"]);
+        let got = scan(&b, &[&pom, &fig, &mango, &kumquat], std::slice::from_ref(&extra), &[]);
+        let mut by: Vec<(&str, &str)> = got.iter().map(|g| (g.title.as_str(), g.fruit.as_str())).collect();
+        by.sort();
+        assert_eq!(
+            by,
+            [
+                ("Crash", "fig"),
+                ("Final Fantasy VII", "fig"),
+                ("Final Fantasy X", "pomegranate"),
+                ("Gran Turismo", "pomegranate"),
+                ("Lumines", "kumquat"),
+                ("Melee", "mango"),
+                ("Mystery", "pomegranate"),
+                ("Wind Waker", "mango"),
+            ]
+        );
+
+        // Without the fruit the probe names, the first in feed order.
+        let got = scan(&b, &[&pom, &mango], std::slice::from_ref(&extra), &[]);
+        let ff7 = got.iter().find(|g| g.title == "Final Fantasy VII").unwrap();
+        assert_eq!(ff7.fruit, "pomegranate");
+
+        // A fruit's own games folder is its own, whatever the disc says.
+        let games = b.games_dir("pomegranate");
+        fs::create_dir_all(&games).unwrap();
+        fs::write(games.join("Spyro.iso"), iso_image("PLAYSTATION", Some(PS1_CNF))).unwrap();
+        let got = scan(&b, &[&pom, &fig], &[], &[]);
+        assert_eq!(got.iter().map(|g| g.fruit.as_str()).collect::<Vec<_>>(), ["pomegranate"]);
     }
 
     #[test]

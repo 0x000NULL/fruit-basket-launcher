@@ -128,6 +128,7 @@ Pomegranate would otherwise copy back).
 | `library.rs` | game scan and `plays` (an `ext`, or a zip from `archives` holding one or a `members` name; a set claimed only by `members` gets its lowercase name as its code), titles, serials (GBA header code, disc serial in the name), `gb_system` (GB or GBC from the header's CGB flag), save files and `save_dirs`, `slots` / `delete_slot` / `Slot::picture`, `Played`, `Sessions`, `Favorites`, `rebase` (paths after a move) |
 | `lists.rs` | fetches and caches compat and dump lists, checked against the feed |
 | `compat.rs` | `compat.txt` parse; level by serial, then title |
+| `probe.rs` | the disc probe for a file in an extra folder that more than one fruit plays: GameCube magic (also in a CISO), PSP by the ISO9660 system id, PS2 / PS1 by SYSTEM.CNF's `BOOT2` / `BOOT` (cooked or raw sectors), through a `.cue`'s first file or a zip's first disc-like entry; on a thread with a 2 s wait, cached by path, size and mtime; `pick` matches the result to a fruit's `system` |
 | `dumps.rs` | `dumps.txt` parse, SHA-1 (CHD raw SHA-1 from the header), hash cache, hashing thread |
 | `launch.rs` | template expansion (`{rom}`, `{slot}`, `{data}`; an unfilled one is an error), `path` for the feed's `art` (`{rom_dir}`, `{stem}`, `{data}`, `{code}`, `{cache}`; unfilled gives none), start, a thread that times the session |
 | `pics.rs` | pictures for covers and saves: PNGs decoded and shrunk on a thread, kept by path; drawing never waits |
