@@ -21,8 +21,13 @@ macro_rules! icons {
 }
 
 const ICONS: &[(&str, &[u8], &[u8])] =
-    icons!("pomegranate", "strawberry", "fig", "starfruit", "mangosteen", "crabapple", "mulberry", "olive", "pear",
-        "plum", "cherry", "kiwi", "durian", "coconut", "kumquat");
+    icons!("pomegranate", "strawberry", "fig", "starfruit", "mango", "crabapple", "mulberry", "olive", "pear",
+        "plum", "orange", "peach", "cherry", "kiwi", "durian", "coconut", "kumquat");
+
+/// Old feed ids drawn with a renamed fruit's icon. Mango (No. 6) was
+/// Mangosteen until 2026-10-16, and the feed lists it as `mangosteen`
+/// until its first release; drop the alias once no feed does.
+const ALIASES: &[(&str, &str)] = &[("mangosteen", "mango")];
 
 const MARK: &str = include_str!("../assets/fruit-basket-mark.svg");
 const MARK_NIGHT: &str = include_str!("../assets/fruit-basket-mark-night.svg");
@@ -47,6 +52,15 @@ impl Art {
                 let Some(full) = decode_png(bytes) else { continue };
                 for size in [ICON_L, ICON_S] {
                     icons.insert((id.to_string(), night_flag, size), shrink(&full, 128 / size));
+                }
+            }
+        }
+        for (old, new) in ALIASES {
+            for night in [false, true] {
+                for size in [ICON_L, ICON_S] {
+                    if let Some(pm) = icons.get(&(new.to_string(), night, size)).cloned() {
+                        icons.insert((old.to_string(), night, size), pm);
+                    }
                 }
             }
         }
@@ -167,6 +181,48 @@ mod tests {
                 assert_eq!(art.icons[&(id.to_string(), night, ICON_S)].width(), ICON_S, "{id}");
             }
         }
+    }
+
+    #[test]
+    fn old_ids_draw_the_renamed_fruit() {
+        let art = Art::load();
+        for night in [false, true] {
+            for size in [ICON_L, ICON_S] {
+                let key = |id: &str| (id.to_string(), night, size);
+                assert_eq!(art.icons[&key("mangosteen")].data(), art.icons[&key("mango")].data());
+            }
+        }
+    }
+
+    /// The newest icons as the launcher draws them, at both sizes, full and
+    /// faded (a growing fruit), on paper and night: target/shots/icons-new.png.
+    #[test]
+    fn new_icons_sheet() {
+        use basket_ui::text::Style;
+        use basket_ui::tokens::{NIGHT, PAPER};
+        use basket_ui::Fonts;
+        let fruits = [("mango", "Mango · No. 6"), ("orange", "Orange · No. 12"), ("peach", "Peach · No. 13")];
+        let (panel, row, top) = (420.0, 96.0, 44.0);
+        let mut cv = Canvas::new((panel * 2.0) as u32, (top + row * fruits.len() as f32 + 16.0) as u32, Fonts::new());
+        let art = Art::load();
+        for (i, (pal, night, name)) in [(PAPER, false, "paper"), (NIGHT, true, "night")].into_iter().enumerate() {
+            let x0 = panel * i as f32;
+            cv.fill_rect(x0, 0.0, panel, cv.height() as f32, pal.bg);
+            let small = Style::data(11.0).color(pal.fg2);
+            cv.text(x0 + 16.0, 14.0, &format!("{name}   64 · 32 · 64 at 45% · 32 at 45%"), &small);
+            for (j, (id, label)) in fruits.iter().enumerate() {
+                let y = top + row * j as f32;
+                cv.text(x0 + 16.0, y + 26.0, label, &Style::data(12.0).color(pal.fg));
+                let mut x = x0 + 130.0;
+                for (size, alpha) in [(ICON_L, 1.0), (ICON_S, 1.0), (ICON_L, 0.45), (ICON_S, 0.45)] {
+                    art.icon(&mut cv, id, night, size, x, y + (ICON_L - size) as f32 / 2.0, alpha);
+                    x += size as f32 + 24.0;
+                }
+            }
+        }
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/shots");
+        std::fs::create_dir_all(&dir).unwrap();
+        cv.save_png(&dir.join("icons-new.png")).unwrap();
     }
 
     #[test]

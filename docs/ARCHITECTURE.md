@@ -137,7 +137,7 @@ Pomegranate would otherwise copy back).
 | `shelf.rs` | the Library's state: games, lists, hashing, the running game (from a slot, with couch arguments), `view()`, `couch_rows()` |
 | `settings.rs` | `Settings` (with `[gamepad]`, the launcher's controller map), unknown keys kept |
 | `platform.rs` | OS dark mode, free space, screen size, open / reveal, `~` paths |
-| `art.rs` | fruit icons (128 px, drawn at 64 and 32) and the basket mark |
+| `art.rs` | fruit icons (128 px, drawn at 64 and 32) and the basket mark; `ALIASES` draws an old feed id with a renamed fruit's icon (`mangosteen` → `mango`) |
 | `window.rs` | the `minifb` window and input gathering; couch mode remakes it borderless at the screen's size |
 | `ui/mod.rs` | `Tab`, `Size` (regular ≥ 1180, compact ≥ 820, narrow), `Cmd`, the `Ui` drawing context and shared controls |
 | `ui/frame.rs` | header (tabs, FIND, Update all, couch button), the banner (launcher update, ripe fruit), footer |
