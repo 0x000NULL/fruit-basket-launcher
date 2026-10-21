@@ -906,7 +906,13 @@ pub(crate) mod tests {
         const KATANA: &[u8; 16] = b"SEGA SEGAKATANA ";
         let zip = |name: &str, data: &[u8], method| {
             let mut w = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
-            w.start_file(name, zip::write::SimpleFileOptions::default().compression_method(method)).unwrap();
+            // A fixed "made by" host and permissions (the writer would use
+            // the building OS's), so the bytes are the same everywhere.
+            let opts = zip::write::SimpleFileOptions::default()
+                .compression_method(method)
+                .system(zip::System::Unix)
+                .unix_permissions(0o644);
+            w.start_file(name, opts).unwrap();
             w.write_all(data).unwrap();
             w.finish().unwrap().into_inner()
         };
