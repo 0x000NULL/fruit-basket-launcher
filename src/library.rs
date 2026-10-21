@@ -72,7 +72,7 @@ pub fn scan_late(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: 
     }
     let (kinds, late) = probe::kinds(found.iter().filter(|(_, c)| c.len() > 1).map(|(p, _)| p.clone()).collect());
     for (path, claims) in found {
-        let f = probe::pick(&claims, kinds.get(&path).copied().flatten());
+        let f = probe::pick(&path, &claims, kinds.get(&path).map_or(&[][..], Vec::as_slice));
         add(path, f, &mut out);
     }
     (out, late)

@@ -6,6 +6,12 @@
 - **`.chd` discs are probed too.** Fig, Kumquat, Pomegranate, Peach and Orange all read CHDs. The launcher now opens one, reads the few hunks that hold the markers above, and decompresses only those. A GD-ROM CHD is a Dreamcast from its track list alone.
   - Opening a CHD means reading its whole hunk map. This is about 50–100 KB for a CD, and up to a few MB for a dual-layer DVD. A CHD whose map is over 16 MB, or whose header is corrupt, stays unknown and goes by the old rule.
   - CHDs are read with the [chd](https://crates.io/crates/chd) crate (BSD-3-Clause), the one Fig and Kumquat use. Its licence is in NOTICE.
+- **The disc probe follows the new shared rule** (fruit-basket's DISC-PROBE.md):
+  - Every signature check runs on a disc, so one that matches two consoles is noticed (a probe bug). It goes to the lower-numbered fruit, and a log line names both.
+  - A `.cue` is probed through its first data track; audio tracks are skipped.
+  - Early PS1 discs with no SYSTEM.CNF are recognised by `PSX.EXE` in the root.
+  - PS1 and PS2 discs must also have the `PLAYSTATION` volume ID.
+  - A disc no signature matches still goes to the lowest-numbered fruit. Refusing it, and asking when two match, come with a later launcher.
 - **One more scan when slow probes finish.** A scan waits at most 2 seconds for its probes, so on a first scan of a big folder, or of a slow network share, some discs can still be unread. Those discs go to the lowest-numbered fruit for now. When the last of those probes finishes, the Library scans once more, and the discs move to the right fruit. That extra scan never starts another.
 - **Installs and launcher updates ride out a virus scan.** On Windows, a virus scanner can still be reading a newly unpacked emulator for a moment. Moving its folder into place then failed with "Access is denied", about once in a thousand installs. The launcher now waits and tries again for up to about 2 seconds, but only for that error and the matching sharing error. Any other problem fails at once, as before.
 

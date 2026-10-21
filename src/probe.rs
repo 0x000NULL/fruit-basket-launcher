@@ -6,12 +6,15 @@
 //! - GameCube: the magic C2339F3D at 1Ch (`.iso`, `.gcm`), or in the first
 //!   data block of a CISO.
 //! - PSP: the ISO9660 volume's system identifier, `PSP GAME`.
-//! - PS2 / PS1: SYSTEM.CNF in the root directory says `BOOT2` or `BOOT`.
+//! - PS2 / PS1: a `PLAYSTATION` volume whose SYSTEM.CNF says `BOOT2` or
+//!   `BOOT`; or, for an early PS1 disc, no SYSTEM.CNF and `PSX.EXE` in the
+//!   root directory.
 //!   Cooked (2048) and raw (2352, mode 1 or 2) sectors are both read.
 //! - Saturn: `SEGA SEGASATURN ` at the start of sector 0. Dreamcast:
 //!   `SEGA SEGAKATANA ` at the start of IP.BIN, the first sector of track 3
 //!   (the high-density data track). Cooked or raw (16-byte header) sectors.
-//! - `.cue`: the first `FILE` it names, then (for a Dreamcast) track 3's.
+//! - `.cue`: the first `FILE` holding a data track (AUDIO is skipped),
+//!   then (for a Dreamcast) track 3's.
 //!   `.gdi`: track 3's file. `.zip`: its first disc-like entry, read in
 //!   place when stored, inflated only as far as needed otherwise.
 //! - `.chd`: a GD-ROM's track metadata says Dreamcast outright. A CD or
@@ -101,7 +104,7 @@ fn wait() -> Duration {
 }
 
 /// The probes a scan stopped waiting for, still running on their thread.
-pub struct Late(Receiver<(PathBuf, Option<Kind>)>);
+pub struct Late(Receiver<(PathBuf, Vec<Kind>)>);
 
 impl Late {
     /// True once the thread is done (its answers are in the cache).
@@ -117,21 +120,32 @@ impl Late {
 }
 
 type Key = (PathBuf, u64, i64);
-static CACHE: LazyLock<Mutex<HashMap<Key, Option<Kind>>>> = LazyLock::new(Mutex::default);
+static CACHE: LazyLock<Mutex<HashMap<Key, Vec<Kind>>>> = LazyLock::new(Mutex::default);
 /// Paths a probe thread is still reading (maybe stuck on a share).
 static BUSY: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(Mutex::default);
+/// Paths already logged as matching more than one fruit.
+static DOUBLE: LazyLock<Mutex<HashSet<PathBuf>>> = LazyLock::new(Mutex::default);
 
 /// Of `claims` (the fruits that play `path`, in feed order, at least
-/// one), the one whose `system` is `kind`'s; else the first.
-pub fn pick<'a>(claims: &[&'a Fruit], kind: Option<Kind>) -> &'a Fruit {
-    kind.and_then(|k| claims.iter().find(|f| f.system.trim().eq_ignore_ascii_case(k.system())))
-        .unwrap_or(&claims[0])
+/// one), the one whose `system` is one of the `kinds` the probe found.
+/// No match: the first, the lowest-numbered (DISC-PROBE.md refuses it
+/// instead, once the launcher can show that). More than one: also the
+/// first of them, and a log line, since two signatures matching one disc
+/// is a bug in a probe.
+pub fn pick<'a>(path: &Path, claims: &[&'a Fruit], kinds: &[Kind]) -> &'a Fruit {
+    let matched: Vec<&Fruit> =
+        claims.iter().copied().filter(|f| kinds.iter().any(|k| f.system.trim().eq_ignore_ascii_case(k.system()))).collect();
+    if matched.len() > 1 && DOUBLE.lock().unwrap().insert(path.to_path_buf()) {
+        let names: Vec<&str> = matched.iter().map(|f| f.name.as_str()).collect();
+        eprintln!("fruitbasket: {} matches {} (a disc probe bug); it goes to {}", path.display(), names.join(" and "), names[0]);
+    }
+    matched.first().copied().unwrap_or(claims[0])
 }
 
 /// The kind of each of `paths`, from the cache or a probe thread; a path
 /// missing from the result is unknown, or still being read: then the
 /// `Late` says when the thread is done.
-pub fn kinds(paths: Vec<PathBuf>) -> (HashMap<PathBuf, Option<Kind>>, Option<Late>) {
+pub fn kinds(paths: Vec<PathBuf>) -> (HashMap<PathBuf, Vec<Kind>>, Option<Late>) {
     let n = paths.len();
     if n == 0 {
         return (HashMap::new(), None);
@@ -165,20 +179,26 @@ pub fn kinds(paths: Vec<PathBuf>) -> (HashMap<PathBuf, Option<Kind>>, Option<Lat
     (out, late)
 }
 
-fn cached(path: &Path) -> Option<Kind> {
-    let meta = std::fs::metadata(path).ok()?;
+fn cached(path: &Path) -> Vec<Kind> {
+    let Ok(meta) = std::fs::metadata(path) else { return Vec::new() };
     let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs() as i64);
     let key = (path.to_path_buf(), meta.len(), mtime);
     if let Some(k) = CACHE.lock().unwrap().get(&key) {
-        return *k;
+        return k.clone();
     }
-    let kind = probe(path);
-    CACHE.lock().unwrap().insert(key, kind);
+    let kind = probe_all(path);
+    CACHE.lock().unwrap().insert(key, kind.clone());
     kind
 }
 
-/// Which console the file at `path` is for, if a few KB of it say so.
-pub fn probe(path: &Path) -> Option<Kind> {
+/// Every console whose signature a few KB of the file at `path` carry.
+/// All the checks run, so a disc two of them match shows up as two (a
+/// probe bug) rather than as whichever ran first.
+pub fn probe_all(path: &Path) -> Vec<Kind> {
+    probe_any(path).unwrap_or_default()
+}
+
+fn probe_any(path: &Path) -> Option<Vec<Kind>> {
     let name = path.file_name()?.to_str()?.to_ascii_lowercase();
     if name.ends_with(".zip") {
         zip(path)
@@ -189,7 +209,7 @@ pub fn probe(path: &Path) -> Option<Kind> {
     } else if name.ends_with(".chd") {
         chd(path)
     } else {
-        image(&mut open(path)?)
+        Some(image(&mut open(path)?))
     }
 }
 
@@ -232,8 +252,8 @@ impl<R: Read> At for Stream<R> {
     }
 }
 
-fn image(src: &mut impl At) -> Option<Kind> {
-    gamecube(src).or_else(|| sega(src)).or_else(|| iso(src))
+fn image(src: &mut impl At) -> Vec<Kind> {
+    [gamecube(src), sega(src), iso(src)].into_iter().flatten().collect()
 }
 
 /// A Saturn or Dreamcast boot sector at the start of `src`, cooked or raw.
@@ -268,7 +288,8 @@ fn gamecube(src: &mut impl At) -> Option<Kind> {
     (&head[..4] == b"CISO" && head[8] == 1 && src.at(0x8000 + 0x1C, &mut magic) && magic == GC_MAGIC).then_some(Kind::GameCube)
 }
 
-/// An ISO9660 disc: PSP by its system identifier, PS2 or PS1 by SYSTEM.CNF.
+/// An ISO9660 disc: PSP by its system identifier; a `PLAYSTATION` one is
+/// PS2 or PS1 by SYSTEM.CNF, or PS1 with no SYSTEM.CNF and PSX.EXE.
 fn iso(src: &mut impl At) -> Option<Kind> {
     // Cooked sectors, then raw mode 1, then raw mode 2 (form 1).
     let (size, head) = [(2048u64, 0u64), (2352, 16), (2352, 24)].into_iter().find(|&(size, head)| {
@@ -283,9 +304,12 @@ fn iso(src: &mut impl At) -> Option<Kind> {
     if pvd[8..40].starts_with(b"PSP GAME") {
         return Some(Kind::Psp);
     }
+    if !pvd[8..40].starts_with(b"PLAYSTATION") {
+        return None;
+    }
     let root = u32le(&pvd[158..]);
     let root_len = u32le(&pvd[166..]);
-    let mut cnf = None;
+    let (mut cnf, mut psx_exe) = (None, false);
     'dir: for i in 0..root_len.div_ceil(2048).min(ROOT_SECTORS) {
         let mut dir = [0u8; 2048];
         if !sector(root + i, &mut dir) {
@@ -301,10 +325,12 @@ fn iso(src: &mut impl At) -> Option<Kind> {
                 cnf = Some((u32le(&dir[at + 2..]), u32le(&dir[at + 10..])));
                 break 'dir;
             }
+            psx_exe |= name.eq_ignore_ascii_case(b"PSX.EXE");
             at += len;
         }
     }
-    let (lba, len) = cnf?;
+    // Early PS1 discs have no SYSTEM.CNF: the BIOS boots PSX.EXE.
+    let Some((lba, len)) = cnf else { return psx_exe.then_some(Kind::Ps1) };
     let mut text = [0u8; 2048];
     if !sector(lba, &mut text) {
         return None;
@@ -324,12 +350,12 @@ fn u32le(b: &[u8]) -> u32 {
     u32::from_le_bytes(b[..4].try_into().unwrap())
 }
 
-/// A cue sheet: probe the first file it names, beside it; failing that,
-/// look for a Dreamcast's IP.BIN in track 3's file.
-fn cue(path: &Path) -> Option<Kind> {
+/// A cue sheet: probe the first file beside it that holds a data track;
+/// failing that, look for a Dreamcast's IP.BIN in track 3's file.
+fn cue(path: &Path) -> Option<Vec<Kind>> {
     let text = small_text(path)?;
-    // (file, first track in it), in order.
-    let mut files: Vec<(&str, u32)> = Vec::new();
+    // (file, its first track's number and type), in order.
+    let mut files: Vec<(&str, u32, &str)> = Vec::new();
     for line in text.lines().map(str::trim) {
         let (key, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
         let rest = rest.trim();
@@ -338,31 +364,35 @@ fn cue(path: &Path) -> Option<Kind> {
                 Some(q) => q.split('"').next(),
                 None => rest.split_whitespace().next(),
             };
-            files.extend(name.map(|n| (n, 0)));
+            files.extend(name.map(|n| (n, 0, "")));
         } else if key.eq_ignore_ascii_case("TRACK")
             && let Some(last) = files.last_mut().filter(|f| f.1 == 0)
         {
-            last.1 = rest.split_whitespace().next().and_then(|n| n.parse().ok()).unwrap_or(0);
+            let mut words = rest.split_whitespace();
+            last.1 = words.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+            last.2 = words.next().unwrap_or("");
         }
     }
     let dir = path.parent()?;
-    if let Some(k) = image(&mut open(&dir.join(files.first()?.0))?) {
-        return Some(k);
+    let data = files.iter().find(|f| !f.2.eq_ignore_ascii_case("AUDIO"))?;
+    let found = image(&mut open(&dir.join(data.0))?);
+    if !found.is_empty() {
+        return Some(found);
     }
-    let (three, _) = files.iter().find(|f| f.1 == 3)?;
-    sega(&mut open(&dir.join(three))?).filter(|k| *k == Kind::Dreamcast)
+    let (three, _, _) = files.iter().find(|f| f.1 == 3)?;
+    Some(sega(&mut open(&dir.join(three))?).filter(|k| *k == Kind::Dreamcast).into_iter().collect())
 }
 
 /// A GD-ROM sheet (`count`, then `track lba type sector_size file offset`
 /// a line): IP.BIN starts track 3's file.
-fn gdi(path: &Path) -> Option<Kind> {
+fn gdi(path: &Path) -> Option<Vec<Kind>> {
     let text = small_text(path)?;
     let line = text.lines().skip(1).map(str::trim).find(|l| l.split_whitespace().next() == Some("3"))?;
     let name = match line.split_once('"') {
         Some((_, q)) => q.split('"').next()?,
         None => line.split_whitespace().nth(4)?,
     };
-    sega(&mut open(&path.parent()?.join(name))?).filter(|k| *k == Kind::Dreamcast)
+    Some(sega(&mut open(&path.parent()?.join(name))?).filter(|k| *k == Kind::Dreamcast).into_iter().collect())
 }
 
 /// A cue or gdi sheet's text, never more than 64 KB of it.
@@ -375,7 +405,7 @@ fn small_text(path: &Path) -> Option<String> {
 /// A CHD: GD-ROM metadata is a Dreamcast; a CD or DVD is read through its
 /// hunks like any other image. Unknown when the map is too big, and on any
 /// error or panic inside the chd crate.
-fn chd(path: &Path) -> Option<Kind> {
+fn chd(path: &Path) -> Option<Vec<Kind>> {
     let mut f = File::open(path).ok()?;
     let mut head = [0u8; 124];
     let n = f.read(&mut head).ok()?;
@@ -429,7 +459,7 @@ const fn tag(t: &[u8; 4]) -> u32 {
     u32::from_be_bytes(*t)
 }
 
-fn chd_kind(f: File) -> Option<Kind> {
+fn chd_kind(f: File) -> Option<Vec<Kind>> {
     let mut chd = chd::Chd::open(io::BufReader::new(f), None).ok()?;
     let refs: Vec<_> = chd.metadata_refs().collect();
     // (virtual sector, bytes per stored frame).
@@ -437,7 +467,7 @@ fn chd_kind(f: File) -> Option<Kind> {
     for r in &refs {
         use chd::metadata::MetadataTag;
         match r.metatag() {
-            t if t == tag(b"CHGD") || t == tag(b"CHGT") => return Some(Kind::Dreamcast),
+            t if t == tag(b"CHGD") || t == tag(b"CHGT") => return Some(vec![Kind::Dreamcast]),
             t if t == tag(b"DVD ") => layout = layout.or(Some((2048, 2048))),
             t if t == tag(b"CHT2") || t == tag(b"CHTR") => {
                 if layout.is_none() {
@@ -455,7 +485,7 @@ fn chd_kind(f: File) -> Option<Kind> {
     }
     let (sector, frame) = layout?;
     let buf = chd.get_hunksized_buffer();
-    image(&mut ChdAt { chd, sector, frame, hunk: None, buf, cmp: Vec::new(), reads: 0 })
+    Some(image(&mut ChdAt { chd, sector, frame, hunk: None, buf, cmp: Vec::new(), reads: 0 }))
 }
 
 /// A CHD's data as a plain image: `sector`-byte sectors, each stored at the
@@ -516,7 +546,7 @@ impl<F: Read + Seek> At for ChdAt<F> {
 }
 
 /// A zip: probe its first disc-like entry.
-fn zip(path: &Path) -> Option<Kind> {
+fn zip(path: &Path) -> Option<Vec<Kind>> {
     let mut z = zip::ZipArchive::new(io::BufReader::new(File::open(path).ok()?)).ok()?;
     let i = (0..z.len()).find(|&i| {
         z.name_for_index(i).is_some_and(|n| {
@@ -528,9 +558,9 @@ fn zip(path: &Path) -> Option<Kind> {
     match entry.compression() {
         zip::CompressionMethod::Stored => {
             let base = entry.data_start()?;
-            image(&mut Seekable { f: File::open(path).ok()?, base })
+            Some(image(&mut Seekable { f: File::open(path).ok()?, base }))
         }
-        _ => image(&mut Stream { r: entry, got: Vec::new() }),
+        _ => Some(image(&mut Stream { r: entry, got: Vec::new() })),
     }
 }
 
@@ -591,6 +621,14 @@ pub(crate) mod tests {
         img
     }
 
+    /// The one console the file is for; none, or a test failure if the
+    /// checks found more than one.
+    fn probe(path: &Path) -> Option<Kind> {
+        let found = probe_all(path);
+        assert!(found.len() <= 1, "{} matched {found:?}", path.display());
+        found.first().copied()
+    }
+
     pub(crate) const PS2_CNF: &str = "BOOT2 = cdrom0:\\SLUS_203.12;1\r\nVER = 1.00\r\nVMODE = NTSC\r\n";
     pub(crate) const PS1_CNF: &str = "BOOT = cdrom:\\SLUS_007.08;1\r\nTCB = 4\r\nEVENT = 10\r\nSTACK = 801FFF00\r\n";
 
@@ -638,6 +676,57 @@ pub(crate) mod tests {
         assert_eq!(probe(&t.path().join("missing.iso")), None);
     }
 
+    /// An ISO9660 image whose root holds PSX.EXE (and no SYSTEM.CNF).
+    pub(crate) fn psx_exe_image() -> Vec<u8> {
+        let mut img = iso_image("PLAYSTATION", None);
+        // Rename the root's README.TXT;1 record to PSX.EXE;1 (same length).
+        let at = img.windows(12).position(|w| w == b"README.TXT;1").unwrap();
+        img[at..at + 12].copy_from_slice(b"PSX.EXE;1\0\0\0");
+        img[at - 1] = 9;
+        img
+    }
+
+    #[test]
+    fn early_ps1_discs_boot_psx_exe() {
+        let t = tempfile::tempdir().unwrap();
+        let p = |n: &str| t.path().join(n);
+        fs::write(p("early.iso"), psx_exe_image()).unwrap();
+        assert_eq!(probe(&p("early.iso")), Some(Kind::Ps1));
+        // A PSX.EXE on a volume that isn't PLAYSTATION's is nothing.
+        let mut other = psx_exe_image();
+        other[16 * 2048 + 8..16 * 2048 + 19].copy_from_slice(b"WIN32\0\0\0\0\0\0");
+        fs::write(p("other.iso"), other).unwrap();
+        assert_eq!(probe(&p("other.iso")), None);
+        // SYSTEM.CNF wins over PSX.EXE when a disc has both.
+        fs::write(p("ffx.iso"), iso_image("PLAYSTATION", Some(PS2_CNF))).unwrap();
+        assert_eq!(probe(&p("ffx.iso")), Some(Kind::Ps2));
+    }
+
+    #[test]
+    fn every_check_runs_so_a_double_match_shows() {
+        let t = tempfile::tempdir().unwrap();
+        let p = t.path().join("both.iso");
+        // A PS2 volume that also carries the GameCube magic.
+        let mut both = iso_image("PLAYSTATION", Some(PS2_CNF));
+        both[0x1C..0x20].copy_from_slice(&GC_MAGIC);
+        fs::write(&p, both).unwrap();
+        assert_eq!(probe_all(&p), [Kind::GameCube, Kind::Ps2]);
+
+        let fruit = |id: &str, system: &str| {
+            let mut f = crate::library::tests::fruit(id, &[".iso"]);
+            f.system = system.into();
+            f
+        };
+        let (pom, mango) = (fruit("pomegranate", "PS2"), fruit("mango", "GameCube"));
+        // Both match: the lowest-numbered, logged once.
+        assert_eq!(pick(&p, &[&pom, &mango], &probe_all(&p)).id, "pomegranate");
+        assert!(DOUBLE.lock().unwrap().contains(&p));
+        // One match: that one, whatever the order; none: the first.
+        assert_eq!(pick(&p, &[&pom, &mango], &[Kind::GameCube]).id, "mango");
+        assert_eq!(pick(&p, &[&mango, &pom], &[Kind::Ps2]).id, "pomegranate");
+        assert_eq!(pick(&p, &[&mango, &pom], &[]).id, "mango");
+    }
+
     #[test]
     fn probes_cue_sheets() {
         let t = tempfile::tempdir().unwrap();
@@ -649,6 +738,10 @@ pub(crate) mod tests {
         assert_eq!(probe(&t.path().join("dq8.cue")), Some(Kind::Ps2));
         fs::write(t.path().join("lost.cue"), "FILE \"gone.bin\" BINARY\n").unwrap();
         assert_eq!(probe(&t.path().join("lost.cue")), None);
+        // An audio track first (a mixed-mode sheet): the data track is probed.
+        fs::write(t.path().join("intro.bin"), [0u8; 4704]).unwrap();
+        fs::write(t.path().join("mixed.cue"), "FILE \"intro.bin\" BINARY\n  TRACK 01 AUDIO\nFILE \"FF7 (Track 1).bin\" BINARY\n  TRACK 02 MODE2/2352\n").unwrap();
+        assert_eq!(probe(&t.path().join("mixed.cue")), Some(Kind::Ps1));
     }
 
     /// A Saturn or Dreamcast boot sector, `head` bytes into sector 0.
@@ -687,9 +780,10 @@ pub(crate) mod tests {
         put("cooked.gdi", b"3\n1 0 4 2048 track01.iso 0\n2 600 0 2352 track02.raw 0\n3 45000 4 2048 track03.iso 0\n");
         assert_eq!(probe(&p("cooked.gdi")), Some(Kind::Dreamcast));
 
-        // Track 3 of something else is not a Dreamcast; a gdi with no track 3.
+        // A Saturn header in track 3, behind a data track 1 that says
+        // nothing, is not a Dreamcast; nor is a gdi with no track 3.
         put("Other (Track 3).bin", &sega_sector(b"SEGA SEGASATURN ", 16));
-        put("Other.cue", b"FILE \"SA (Track 2).bin\" BINARY\n  TRACK 01 AUDIO\nFILE \"Other (Track 3).bin\" BINARY\n  TRACK 03 MODE1/2352\n");
+        put("Other.cue", b"FILE \"SA (Track 1).bin\" BINARY\n  TRACK 01 MODE1/2352\nFILE \"Other (Track 3).bin\" BINARY\n  TRACK 03 MODE1/2352\n");
         assert_eq!(probe(&p("Other.cue")), None);
         put("short.gdi", b"1\n1 0 4 2352 \"SA (Track 3).bin\" 0\n");
         assert_eq!(probe(&p("short.gdi")), None);
@@ -842,18 +936,18 @@ pub(crate) mod tests {
         fs::write(&p, gc_image()).unwrap();
         let (got, late) = kinds(vec![p.clone(), t.path().join("none.iso")]);
         assert!(late.is_none(), "all answered in time");
-        assert_eq!(got[&p], Some(Kind::GameCube));
-        assert_eq!(got[&t.path().join("none.iso")], None);
+        assert_eq!(got[&p], [Kind::GameCube]);
+        assert!(got[&t.path().join("none.iso")].is_empty());
         // Same size and mtime: the cached answer, even though the bytes changed.
         let mtime = fs::metadata(&p).unwrap().modified().unwrap();
         let mut ps1 = gc_image();
         ps1[0x1C] = 0;
         fs::write(&p, &ps1).unwrap();
         fs::File::options().write(true).open(&p).unwrap().set_modified(mtime).unwrap();
-        assert_eq!(kinds(vec![p.clone()]).0[&p], Some(Kind::GameCube));
+        assert_eq!(kinds(vec![p.clone()]).0[&p], [Kind::GameCube]);
         // A different size: probed again.
         fs::write(&p, iso_image("PLAYSTATION", Some(PS1_CNF))).unwrap();
-        assert_eq!(kinds(vec![p.clone()]).0[&p], Some(Kind::Ps1));
+        assert_eq!(kinds(vec![p.clone()]).0[&p], [Kind::Ps1]);
     }
 
     #[test]
@@ -873,7 +967,7 @@ pub(crate) mod tests {
         }
         // The thread filled the cache: the next scan has the answer at once.
         let (got, late) = kinds(vec![p.clone()]);
-        assert_eq!(got[&p], Some(Kind::GameCube));
+        assert_eq!(got[&p], [Kind::GameCube]);
         assert!(late.is_none());
     }
 }
