@@ -350,12 +350,23 @@ fn u32le(b: &[u8]) -> u32 {
     u32::from_le_bytes(b[..4].try_into().unwrap())
 }
 
-/// A cue sheet: probe the first file beside it that holds a data track;
-/// failing that, look for a Dreamcast's IP.BIN in track 3's file.
+/// One `FILE` of a cue sheet: its name, and its first track's number,
+/// type and `INDEX 01` (in frames from the start of the file).
+struct CueFile<'a> {
+    name: &'a str,
+    track: u32,
+    kind: &'a str,
+    index1: u64,
+    tracks: u32,
+}
+
+/// A cue sheet: probe the first file beside it that holds a data track,
+/// from that track's `INDEX 01` (a data track after audio carries its
+/// pregap at the start of its file, as Redump stores it); failing that,
+/// look for a Dreamcast's IP.BIN in track 3's file.
 fn cue(path: &Path) -> Option<Vec<Kind>> {
     let text = small_text(path)?;
-    // (file, its first track's number and type), in order.
-    let mut files: Vec<(&str, u32, &str)> = Vec::new();
+    let mut files: Vec<CueFile> = Vec::new();
     for line in text.lines().map(str::trim) {
         let (key, rest) = line.split_once(char::is_whitespace).unwrap_or((line, ""));
         let rest = rest.trim();
@@ -364,23 +375,42 @@ fn cue(path: &Path) -> Option<Vec<Kind>> {
                 Some(q) => q.split('"').next(),
                 None => rest.split_whitespace().next(),
             };
-            files.extend(name.map(|n| (n, 0, "")));
+            files.extend(name.map(|name| CueFile { name, track: 0, kind: "", index1: 0, tracks: 0 }));
         } else if key.eq_ignore_ascii_case("TRACK")
-            && let Some(last) = files.last_mut().filter(|f| f.1 == 0)
+            && let Some(last) = files.last_mut()
         {
-            let mut words = rest.split_whitespace();
-            last.1 = words.next().and_then(|n| n.parse().ok()).unwrap_or(0);
-            last.2 = words.next().unwrap_or("");
+            last.tracks += 1;
+            if last.tracks == 1 {
+                let mut words = rest.split_whitespace();
+                last.track = words.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+                last.kind = words.next().unwrap_or("");
+            }
+        } else if key.eq_ignore_ascii_case("INDEX")
+            && let Some(last) = files.last_mut().filter(|f| f.tracks == 1)
+            && let Some(("01", at)) = rest.split_once(char::is_whitespace)
+        {
+            last.index1 = msf_frames(at.trim()).unwrap_or(0);
         }
     }
     let dir = path.parent()?;
-    let data = files.iter().find(|f| !f.2.eq_ignore_ascii_case("AUDIO"))?;
-    let found = image(&mut open(&dir.join(data.0))?);
+    let at = |f: &CueFile| -> Option<Seekable> {
+        let sector = if f.kind.ends_with("/2048") { 2048 } else { 2352 };
+        Some(Seekable { f: File::open(dir.join(f.name)).ok()?, base: f.index1 * sector })
+    };
+    let Some(data) = files.iter().find(|f| !f.kind.eq_ignore_ascii_case("AUDIO")) else { return Some(Vec::new()) };
+    let found = image(&mut at(data)?);
     if !found.is_empty() {
         return Some(found);
     }
-    let (three, _, _) = files.iter().find(|f| f.1 == 3)?;
-    Some(sega(&mut open(&dir.join(three))?).filter(|k| *k == Kind::Dreamcast).into_iter().collect())
+    let Some(three) = files.iter().find(|f| f.track == 3) else { return Some(Vec::new()) };
+    Some(sega(&mut at(three)?).filter(|k| *k == Kind::Dreamcast).into_iter().collect())
+}
+
+/// `mm:ss:ff` (75 frames a second) as frames.
+fn msf_frames(msf: &str) -> Option<u64> {
+    let mut n = msf.split(':').map(|p| p.parse::<u64>().ok());
+    let (m, s, f) = (n.next()??, n.next()??, n.next()??);
+    Some((m * 60 + s) * 75 + f)
 }
 
 /// A GD-ROM sheet (`count`, then `track lba type sector_size file offset`
@@ -607,11 +637,89 @@ pub(crate) mod tests {
             data[19][..text.len()].copy_from_slice(text.as_bytes());
         }
         data[18] = dir;
-        data.iter().flat_map(|s| {
-            let mut out = vec![0u8; size];
-            out[head..head + 2048].copy_from_slice(s);
-            out
-        }).collect()
+        let cooked = data.concat();
+        match (size, head) {
+            (2048, _) => cooked,
+            (_, 24) => raw_track(0, true, &cooked),
+            _ => raw_track(0, false, &cooked),
+        }
+    }
+
+    /// Cooked 2048-byte sectors as a raw 2352-byte track from `lba`, as a
+    /// Redump dump stores them: the 12-byte sync, the BCD address (`lba` +
+    /// 150) and mode, the data (mode 2: form 1, after a data subheader),
+    /// then its EDC and ECC.
+    pub(crate) fn raw_track(lba: u32, mode2: bool, cooked: &[u8]) -> Vec<u8> {
+        cooked.chunks(2048).enumerate().flat_map(|(i, d)| raw_sector(lba + i as u32, mode2, d)).collect()
+    }
+
+    fn raw_sector(lba: u32, mode2: bool, data: &[u8]) -> [u8; 2352] {
+        let mut s = [0u8; 2352];
+        s[1..11].fill(0xFF);
+        let bcd = |n: u32| ((n / 10) << 4 | n % 10) as u8;
+        let a = lba + 150;
+        s[12..15].copy_from_slice(&[bcd(a / 4500), bcd(a / 75 % 60), bcd(a % 75)]);
+        if mode2 {
+            s[15] = 2;
+            s[16..24].copy_from_slice(&[0, 0, 8, 0, 0, 0, 8, 0]);
+            s[24..24 + data.len()].copy_from_slice(data);
+            let e = edc(&s[16..2072]);
+            s[2072..2076].copy_from_slice(&e.to_le_bytes());
+            // Mode 2's ECC counts the address as zeros.
+            let address: [u8; 4] = s[12..16].try_into().unwrap();
+            s[12..16].fill(0);
+            ecc(&mut s);
+            s[12..16].copy_from_slice(&address);
+        } else {
+            s[15] = 1;
+            s[16..16 + data.len()].copy_from_slice(data);
+            let e = edc(&s[..2064]);
+            s[2064..2068].copy_from_slice(&e.to_le_bytes());
+            ecc(&mut s);
+        }
+        s
+    }
+
+    /// The CD-ROM EDC: a reflected CRC-32, polynomial D8018001h.
+    fn edc(b: &[u8]) -> u32 {
+        b.iter().fold(0u32, |e, &x| {
+            let mut c = (e ^ x as u32) & 0xFF;
+            for _ in 0..8 {
+                c = (c >> 1) ^ if c & 1 != 0 { 0xD801_8001 } else { 0 };
+            }
+            (e >> 8) ^ c
+        })
+    }
+
+    /// The CD-ROM ECC: P and Q Reed-Solomon parity over bytes 12 on.
+    fn ecc(s: &mut [u8; 2352]) {
+        let f = |i: u8| (i << 1) ^ if i & 0x80 != 0 { 0x1D } else { 0 };
+        let mut b = [0u8; 256];
+        for i in 0..=255u8 {
+            b[(i ^ f(i)) as usize] = i;
+        }
+        let mut parity = |majors: usize, minors: usize, major_mult: usize, minor_inc: usize, dest: usize| {
+            let size = majors * minors;
+            for major in 0..majors {
+                let mut index = (major >> 1) * major_mult + (major & 1);
+                let (mut a, mut x) = (0u8, 0u8);
+                for _ in 0..minors {
+                    let t = s[12 + index];
+                    index += minor_inc;
+                    if index >= size {
+                        index -= size;
+                    }
+                    a ^= t;
+                    x ^= t;
+                    a = f(a);
+                }
+                a = b[(f(a) ^ x) as usize];
+                s[dest + major] = a;
+                s[dest + major + majors] = a ^ x;
+            }
+        };
+        parity(86, 24, 2, 86, 0x81C);
+        parity(52, 43, 86, 88, 0x8C8);
     }
 
     pub(crate) fn gc_image() -> Vec<u8> {
@@ -744,11 +852,16 @@ pub(crate) mod tests {
         assert_eq!(probe(&t.path().join("mixed.cue")), Some(Kind::Ps1));
     }
 
-    /// A Saturn or Dreamcast boot sector, `head` bytes into sector 0.
+    /// 16 sectors starting with a Saturn or Dreamcast boot string: cooked
+    /// (`head` 0), or a raw mode 1 track from LBA 0 (the string 16 bytes in).
     pub(crate) fn sega_sector(id: &[u8; 16], head: usize) -> Vec<u8> {
-        let size = if head == 0 { 2048 } else { 2352 };
-        let mut img = vec![0u8; size * 16];
-        img[head..head + 16].copy_from_slice(id);
+        let cooked = sega_cooked(id);
+        if head == 0 { cooked } else { raw_track(0, false, &cooked) }
+    }
+
+    fn sega_cooked(id: &[u8; 16]) -> Vec<u8> {
+        let mut img = vec![0u8; 2048 * 16];
+        img[..16].copy_from_slice(id);
         img
     }
 
@@ -792,10 +905,23 @@ pub(crate) mod tests {
     /// A CHD v5 with no compressors (an uncompressed map) holding `data`
     /// in `hunk`-byte hunks, and one metadata entry `meta` tagged `tag`.
     pub(crate) fn chd_image(data: &[u8], hunk: u32, unit: u32, meta_tag: &[u8; 4], meta: &[u8]) -> Vec<u8> {
-        let hunks = (data.len() as u64).div_ceil(hunk as u64) as usize;
+        chd_with(data, hunk, unit, &[(meta_tag, meta)])
+    }
+
+    /// `chd_image` with several metadata entries, chained in order (one a
+    /// track, as chdman writes them). Hunks that are all zeros share one
+    /// stored copy, so a GD-ROM's 45000-frame gap costs one hunk.
+    pub(crate) fn chd_with(data: &[u8], hunk: u32, unit: u32, metas: &[(&[u8; 4], &[u8])]) -> Vec<u8> {
+        let hs = hunk as usize;
+        let chunks: Vec<Vec<u8>> = data.chunks(hs).map(|c| {
+            let mut c = c.to_vec();
+            c.resize(hs, 0);
+            c
+        }).collect();
         let map_at = 124u64;
-        let meta_at = map_at + 4 * hunks as u64;
-        let data_at = (meta_at + 16 + meta.len() as u64).div_ceil(hunk as u64) * hunk as u64;
+        let meta_at = map_at + 4 * chunks.len() as u64;
+        let metas_len: u64 = metas.iter().map(|(_, m)| 16 + m.len() as u64).sum();
+        let data_at = (meta_at + metas_len).div_ceil(hunk as u64) * hunk as u64;
         let mut f = vec![0u8; 124];
         f[..8].copy_from_slice(b"MComprHD");
         f[8..12].copy_from_slice(&124u32.to_be_bytes());
@@ -805,16 +931,35 @@ pub(crate) mod tests {
         f[48..56].copy_from_slice(&meta_at.to_be_bytes());
         f[56..60].copy_from_slice(&hunk.to_be_bytes());
         f[60..64].copy_from_slice(&unit.to_be_bytes());
-        for i in 0..hunks {
-            f.extend_from_slice(&((data_at / hunk as u64) as u32 + i as u32).to_be_bytes());
+        // Stored hunks: a shared zero hunk first if any hunk is all zeros,
+        // then every other hunk in order.
+        let zero = chunks.iter().any(|c| c.iter().all(|&b| b == 0));
+        let first = data_at / hunk as u64;
+        let mut next = first + zero as u64;
+        let mut stored = Vec::new();
+        for c in &chunks {
+            let at = if c.iter().all(|&b| b == 0) {
+                first
+            } else {
+                stored.extend_from_slice(c);
+                next += 1;
+                next - 1
+            };
+            f.extend_from_slice(&(at as u32).to_be_bytes());
         }
-        f.extend_from_slice(meta_tag);
-        f.extend_from_slice(&(meta.len() as u32).to_be_bytes());
-        f.extend_from_slice(&0u64.to_be_bytes());
-        f.extend_from_slice(meta);
+        let mut at = meta_at;
+        for (i, (tag, meta)) in metas.iter().enumerate() {
+            at += 16 + meta.len() as u64;
+            f.extend_from_slice(*tag);
+            f.extend_from_slice(&(meta.len() as u32).to_be_bytes());
+            f.extend_from_slice(&if i + 1 < metas.len() { at } else { 0 }.to_be_bytes());
+            f.extend_from_slice(meta);
+        }
         f.resize(data_at as usize, 0);
-        f.extend_from_slice(data);
-        f.resize(data_at as usize + hunks * hunk as usize, 0);
+        if zero {
+            f.resize(f.len() + hs, 0);
+        }
+        f.extend_from_slice(&stored);
         f
     }
 
@@ -823,7 +968,7 @@ pub(crate) mod tests {
         raw.chunks(2352).flat_map(|s| s.iter().copied().chain([0u8; 96])).collect()
     }
 
-    const CHT2: &[u8] = b"TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:24 PREGAP:0 PGTYPE:MODE1 PGSUB:RW POSTGAP:0\0";
+    const CHT2: &[u8] = b"TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:20 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0";
 
     #[test]
     fn probes_chds() {
@@ -869,7 +1014,9 @@ pub(crate) mod tests {
         // Cut off in the map, in the metadata, and in the data.
         assert_eq!(put("map.chd", &good[..130]), None);
         assert_eq!(put("meta.chd", &good[..124 + 4 * 10 + 8]), None);
-        assert_eq!(put("data.chd", &good[..good.len() - 30000]), None);
+        // Cut off in the first stored hunk: the volume descriptor's is gone.
+        let data_at = (124 + 4 * 10 + 16 + 1usize).div_ceil(4096) * 4096;
+        assert_eq!(put("data.chd", &good[..data_at + 100]), None);
         // Garbage everywhere after a valid header.
         let mut junk = good.clone();
         for (i, b) in junk.iter_mut().enumerate().skip(124) {
@@ -916,12 +1063,40 @@ pub(crate) mod tests {
             w.write_all(data).unwrap();
             w.finish().unwrap().into_inner()
         };
-        let cd = |raw: &[u8], meta: &str| chd_image(&frames(raw), 2448 * 8, 2448, b"CHT2", meta.as_bytes());
-        let cht2 = String::from_utf8(CHT2.to_vec()).unwrap();
-        let mode1 = cht2.replace("MODE2_RAW", "MODE1_RAW");
         let dvd = |img: &[u8]| chd_image(img, 4096, 2048, b"DVD ", b"\0");
-        let gd = "TRACK:1 TYPE:MODE1 SUBTYPE:NONE FRAMES:300 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0";
+        let silence = |sectors: usize| vec![0u8; 2352 * sectors];
+        // A CD CHD as chdman makes one from a cue: every track's frames (2352
+        // bytes and 96 of subcode), in 8-frame hunks, one CHT2 entry a track.
+        let cd = |tracks: &[(&[u8], &str)]| {
+            let data: Vec<u8> = tracks.iter().flat_map(|(raw, _)| frames(raw)).collect();
+            let metas: Vec<Vec<u8>> = tracks.iter().map(|(_, m)| format!("{m}\0").into_bytes()).collect();
+            let metas: Vec<(&[u8; 4], &[u8])> = metas.iter().map(|m| (b"CHT2", m.as_slice())).collect();
+            chd_with(&data, 2448 * 8, 2448, &metas)
+        };
+        // PS1: a data track, then an audio track with its 2 s pregap
+        // (INDEX 00 00:00:00, INDEX 01 00:02:00) at the start of its file.
         let ps1 = raw_image(24, "PLAYSTATION", Some(PS1_CNF));
+        let ps1_audio = silence(152);
+        // Audio first, then a data track whose file starts with its pregap.
+        let mut late_data = raw_track(2, true, &vec![0u8; 2048 * 150]);
+        late_data.extend(raw_track(152, true, &iso_image("PLAYSTATION", Some(PS1_CNF))));
+        // Dreamcast (Redump): a single-density data track and an audio
+        // track, then the high-density area from LBA 45000, whose first
+        // sector is IP.BIN.
+        let dc1 = raw_track(0, false, &iso_image("", None));
+        let dc2 = silence(152);
+        let dc3 = raw_track(45000, false, &sega_cooked(KATANA));
+        // The GD CHD (chdman): track 2 runs to frame 45000 with padding.
+        let mut gd = frames(&dc1);
+        gd.extend(vec![0u8; 2448 * 44980]);
+        gd.extend(frames(&dc3));
+        let gd_tracks = [
+            "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:20 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0",
+            "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:44980 PAD:44978 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0",
+            "TRACK:3 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:16 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0",
+        ];
+        let gd_metas: Vec<(&[u8; 4], &[u8])> = gd_tracks.iter().map(|m| (b"CHGD", m.as_bytes())).collect();
+        let gd = chd_with(&gd, 2448 * 8, 2448, &gd_metas);
         let mut both = iso_image("PLAYSTATION", Some(PS2_CNF));
         both[0x1C..0x20].copy_from_slice(&GC_MAGIC);
         let mut hunk_cap = dvd(&iso_image("PSP GAME", None));
@@ -932,28 +1107,38 @@ pub(crate) mod tests {
             ("gamecube.ciso", ciso(true), "GameCube"),
             ("gamecube-stored.zip", zip("Game (USA).iso", &gc_image(), Stored), "GameCube"),
             ("ps2.iso", iso_image("PLAYSTATION", Some(PS2_CNF)), "PS2"),
-            ("ps2-mode1.bin", raw_image(16, "PLAYSTATION", Some(PS2_CNF)), "PS2"),
+            ("ps2-cd.bin", raw_image(24, "PLAYSTATION", Some(PS2_CNF)), "PS2"),
             ("ps2-dvd.chd", dvd(&iso_image("PLAYSTATION", Some(PS2_CNF))), "PS2"),
             ("ps1.iso", iso_image("PLAYSTATION", Some(PS1_CNF)), "PS1"),
             ("ps1-psx-exe.iso", psx_exe_image(), "PS1"),
             ("ps1-track1.bin", ps1.clone(), "PS1"),
-            ("ps1-track2.bin", vec![0u8; 4704], "none"),
-            ("ps1.cue", b"FILE ps1-track1.bin BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\nFILE ps1-track2.bin BINARY\r\n  TRACK 02 AUDIO\r\n    INDEX 01 00:00:00\r\n".to_vec(), "PS1"),
-            ("ps1-audio-first.cue", b"FILE ps1-track2.bin BINARY\r\n  TRACK 01 AUDIO\r\nFILE ps1-track1.bin BINARY\r\n  TRACK 02 MODE2/2352\r\n".to_vec(), "PS1"),
-            ("ps1-cd.chd", cd(&ps1, &cht2), "PS1"),
+            ("ps1-track2.bin", ps1_audio.clone(), "none"),
+            ("ps1.cue", b"FILE \"ps1-track1.bin\" BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\nFILE \"ps1-track2.bin\" BINARY\r\n  TRACK 02 AUDIO\r\n    INDEX 00 00:00:00\r\n    INDEX 01 00:02:00\r\n".to_vec(), "PS1"),
+            ("ps1-audio-first-track1.bin", silence(2), "none"),
+            // Its pregap comes first, so the file alone is nothing: only the
+            // sheet's INDEX 01 finds the volume.
+            ("ps1-audio-first-track2.bin", late_data, "none"),
+            ("ps1-audio-first.cue", b"FILE \"ps1-audio-first-track1.bin\" BINARY\r\n  TRACK 01 AUDIO\r\n    INDEX 01 00:00:00\r\nFILE \"ps1-audio-first-track2.bin\" BINARY\r\n  TRACK 02 MODE2/2352\r\n    INDEX 00 00:00:00\r\n    INDEX 01 00:02:00\r\n".to_vec(), "PS1"),
+            ("ps1-cd.chd", cd(&[
+                (&ps1, "TRACK:1 TYPE:MODE2_RAW SUBTYPE:NONE FRAMES:20 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0"),
+                (&ps1_audio, "TRACK:2 TYPE:AUDIO SUBTYPE:NONE FRAMES:152 PREGAP:150 PGTYPE:VAUDIO PGSUB:NONE POSTGAP:0"),
+            ]), "PS1"),
             ("ps1-deflated.zip", zip("Game (USA).bin", &ps1, Deflated), "PS1"),
             ("psp.iso", iso_image("PSP GAME", None), "PSP"),
             ("psp-dvd.chd", dvd(&iso_image("PSP GAME", None)), "PSP"),
             ("saturn.iso", sega_sector(SATURN, 0), "Saturn"),
             ("saturn-track1.bin", sega_sector(SATURN, 16), "Saturn"),
             ("saturn.cue", b"FILE \"saturn-track1.bin\" BINARY\r\n  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\n".to_vec(), "Saturn"),
-            ("saturn-cd.chd", cd(&sega_sector(SATURN, 16), &mode1), "Saturn"),
-            ("dreamcast (Track 1).bin", iso_image("", None), "none"),
-            ("dreamcast (Track 2).bin", vec![0u8; 4704], "none"),
-            ("dreamcast (Track 3).bin", sega_sector(KATANA, 16), "Dreamcast"),
-            ("dreamcast.cue", b"FILE \"dreamcast (Track 1).bin\" BINARY\r\n  TRACK 01 MODE1/2352\r\nFILE \"dreamcast (Track 2).bin\" BINARY\r\n  TRACK 02 AUDIO\r\nFILE \"dreamcast (Track 3).bin\" BINARY\r\n  TRACK 03 MODE1/2352\r\n".to_vec(), "Dreamcast"),
-            ("dreamcast.gdi", b"3\r\n1 0 4 2352 \"dreamcast (Track 1).bin\" 0\r\n2 756 0 2352 \"dreamcast (Track 2).bin\" 0\r\n3 45000 4 2352 \"dreamcast (Track 3).bin\" 0\r\n".to_vec(), "Dreamcast"),
-            ("dreamcast-gd.chd", chd_image(&[0u8; 2448 * 8], 2448 * 8, 2448, b"CHGD", gd.as_bytes()), "Dreamcast"),
+            ("saturn-cd.chd", cd(&[(&sega_sector(SATURN, 16), "TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:16 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0")]), "Saturn"),
+            ("dreamcast (Track 1).bin", dc1, "none"),
+            ("dreamcast (Track 2).bin", dc2, "none"),
+            ("dreamcast (Track 3).bin", dc3, "Dreamcast"),
+            ("dreamcast.cue", b"REM SINGLE-DENSITY AREA\r\nFILE \"dreamcast (Track 1).bin\" BINARY\r\n  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\nFILE \"dreamcast (Track 2).bin\" BINARY\r\n  TRACK 02 AUDIO\r\n    INDEX 00 00:00:00\r\n    INDEX 01 00:02:00\r\nREM HIGH-DENSITY AREA\r\nFILE \"dreamcast (Track 3).bin\" BINARY\r\n  TRACK 03 MODE1/2352\r\n    INDEX 01 00:00:00\r\n".to_vec(), "Dreamcast"),
+            // A GDI's audio track starts at INDEX 01 (LBA 20 + 150), without
+            // the pregap, so it has its own file.
+            ("dreamcast-track02.raw", silence(2), "none"),
+            ("dreamcast.gdi", b"3\r\n1 0 4 2352 \"dreamcast (Track 1).bin\" 0\r\n2 170 0 2352 dreamcast-track02.raw 0\r\n3 45000 4 2352 \"dreamcast (Track 3).bin\" 0\r\n".to_vec(), "Dreamcast"),
+            ("dreamcast-gd.chd", gd, "Dreamcast"),
             ("none-data.iso", iso_image("WIN32", None), "none"),
             ("none-blank.iso", vec![0u8; 40960], "none"),
             // Read errors: a CHD cut off inside its map, and one whose header
