@@ -1,0 +1,4 @@
+FILE ps1-track2.bin BINARY
+  TRACK 01 AUDIO
+FILE ps1-track1.bin BINARY
+  TRACK 02 MODE2/2352

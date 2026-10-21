@@ -897,6 +897,120 @@ pub(crate) mod tests {
         assert_eq!(put("v9.chd", &v9), None);
     }
 
+    /// The shared disc-probe test files, kept in fruit-basket's
+    /// `testdata/disc-probe/` for the launcher, the apps and each fruit's
+    /// probe: (file, the `system`s a probe must find, comma-separated, or
+    /// `none`). All synthetic: headers built here, no bytes from any disc.
+    pub(crate) fn shared_fixtures() -> Vec<(&'static str, Vec<u8>, &'static str)> {
+        const SATURN: &[u8; 16] = b"SEGA SEGASATURN ";
+        const KATANA: &[u8; 16] = b"SEGA SEGAKATANA ";
+        let zip = |name: &str, data: &[u8], method| {
+            let mut w = zip::ZipWriter::new(io::Cursor::new(Vec::new()));
+            w.start_file(name, zip::write::SimpleFileOptions::default().compression_method(method)).unwrap();
+            w.write_all(data).unwrap();
+            w.finish().unwrap().into_inner()
+        };
+        let cd = |raw: &[u8], meta: &str| chd_image(&frames(raw), 2448 * 8, 2448, b"CHT2", meta.as_bytes());
+        let cht2 = String::from_utf8(CHT2.to_vec()).unwrap();
+        let mode1 = cht2.replace("MODE2_RAW", "MODE1_RAW");
+        let dvd = |img: &[u8]| chd_image(img, 4096, 2048, b"DVD ", b"\0");
+        let gd = "TRACK:1 TYPE:MODE1 SUBTYPE:NONE FRAMES:300 PAD:0 PREGAP:0 PGTYPE:MODE1 PGSUB:NONE POSTGAP:0\0";
+        let ps1 = raw_image(24, "PLAYSTATION", Some(PS1_CNF));
+        let mut both = iso_image("PLAYSTATION", Some(PS2_CNF));
+        both[0x1C..0x20].copy_from_slice(&GC_MAGIC);
+        use zip::CompressionMethod::{Deflated, Stored};
+        vec![
+            ("gamecube.iso", gc_image(), "GameCube"),
+            ("gamecube.ciso", ciso(true), "GameCube"),
+            ("gamecube-stored.zip", zip("Game (USA).iso", &gc_image(), Stored), "GameCube"),
+            ("ps2.iso", iso_image("PLAYSTATION", Some(PS2_CNF)), "PS2"),
+            ("ps2-mode1.bin", raw_image(16, "PLAYSTATION", Some(PS2_CNF)), "PS2"),
+            ("ps2-dvd.chd", dvd(&iso_image("PLAYSTATION", Some(PS2_CNF))), "PS2"),
+            ("ps1.iso", iso_image("PLAYSTATION", Some(PS1_CNF)), "PS1"),
+            ("ps1-psx-exe.iso", psx_exe_image(), "PS1"),
+            ("ps1-track1.bin", ps1.clone(), "PS1"),
+            ("ps1-track2.bin", vec![0u8; 4704], "none"),
+            ("ps1.cue", b"FILE ps1-track1.bin BINARY\r\n  TRACK 01 MODE2/2352\r\n    INDEX 01 00:00:00\r\nFILE ps1-track2.bin BINARY\r\n  TRACK 02 AUDIO\r\n    INDEX 01 00:00:00\r\n".to_vec(), "PS1"),
+            ("ps1-audio-first.cue", b"FILE ps1-track2.bin BINARY\r\n  TRACK 01 AUDIO\r\nFILE ps1-track1.bin BINARY\r\n  TRACK 02 MODE2/2352\r\n".to_vec(), "PS1"),
+            ("ps1-cd.chd", cd(&ps1, &cht2), "PS1"),
+            ("ps1-deflated.zip", zip("Game (USA).bin", &ps1, Deflated), "PS1"),
+            ("psp.iso", iso_image("PSP GAME", None), "PSP"),
+            ("psp-dvd.chd", dvd(&iso_image("PSP GAME", None)), "PSP"),
+            ("saturn.iso", sega_sector(SATURN, 0), "Saturn"),
+            ("saturn-track1.bin", sega_sector(SATURN, 16), "Saturn"),
+            ("saturn.cue", b"FILE \"saturn-track1.bin\" BINARY\r\n  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\n".to_vec(), "Saturn"),
+            ("saturn-cd.chd", cd(&sega_sector(SATURN, 16), &mode1), "Saturn"),
+            ("dreamcast (Track 1).bin", iso_image("", None), "none"),
+            ("dreamcast (Track 2).bin", vec![0u8; 4704], "none"),
+            ("dreamcast (Track 3).bin", sega_sector(KATANA, 16), "Dreamcast"),
+            ("dreamcast.cue", b"FILE \"dreamcast (Track 1).bin\" BINARY\r\n  TRACK 01 MODE1/2352\r\nFILE \"dreamcast (Track 2).bin\" BINARY\r\n  TRACK 02 AUDIO\r\nFILE \"dreamcast (Track 3).bin\" BINARY\r\n  TRACK 03 MODE1/2352\r\n".to_vec(), "Dreamcast"),
+            ("dreamcast.gdi", b"3\r\n1 0 4 2352 \"dreamcast (Track 1).bin\" 0\r\n2 756 0 2352 \"dreamcast (Track 2).bin\" 0\r\n3 45000 4 2352 \"dreamcast (Track 3).bin\" 0\r\n".to_vec(), "Dreamcast"),
+            ("dreamcast-gd.chd", chd_image(&[0u8; 2448 * 8], 2448 * 8, 2448, b"CHGD", gd.as_bytes()), "Dreamcast"),
+            ("none-data.iso", iso_image("WIN32", None), "none"),
+            ("none-blank.iso", vec![0u8; 40960], "none"),
+            ("none-truncated.chd", dvd(&iso_image("PSP GAME", None))[..130].to_vec(), "none"),
+            ("double-gamecube-ps2.iso", both, "GameCube,PS2"),
+        ]
+    }
+
+    fn shared_manifest(fx: &[(&str, Vec<u8>, &str)]) -> String {
+        let mut m = String::from("# file\tthe systems a probe must find (the feed's `system`), comma-separated, or none\n");
+        for (name, _, want) in fx {
+            m += &format!("{name}\t{want}\n");
+        }
+        m
+    }
+
+    fn found_systems(path: &Path) -> String {
+        let mut found: Vec<&str> = probe_all(path).iter().map(|k| k.system()).collect();
+        found.sort();
+        if found.is_empty() { "none".into() } else { found.join(",") }
+    }
+
+    const SHARED: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/disc-probe");
+
+    /// Every shared file probes as its MANIFEST line says.
+    #[test]
+    fn shared_fixtures_probe_as_listed() {
+        let dir = Path::new(SHARED);
+        let manifest = fs::read_to_string(dir.join("MANIFEST.tsv")).unwrap();
+        let mut n = 0;
+        for line in manifest.lines().filter(|l| !l.starts_with('#')) {
+            let (name, want) = line.split_once('\t').unwrap();
+            let mut want: Vec<&str> = want.split(',').collect();
+            want.sort();
+            assert_eq!(found_systems(&dir.join(name)), want.join(","), "{name}");
+            n += 1;
+        }
+        assert_eq!(n, shared_fixtures().len());
+    }
+
+    /// The copy here is byte for byte what the builders above make, so the
+    /// shared set and the launcher's own tests can't drift apart.
+    #[test]
+    fn shared_fixtures_are_what_the_builders_make() {
+        let fx = shared_fixtures();
+        let dir = Path::new(SHARED);
+        for (name, bytes, _) in &fx {
+            assert!(fs::read(dir.join(name)).unwrap() == *bytes, "{name} differs from its builder");
+        }
+        assert_eq!(fs::read_to_string(dir.join("MANIFEST.tsv")).unwrap(), shared_manifest(&fx));
+    }
+
+    /// Write the shared set (and MANIFEST.tsv) to `DISC_PROBE_OUT`:
+    /// `DISC_PROBE_OUT=dir cargo test write_shared_fixtures -- --ignored`.
+    #[test]
+    #[ignore]
+    fn write_shared_fixtures() {
+        let out = PathBuf::from(std::env::var_os("DISC_PROBE_OUT").expect("DISC_PROBE_OUT"));
+        fs::create_dir_all(&out).unwrap();
+        let fx = shared_fixtures();
+        for (name, bytes, _) in &fx {
+            fs::write(out.join(name), bytes).unwrap();
+        }
+        fs::write(out.join("MANIFEST.tsv"), shared_manifest(&fx)).unwrap();
+    }
+
     #[test]
     fn probes_zips_stored_and_deflated() {
         let t = tempfile::tempdir().unwrap();
