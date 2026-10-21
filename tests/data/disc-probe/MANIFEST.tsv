@@ -1,4 +1,4 @@
-# file	the systems a probe must find (the feed's `system`), comma-separated, or none
+# file	the systems a probe must find (the feed's `system`), comma-separated; none; or read-error
 gamecube.iso	GameCube
 gamecube.ciso	GameCube
 gamecube-stored.zip	GameCube
@@ -27,5 +27,6 @@ dreamcast.gdi	Dreamcast
 dreamcast-gd.chd	Dreamcast
 none-data.iso	none
 none-blank.iso	none
-none-truncated.chd	none
+error-truncated.chd	read-error
+error-hunk-cap.chd	read-error
 double-gamecube-ps2.iso	GameCube,PS2

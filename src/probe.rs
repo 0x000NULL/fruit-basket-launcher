@@ -924,6 +924,8 @@ pub(crate) mod tests {
         let ps1 = raw_image(24, "PLAYSTATION", Some(PS1_CNF));
         let mut both = iso_image("PLAYSTATION", Some(PS2_CNF));
         both[0x1C..0x20].copy_from_slice(&GC_MAGIC);
+        let mut hunk_cap = dvd(&iso_image("PSP GAME", None));
+        hunk_cap[32..40].copy_from_slice(&(1u64 << 40).to_be_bytes());
         use zip::CompressionMethod::{Deflated, Stored};
         vec![
             ("gamecube.iso", gc_image(), "GameCube"),
@@ -954,13 +956,18 @@ pub(crate) mod tests {
             ("dreamcast-gd.chd", chd_image(&[0u8; 2448 * 8], 2448 * 8, 2448, b"CHGD", gd.as_bytes()), "Dreamcast"),
             ("none-data.iso", iso_image("WIN32", None), "none"),
             ("none-blank.iso", vec![0u8; 40960], "none"),
-            ("none-truncated.chd", dvd(&iso_image("PSP GAME", None))[..130].to_vec(), "none"),
+            // Read errors: a CHD cut off inside its map, and one whose header
+            // claims more hunks than HUNK_COUNT_LIMIT (2^40 bytes of data).
+            ("error-truncated.chd", dvd(&iso_image("PSP GAME", None))[..130].to_vec(), "read-error"),
+            ("error-hunk-cap.chd", hunk_cap, "read-error"),
             ("double-gamecube-ps2.iso", both, "GameCube,PS2"),
         ]
     }
 
     fn shared_manifest(fx: &[(&str, Vec<u8>, &str)]) -> String {
-        let mut m = String::from("# file\tthe systems a probe must find (the feed's `system`), comma-separated, or none\n");
+        let mut m = String::from(
+            "# file\tthe systems a probe must find (the feed's `system`), comma-separated; none; or read-error\n",
+        );
         for (name, _, want) in fx {
             m += &format!("{name}\t{want}\n");
         }
@@ -983,6 +990,9 @@ pub(crate) mod tests {
         let mut n = 0;
         for line in manifest.lines().filter(|l| !l.starts_with('#')) {
             let (name, want) = line.split_once('\t').unwrap();
+            // The launcher can't report a read error yet: until the UI
+            // milestone (refused / pending / error states) it counts as none.
+            let want = if want == "read-error" { "none" } else { want };
             let mut want: Vec<&str> = want.split(',').collect();
             want.sort();
             assert_eq!(found_systems(&dir.join(name)), want.join(","), "{name}");
