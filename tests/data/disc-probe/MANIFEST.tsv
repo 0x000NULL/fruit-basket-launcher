@@ -1,0 +1,35 @@
+# file	the systems a probe must find (the feed's `system`), comma-separated; none; or read-error
+gamecube.iso	GameCube
+gamecube.ciso	GameCube
+gamecube-stored.zip	GameCube
+ps2.iso	PS2
+ps2-cd.bin	PS2
+ps2-dvd.chd	PS2
+ps1.iso	PS1
+ps1-psx-exe.iso	PS1
+ps1-track1.bin	PS1
+ps1-track2.bin	none
+ps1.cue	PS1
+ps1-audio-first-track1.bin	none
+ps1-audio-first-track2.bin	none
+ps1-audio-first.cue	PS1
+ps1-cd.chd	PS1
+ps1-deflated.zip	PS1
+psp.iso	PSP
+psp-dvd.chd	PSP
+saturn.iso	Saturn
+saturn-track1.bin	Saturn
+saturn.cue	Saturn
+saturn-cd.chd	Saturn
+dreamcast (Track 1).bin	none
+dreamcast (Track 2).bin	none
+dreamcast (Track 3).bin	Dreamcast
+dreamcast.cue	Dreamcast
+dreamcast-track02.raw	none
+dreamcast.gdi	Dreamcast
+dreamcast-gd.chd	Dreamcast
+none-data.iso	none
+none-blank.iso	none
+error-truncated.chd	read-error
+error-hunk-cap.chd	read-error
+double-gamecube-ps2.iso	GameCube,PS2

@@ -35,6 +35,12 @@ pub struct Game {
 /// in an extra folder goes to the fruit that plays it (`plays`); when
 /// several do, to the one `probe` names, else the first.
 pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[PathBuf]) -> Vec<Game> {
+    scan_late(basket, fruits, extra, hidden).0
+}
+
+/// `scan`, plus the disc probes it stopped waiting for: a file they cover
+/// went by feed order this time.
+pub fn scan_late(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[PathBuf]) -> (Vec<Game>, Option<probe::Late>) {
     let mut out = Vec::new();
     let mut seen = std::collections::HashSet::new();
     let mut add = |path: PathBuf, fruit: &Fruit, out: &mut Vec<Game>| {
@@ -64,12 +70,12 @@ pub fn scan(basket: &Basket, fruits: &[&Fruit], extra: &[PathBuf], hidden: &[Pat
             }
         }
     }
-    let kinds = probe::kinds(found.iter().filter(|(_, c)| c.len() > 1).map(|(p, _)| p.clone()).collect());
+    let (kinds, late) = probe::kinds(found.iter().filter(|(_, c)| c.len() > 1).map(|(p, _)| p.clone()).collect());
     for (path, claims) in found {
-        let f = probe::pick(&claims, kinds.get(&path).copied().flatten());
+        let f = probe::pick(&path, &claims, kinds.get(&path).map_or(&[][..], Vec::as_slice));
         add(path, f, &mut out);
     }
-    out
+    (out, late)
 }
 
 /// True if `fruit` plays the file at `path`: it has one of the fruit's
@@ -753,7 +759,9 @@ pub(crate) mod tests {
         let fig = sys("fig", "PS1", &[".cue", ".chd", ".iso", ".m3u"]);
         let mango = sys("mango", "GameCube", &[".iso", ".gcm", ".ciso"]);
         let kumquat = sys("kumquat", "PSP", &[".iso", ".cso", ".chd", ".pbp"]);
-        let got = scan(&b, &[&pom, &fig, &mango, &kumquat], std::slice::from_ref(&extra), &[]);
+        put("Nights.iso", &crate::probe::tests::sega_sector(b"SEGA SEGASATURN ", 0));
+        let peach = sys("peach", "Saturn", &[".cue", ".chd", ".iso", ".m3u"]);
+        let got = scan(&b, &[&pom, &fig, &mango, &peach, &kumquat], std::slice::from_ref(&extra), &[]);
         let mut by: Vec<(&str, &str)> = got.iter().map(|g| (g.title.as_str(), g.fruit.as_str())).collect();
         by.sort();
         assert_eq!(
@@ -766,6 +774,7 @@ pub(crate) mod tests {
                 ("Lumines", "kumquat"),
                 ("Melee", "mango"),
                 ("Mystery", "pomegranate"),
+                ("Nights", "peach"),
                 ("Wind Waker", "mango"),
             ]
         );

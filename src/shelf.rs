@@ -15,6 +15,7 @@ use crate::feed::{Feed, Fruit};
 use crate::launch::{self, Session};
 use crate::library::{self, Favorites, Game, Played, Sessions, Slot};
 use crate::pics::Pics;
+use crate::probe;
 use crate::lists::{self, Kind};
 use crate::settings::{LibView, Settings};
 use crate::ui::library::{Dump, Empty, GameDetail, LibraryView, PlayState, Row};
@@ -51,6 +52,12 @@ pub struct Shelf {
     slots: RefCell<HashMap<PathBuf, Vec<Slot>>>,
     /// A game exited: the covers need looking for again.
     pub stale_covers: bool,
+    /// Disc probes the last scan didn't wait for: when they finish, scan
+    /// once more so those files go to the right fruit.
+    late: Option<probe::Late>,
+    /// Scans so far, for the tests to count.
+    #[cfg(test)]
+    pub scans: u32,
     /// The last game's arguments, for the tests to check.
     #[cfg(test)]
     pub launched: Vec<String>,
@@ -67,8 +74,33 @@ impl Shelf {
 
     /// Scan the folders again, then hash whatever the dump lists need.
     pub fn rescan(&mut self, basket: &Basket, feed: Option<&Feed>, installed: &HashMap<String, Current>, settings: &Settings) {
+        self.scan(basket, feed, installed, settings, true);
+    }
+
+    /// The one scan after the last scan's late probes finished. It keeps no
+    /// `late` of its own, so it never starts another: once per scan.
+    pub fn rescan_after_probes(&mut self, basket: &Basket, feed: Option<&Feed>, installed: &HashMap<String, Current>, settings: &Settings) {
+        self.scan(basket, feed, installed, settings, false);
+    }
+
+    /// True once, when the last scan's late probes have all finished.
+    pub fn probes_done(&mut self) -> bool {
+        let done = self.late.as_ref().is_some_and(probe::Late::drained);
+        if done {
+            self.late = None;
+        }
+        done
+    }
+
+    fn scan(&mut self, basket: &Basket, feed: Option<&Feed>, installed: &HashMap<String, Current>, settings: &Settings, keep_late: bool) {
         let fruits = Shelf::installed(feed, installed);
-        self.games = library::scan(basket, &fruits, &settings.folders, &settings.hidden);
+        let (games, late) = library::scan_late(basket, &fruits, &settings.folders, &settings.hidden);
+        self.games = games;
+        self.late = late.filter(|_| keep_late);
+        #[cfg(test)]
+        {
+            self.scans += 1;
+        }
         self.start_hashing();
         self.index_covers(basket, feed);
     }

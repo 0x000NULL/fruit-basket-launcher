@@ -448,6 +448,9 @@ impl App {
         if self.shelf.stale_covers {
             self.shelf.index_covers(&self.basket, self.feed.as_ref());
         }
+        if self.shelf.probes_done() {
+            self.shelf.rescan_after_probes(&self.basket, self.feed.as_ref(), &self.installed, &self.settings);
+        }
         if self.settings.theme == ThemePref::System && self.os_dark_at.elapsed() > Duration::from_secs(5) {
             self.os_dark = platform::os_dark();
             self.os_dark_at = Instant::now();
@@ -2323,6 +2326,45 @@ mod tests {
             app.poll();
             thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    /// A disc whose probe didn't answer in time goes by feed order, then to
+    /// the right fruit after one more scan when the probe finishes; that
+    /// scan starts no other.
+    #[test]
+    fn late_probes_rescan_once() {
+        let feed = feed::verify(feed::tests::FEED, feed::tests::SIG, key::PUBLIC_KEY, None).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let b = Basket::new(tmp.path().join("basket"));
+        for (id, build) in [("pomegranate", "v0.3.0"), ("mangosteen", "v0.1.0")] {
+            std::fs::create_dir_all(b.build_dir(id, build)).unwrap();
+            std::fs::write(b.build_dir(id, build).join(".installed"), "").unwrap();
+            std::fs::write(b.fruit_dir(id).join("current"), format!("{build}\tstable\n")).unwrap();
+        }
+        let extra = tmp.path().join("extra");
+        std::fs::create_dir_all(&extra).unwrap();
+        std::fs::write(extra.join("Melee.iso"), crate::probe::tests::gc_image()).unwrap();
+        let settings = Settings { folders: vec![extra.clone()], ..Settings::default() };
+        crate::probe::TEST_WAIT.with(|w| w.set(Some(Duration::ZERO)));
+        let mut app = App::with(settings, b, Some(feed));
+        crate::probe::TEST_WAIT.with(|w| w.set(None));
+        let fruit = |app: &App| app.shelf.games.iter().find(|g| g.title == "Melee").map(|g| g.fruit.clone());
+        assert_eq!(fruit(&app).as_deref(), Some("pomegranate"), "the probe hadn't answered: feed order");
+        let scans = app.shelf.scans;
+        let start = Instant::now();
+        while app.shelf.scans == scans {
+            assert!(start.elapsed() < Duration::from_secs(10), "no rescan after the probe finished");
+            app.poll();
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(fruit(&app).as_deref(), Some("mangosteen"));
+        assert_eq!(app.shelf.scans, scans + 1);
+        // Never again on its own.
+        for _ in 0..20 {
+            app.poll();
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(app.shelf.scans, scans + 1, "once per scan, never a loop");
     }
 
     /// The controller reaches every control: the D-pad walks Settings and
